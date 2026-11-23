@@ -7908,8 +7908,15 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .recon-f-book{flex:1 1 0;min-width:160px;}
 .recon-f-qty{width:70px;}
 .recon-group .recon-f-qty{width:80px;}
-/* "Ready to record" card above the worklist: room between the sentence and its button. */
+/* "Record all waiting payments" card above the worklist: one compact row per
+   payment (what was paid, then its book and copies), then the one button. */
 .recon-bulk .recon-actions{margin-top:var(--space-3);}
+.recon-bulk-list{margin-top:var(--space-3);}
+.recon-bulk-list > summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center;}
+.recon-bulk-row{display:grid;grid-template-columns:1fr 88px;gap:var(--space-2);align-items:end;padding:var(--space-3) 0;border-top:1px solid var(--border-subtle);}
+.recon-bulk-row .recon-bulk-what{grid-column:1 / -1;}
+.recon-bulk-row .form-group{margin:0;}
+.recon-bulk-row .recon-f-qty{width:auto;}
 .recon-f-num{width:280px;max-width:100%;}
 .recon-f-amt{width:120px;}
 .recon-f-cur{width:90px;}

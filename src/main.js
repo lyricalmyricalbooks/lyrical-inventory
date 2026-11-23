@@ -274,7 +274,6 @@ import {
   wholeCopies,
   booksFittingAmount,
   suggestedBook,
-  MAX_AUTO_QTY,
 } from './lib/stripe-sale-autorecord.js';
 import { STRIPE_DISMISSALS_KEY, mergeDismissedMap, withDismissals } from './lib/stripe-dismissals.js';
 import {
@@ -17487,18 +17486,12 @@ export function renderReconcile() {
   }
 
   // A busy fair day leaves a dozen card taps that each need one press of
-  // Record. When several already have their book picked and add up to whole
-  // copies in the book's own currency, offer to record them all at once.
-  const ready = _reconSuggestedReady(shown);
-  window._reconReadyIds = ready.map(r => r.p.id);
-  if (ready.length > 1) {
-    const copies = ready.reduce((sum, r) => sum + r.qty, 0);
-    needsEl.insertAdjacentHTML('afterbegin', `<div class="card recon-card recon-bulk">
-      <div class="recon-info"><div><strong>${ready.length} payments are ready to record</strong></div>
-        <div class="recon-meta">Each has its book picked, from its link, a title typed on the card reader, or the only book at that price. ${copies} cop${copies === 1 ? 'y' : 'ies'} in all.</div></div>
-      <div class="recon-actions"><button class="btn gold sm" data-action="recon.recordSuggested">Record all ${ready.length}</button></div>
-    </div>`);
-  }
+  // Record. One list holds every payment still waiting for a book, with the
+  // book picked wherever the app can tell, so she checks it, picks the rest,
+  // and records the lot with one press.
+  const bulk = _reconBulkRows(shown);
+  window._reconBulkIds = bulk.map(r => r.p.id);
+  if (bulk.length > 1) needsEl.insertAdjacentHTML('afterbegin', _reconBulkCard(bulk));
 
   needsEl.querySelectorAll('[data-recon-default]').forEach(input => {
     void reconUpdateDefaults(input.dataset.reconDefault, input.dataset.grouped === '1');
@@ -19212,63 +19205,112 @@ function reconRecordGroup(gi) {
   renderReconcile();
 }
 
-// The shown worklist payments that can be recorded without any typing: a
-// direct sale with its book picked in advance, paid in that book's own
-// currency (no exchange rate to wait for), adding up to whole copies.
-function _reconSuggestedReady(shown = []) {
-  const out = [];
-  shown.forEach(({ p, c }) => {
-    if (c.kind !== 'direct' || p.refunded || p.disputed) return;
-    const pick = _reconSuggestion(p, c).pick;
-    const book = pick && BOOKS[pick.bookId];
-    if (!book) return;
-    const bookCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
-    if (String(p.currency || '').toUpperCase() !== bookCur) return;
-    const unit = paidUnitPrice(p, book, bookCur);
-    const qty = unit ? wholeCopies(p.amount, unit.price) : 0;
-    if (!qty || qty > MAX_AUTO_QTY) return;
-    out.push({ p, bookId: book.id, qty });
-  });
-  return out;
+// ── Accept and record everything ────────────────────────────────────────────
+// Every shown payment that becomes a sale once it has a book (direct sales,
+// and Big Cartel orders never scanned), with the book the worklist would pick
+// and the copies that amount buys. Invoices keep their own flow.
+function _reconBulkRows(shown = []) {
+  return shown
+    .filter(({ p, c }) => _reconIsPickable(c) && !p.refunded && !p.disputed)
+    .map(({ p, c }) => {
+      const { pick, fits } = _reconSuggestion(p, c);
+      const pickId = pick && BOOKS[pick.bookId] ? pick.bookId : '';
+      return { p, c, pickId, fits, qty: _reconDefaultQty(p, pickId) };
+    });
 }
 
-// Bulk: record every payment the worklist has a book picked for. The list is
-// worked out again at the press, so a payment recorded meanwhile (by the
-// background check, or on another device) is not recorded twice.
-async function reconRecordSuggested() {
-  const wanted = new Set(window._reconReadyIds || []);
-  const payments = (window._reconPayments || []).filter(p => wanted.has(p.id));
+function _reconBulkCard(rows) {
+  const picked = rows.filter(r => r.pickId).length;
+  const list = rows.map(({ p, pickId, fits, qty }) => {
+    const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
+    const what = [p.date, p.description || p.customer || ''].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<div class="recon-bulk-row">
+      <div class="recon-bulk-what">${_reconAmountBadge(p)} <span class="recon-meta">${what}</span></div>
+      <div class="form-group recon-f-book">
+        <label for="recon-all-book-${idSafe}">Book</label>
+        <select id="recon-all-book-${idSafe}">${_reconBookOptions(pickId, true, fits)}</select>
+      </div>
+      <div class="form-group recon-f-qty">
+        <label for="recon-all-qty-${idSafe}">Copies</label>
+        <input type="number" inputmode="numeric" id="recon-all-qty-${idSafe}" value="${qty}" min="1">
+      </div>
+    </div>`;
+  }).join('');
+  const rest = rows.length - picked;
+  return `<div class="card recon-card recon-bulk">
+    <div class="recon-info"><div><strong>Record all ${rows.length} waiting payments</strong></div>
+      <div class="recon-meta">${picked ? `${picked} already ha${picked === 1 ? 's its' : 've their'} book picked.` : 'Pick a book for each one.'}${rest && picked ? ` Pick a book for the other ${rest}.` : ''} Then record them all with one press. Anything left on “Choose book” stays in the list.</div></div>
+    <details class="recon-bulk-list"${rest ? ' open' : ''}>
+      <summary>Check the books and copies</summary>
+      <div class="recon-bulk-rows">${list}</div>
+    </details>
+    <div class="recon-actions"><button class="btn gold sm" data-action="recon.recordAll">Record all with a book</button></div>
+  </div>`;
+}
+
+// Records every row of the list that has a book. Worked out again at the
+// press, so a payment recorded meanwhile (by the background check, or on
+// another device) is not recorded twice. A payment in another currency is
+// converted at the payment day's rate, the same lookup Record uses.
+async function reconRecordAll() {
+  const ids = window._reconBulkIds || [];
   const mem = getReconMemory();
   const recordedIds = _reconRecordedChargeIds();
-  const ready = _reconSuggestedReady(payments
-    .map(p => ({ p, c: classifyStripePayment(p, { mem, recordedIds }) }))
-    .filter(({ c }) => c.kind === 'direct'));
-  if (!ready.length) { showToast('These payments are already recorded', 'warn'); renderReconcile(); return; }
-  const ok = await confirmDialog('Each one takes its copies off stock and adds to your earnings. You can void any of them from History.', {
-    title: `Record ${ready.length} card sale${ready.length === 1 ? '' : 's'}?`,
-    okLabel: `Record ${ready.length}`,
-    details: ready.map(r => [`${r.p.date} · ${_stripeFmtMoney(r.p.amount, r.p.currency)}`, `${r.qty} × ${BOOKS[r.bookId].title}`]),
+  const picks = [];
+  let unpicked = 0;
+  ids.forEach(id => {
+    const p = (window._reconPayments || []).find(x => x.id === id);
+    if (!p || p.refunded || p.disputed) return;
+    const c = classifyStripePayment(p, { mem, recordedIds });
+    if ((c.kind !== 'direct' && c.kind !== 'bigcartel') || !_reconIsPickable(c)) return;
+    const idSafe = id.replace(/[^A-Za-z0-9_]/g, '');
+    const bookId = document.getElementById(`recon-all-book-${idSafe}`)?.value;
+    const qty = Math.max(1, parseInt(document.getElementById(`recon-all-qty-${idSafe}`)?.value, 10) || 1);
+    if (!bookId || !BOOKS[bookId]) { unpicked++; return; }
+    picks.push({ p, bookId, qty });
+  });
+  if (!picks.length) {
+    showToast(unpicked ? 'Pick a book for at least one payment first' : 'These payments are already recorded', 'warn');
+    if (!unpicked) renderReconcile();
+    return;
+  }
+  const left = unpicked ? ` ${unpicked} without a book stay${unpicked === 1 ? 's' : ''} in the list.` : '';
+  const ok = await confirmDialog(`Each one takes its copies off stock and adds to your earnings. You can void any of them from History.${left}`, {
+    title: `Record ${picks.length} sale${picks.length === 1 ? '' : 's'}?`,
+    okLabel: `Record ${picks.length}`,
+    details: picks.map(r => [`${r.p.date} · ${_stripeFmtMoney(r.p.amount, r.p.currency)}`, `${r.qty} × ${BOOKS[r.bookId].title}`]),
   });
   if (!ok) return;
   let n = 0;
+  let noRate = 0;
   const touched = new Set();
-  ready.forEach(({ p, bookId, qty }) => {
-    if (_reconRecordedChargeIds().has(p.id)) return;
+  for (const { p, bookId, qty } of picks) {
+    if (_reconRecordedChargeIds().has(p.id)) continue;
+    const bookCur = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
+    let conversion = null;
+    if (String(p.currency || '').toUpperCase() !== bookCur) {
+      conversion = await resolveStripeRate(p, bookCur);
+      if (!(conversion?.rate > 0)) { noRate++; continue; }
+    }
     const num = stripeOrderNumber(p);
     try {
-      _reconApplyPaymentToBook(p, bookId, qty, { num, ...(p.cardPresent ? { chan: 'Book Fair', notes: 'Card reader' } : {}) });
+      _reconApplyPaymentToBook(p, bookId, qty, {
+        num, rate: conversion?.rate, rateSource: conversion?.source, rateDate: conversion?.date,
+        ...(p.cardPresent ? { chan: 'Book Fair', notes: 'Card reader' } : {}),
+      });
       mem.recorded[p.id] = { bookId, num, at: Date.now() };
       _reconSession.logged++; n++;
       touched.add(bookId);
-    } catch (e) { console.warn('Recording a suggested Stripe sale failed', e); }
-  });
+    } catch (e) { console.warn('Recording a Stripe sale from the list failed', e); }
+  }
   saveReconMemory(mem);
   if (touched.has(activeBook)) updateDash();
   if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
-  showToast(n ? `✓ Recorded ${n} card sale${n === 1 ? '' : 's'}` : 'Nothing was recorded', n ? 'ok' : 'warn');
+  const rateNote = noRate ? ` ${noRate} in another currency wait${noRate === 1 ? 's' : ''} for the day’s exchange rate. Try again shortly.` : '';
+  showToast(n ? `✓ Recorded ${n} sale${n === 1 ? '' : 's'}.${rateNote}` : `Nothing was recorded.${rateNote}`, n && !noRate ? 'ok' : 'warn', rateNote ? 6000 : undefined);
   renderReconcile();
 }
-registerActions({ 'recon.recordSuggested': () => reconRecordSuggested() });
+registerActions({ 'recon.recordAll': () => reconRecordAll() });
 
 // Bulk: dismiss every payment in a "Group identical" row.
 function reconDismissGroup(gi) {
