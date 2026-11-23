@@ -116,6 +116,41 @@ export function paidUnitPrice(payment = {}, book = null, bookCurrency = '') {
   return set > 0 && Number.isFinite(set) ? { price: set, source: 'book' } : null;
 }
 
+/**
+ * The books whose price this payment buys a whole number of copies of, in the
+ * currency it was paid in. A suggestion for a person to confirm, never a
+ * reason to record on its own: at a fair several books often share a price.
+ *
+ * `bookCurrencyOf(book)` gives a book's own three-letter currency.
+ */
+export function booksFittingAmount(payment = {}, books = {}, bookCurrencyOf = () => '') {
+  if (!payment || !(Number(payment.amount) > 0)) return [];
+  return Object.values(books || {}).filter(book => {
+    if (!book?.id) return false;
+    const unit = paidUnitPrice(payment, book, bookCurrencyOf(book));
+    const qty = unit ? wholeCopies(payment.amount, unit.price) : 0;
+    return qty >= 1 && qty <= MAX_AUTO_QTY;
+  }).map(book => book.id);
+}
+
+/**
+ * Which book the Stripe worklist should pick in advance for a payment, and why.
+ * Strongest first: the book the payment link was tagged with, the one title
+ * typed on the card reader, then the only book whose price fits the amount.
+ * Returns { bookId, why: 'tag' | 'named' | 'price' } or null.
+ *
+ * `named` is what booksInDescription found in the payment's description.
+ */
+export function suggestedBook({ taggedId = '', named = [], fits = [] } = {}) {
+  if (taggedId) return { bookId: taggedId, why: 'tag' };
+  const names = (Array.isArray(named) ? named : []).filter(line => line?.bookId);
+  if (names.length === 1) return { bookId: names[0].bookId, why: 'named' };
+  // Two titles typed means a mixed sale: the price of one book says nothing.
+  if (names.length > 1) return null;
+  const list = Array.isArray(fits) ? fits.filter(Boolean) : [];
+  return list.length === 1 ? { bookId: list[0], why: 'price' } : null;
+}
+
 /** Whole copies `amount` pays for at `price` (to the cent), or 0 when it isn't a whole number of them. */
 export function wholeCopies(amount, price) {
   // In whole cents, so "within a cent" isn't decided by floating-point dust.
@@ -230,6 +265,56 @@ export function refundsToRaise(refunds = [], sales = []) {
     });
   });
   return out;
+}
+
+// ─── A recorded sale the customer disputed with their bank ────────────────
+
+/**
+ * Which disputes (chargebacks) reach a sale this app recorded from a Stripe
+ * payment and haven't been raised yet. Nothing is reversed: the money is only
+ * held while the dispute runs, and the publisher may well win it.
+ *
+ * `disputes` are { id, chargeId, amount, currency, status, dueBy }; `sales`
+ * are the ledger rows from stripeRecordedSales(), each with `disputeNoted`.
+ */
+export function disputesToRaise(disputes = [], sales = []) {
+  const byCharge = new Map();
+  (Array.isArray(sales) ? sales : []).forEach(sale => {
+    if (!sale?.chargeId || sale.voided) return;
+    if (!byCharge.has(sale.chargeId)) byCharge.set(sale.chargeId, []);
+    byCharge.get(sale.chargeId).push(sale);
+  });
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(disputes) ? disputes : []).forEach(dispute => {
+    if (!dispute?.chargeId || seen.has(dispute.chargeId)) return;
+    const mark = dispute.id || 'disputed';
+    const rows = (byCharge.get(dispute.chargeId) || []).filter(row => row.disputeNoted !== mark
+      // A dispute first seen only as a flag on the charge has no id yet; once
+      // that is noted, the same dispute seen later with its id is not news.
+      && !(row.disputeNoted === 'disputed' && dispute.id));
+    if (!rows.length) return;
+    seen.add(dispute.chargeId);
+    rows.forEach(row => out.push({ ...row, disputeId: dispute.id || '', dueBy: Number(dispute.dueBy) || 0 }));
+  });
+  return out;
+}
+
+/** What the alert says about disputed sales. `dueText(ms)` formats the reply deadline. */
+export function describeDisputes(items = [], dueText = () => '') {
+  const list = (Array.isArray(items) ? items : []).filter(Boolean);
+  if (!list.length) return { count: 0, title: '', detail: '' };
+  const charges = new Set(list.map(item => item.chargeId));
+  const soonest = list.map(item => item.dueBy).filter(due => due > 0).sort((a, b) => a - b)[0];
+  const due = soonest ? dueText(soonest) : '';
+  const head = charges.size === 1
+    ? `A customer disputed the ${list.map(item => item.bookTitle).filter((t, i, all) => all.indexOf(t) === i).join(' and ')} card sale with their bank.`
+    : `${charges.size} card sales were disputed with the customers’ banks.`;
+  return {
+    count: charges.size,
+    title: charges.size === 1 ? 'A card sale is being disputed' : `${charges.size} card sales are being disputed`,
+    detail: `${head} Stripe is holding the money until it’s settled${due ? `. Reply in Stripe by ${due}, or the customer wins by default.` : '. Reply in Stripe before its deadline, or the customer wins by default.'} The sale stays in your books for now.`,
+  };
 }
 
 /** What the alert says about refunded sales. */

@@ -267,10 +267,16 @@ import {
   describeCardSales,
   describeRefunds,
   refundsToRaise,
+  describeDisputes,
+  disputesToRaise,
   stripeSalePlan,
   paidUnitPrice,
   wholeCopies,
+  booksFittingAmount,
+  suggestedBook,
+  MAX_AUTO_QTY,
 } from './lib/stripe-sale-autorecord.js';
+import { STRIPE_DISMISSALS_KEY, mergeDismissedMap, withDismissals } from './lib/stripe-dismissals.js';
 import {
   integrationBackoffMs,
   noteIntegrationFailure,
@@ -16716,15 +16722,43 @@ export function renderFairSyncPill() {
 // ════════════════════════════════════════════════════════════════════════
 
 const RECON_MEMORY_KEY = 'lm-stripe-reconcile';
-export function getReconMemory() {
-  try {
-    const m = JSON.parse(localStorage.getItem(RECON_MEMORY_KEY) || '{}');
-    m.recorded = m.recorded || {};   // chargeId -> { bookId, num, at }
-    m.dismissed = m.dismissed || {};  // chargeId -> reason/true
-    return m;
-  } catch (_) { return { recorded: {}, dismissed: {} }; }
+// Dismissals are shared with the publisher's other devices through the Tax
+// Centre document (lib/stripe-dismissals.js); the rest of this memory is a
+// per-device convenience, since recorded sales are found in the ledger itself.
+function _sharedStripeDismissals() {
+  const list = TAX_CENTER?.[STRIPE_DISMISSALS_KEY];
+  return Array.isArray(list) ? list : [];
 }
-export function saveReconMemory(m) { storageSet(RECON_MEMORY_KEY, JSON.stringify(m || {})); }
+
+export function getReconMemory() {
+  let m;
+  try { m = JSON.parse(localStorage.getItem(RECON_MEMORY_KEY) || '{}') || {}; } catch (_) { m = {}; }
+  m.recorded = m.recorded || {};   // chargeId -> { bookId, num, at }
+  m.dismissed = mergeDismissedMap(m.dismissed || {}, _sharedStripeDismissals());  // chargeId -> true
+  // What was dismissed when this copy was read, so saving can tell an Undo
+  // (gone since) from a payment this device never knew was set aside.
+  Object.defineProperty(m, '_dismissedAtRead', { value: new Set(Object.keys(m.dismissed)), enumerable: false });
+  return m;
+}
+
+export function saveReconMemory(m) {
+  storageSet(RECON_MEMORY_KEY, JSON.stringify(m || {}));
+  // Authors never see the worklist and can't write the Tax Centre.
+  if (!m || isAuthor() || !TAX_CENTER) return;
+  const before = m._dismissedAtRead || new Set();
+  const now = Object.keys(m.dismissed || {}).filter(id => m.dismissed[id]);
+  const changes = [
+    // Every dismissal this device holds, including ones made before sharing existed.
+    ...now.map(id => ({ id, dismissed: true })),
+    ...[...before].filter(id => !m.dismissed?.[id]).map(id => ({ id, dismissed: false })),
+  ];
+  const list = _sharedStripeDismissals();
+  const next = withDismissals(list, changes);
+  if (next === list) return;
+  TAX_CENTER[STRIPE_DISMISSALS_KEY] = next;
+  // Merged with the other devices' copy and kept to send later when offline.
+  saveTaxCenter();
+}
 
 // Resolve a usable Stripe key: prefer the Tax Center key (where the fees tool
 // stores it), then the Invoice Settings key, then whatever is in the field.
@@ -16842,13 +16876,18 @@ function _reconFindInvoice(num) {
 // `near` widens "same amount" to within 10%: before recording on its own, a
 // register row in euros holds a live-converted figure (€37.42 for a €40 copy),
 // so an exact match would miss the very sale it is guarding against.
+// `bookIds`, when the payment says which book(s) it paid for, limits the
+// comparison to sales of those books: at a fair most books cost the same, and
+// a $20 sale of one title is no reason to hold a $20 tap for another.
 // A caller checking a whole list without recording anything in between may
 // pass `logged` from _reconLoggedPayments(), so each payment doesn't re-walk
 // every book's history (and re-parse every row's date).
-function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayments() } = {}) {
+function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayments(), bookIds = null } = {}) {
   const target = Math.round(p.amount * 100);
   const slack = near ? target * 0.1 : 0;
-  for (const { cents, time } of logged.get(p.currency) || []) {
+  const only = Array.isArray(bookIds) && bookIds.filter(Boolean).length ? new Set(bookIds) : null;
+  for (const { cents, time, bookId } of logged.get(p.currency) || []) {
+    if (only && !only.has(bookId)) continue;
     if (Math.abs(cents - target) > slack) continue;
     if (Math.abs((time - p.created) / 86400000) <= 3) return true;
   }
@@ -16856,17 +16895,23 @@ function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayme
 }
 
 // The paid history rows _reconLikelyAlreadyLogged compares against, read in
-// one pass: per currency, each row's amount in cents and its sale day's time.
+// one pass: per currency, each row's amount in cents, its sale day's time and
+// its book. A row recorded from a Stripe payment is left out: it belongs to a
+// different charge (this one would already read as recorded), so it can't be
+// a hand-typed copy of this one. Counting it held every later card sale at the
+// same price for three days, so at a fair the second $20 tap waited behind the
+// first, and the third behind the second.
 function _reconLoggedPayments() {
   const byCurrency = new Map();
-  for (const s of Object.values(states)) {
-    for (const h of (s.hist || [])) {
+  for (const [bookId, s] of Object.entries(states)) {
+    for (const h of (s?.hist || [])) {
       if (h.voided || h.gratuity) continue;
+      if (typeof h.sheetsId === 'string' && h.sheetsId.startsWith('stripe-')) continue;
       const pay = h.payment;
       if (!pay || !pay.amount) continue;
       const cur = normalizeCurrencyCode(pay.currency || '', '');
       if (!byCurrency.has(cur)) byCurrency.set(cur, []);
-      byCurrency.get(cur).push({ cents: Math.round(pay.amount * 100), time: new Date(h.date).getTime() });
+      byCurrency.get(cur).push({ cents: Math.round(pay.amount * 100), time: new Date(h.date).getTime(), bookId });
     }
   }
   return byCurrency;
@@ -17080,14 +17125,46 @@ async function reconUpdateDefaults(id, grouped = false, reset = false, retry = f
   status.textContent = `${source} · ${total}${grouped ? ' per payment' : ''}`;
 }
 
-function _reconBookOptions(selectedId, includeBlank) {
+function _reconBookOptions(selectedId, includeBlank, fits = []) {
   // includeBlank seeds a "— Choose book —" first option so an unmatched payment
   // can't be logged against the first book by a stray click. Selected when no
-  // SKU match is known, which also leaves the Record button disabled.
+  // book is suggested, which also leaves the Record button disabled.
   const blank = includeBlank ? `<option value=""${selectedId ? '' : ' selected'}>— Choose book —</option>` : '';
-  return blank + BOOK_LIST.map(b =>
-    `<option value="${escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${escapeHtml(b.title)} · ${b.currency}${b.listPrice}</option>`
-  ).join('');
+  const option = b =>
+    `<option value="${escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${escapeHtml(b.title)} · ${b.currency}${b.listPrice}</option>`;
+  // Several books at the paid price: those go first, so the right one is
+  // near the top instead of somewhere in the whole catalogue.
+  const fitting = new Set(Array.isArray(fits) ? fits : []);
+  if (fitting.size > 1) {
+    const first = BOOK_LIST.filter(b => fitting.has(b.id));
+    const rest = BOOK_LIST.filter(b => !fitting.has(b.id));
+    return blank
+      + `<optgroup label="Priced to match this payment">${first.map(option).join('')}</optgroup>`
+      + (rest.length ? `<optgroup label="Other books">${rest.map(option).join('')}</optgroup>` : '');
+  }
+  return blank + BOOK_LIST.map(option).join('');
+}
+
+// The book the worklist picks in advance for a payment, so recording it is one
+// tap: the book its link was tagged with, the one title typed on the card
+// reader, or the only book whose price the amount fits. The rules and their
+// order are in lib/stripe-sale-autorecord.js. `fits` also orders the book list.
+function _reconSuggestion(p, c) {
+  if (c.bookId) return { pick: { bookId: c.bookId, why: 'tag' }, fits: [] };
+  if (c.kind !== 'direct') return { pick: null, fits: [] };
+  const fits = booksFittingAmount(p, BOOKS, book => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'));
+  const named = p.cardPresent ? booksInDescription(p.description, BOOKS) : [];
+  return { pick: suggestedBook({ named, fits }), fits };
+}
+
+const _RECON_SUGGEST_WHY = {
+  tag: 'SKU match',
+  named: 'Typed on the card reader',
+  price: 'Only book at this price',
+};
+function _reconSuggestPill(pick) {
+  if (!pick || !BOOKS[pick.bookId]) return '';
+  return `<span class="recon-suggest">${_RECON_SUGGEST_WHY[pick.why] || 'Suggested'} → ${escapeHtml(BOOKS[pick.bookId].title)}</span>`;
 }
 
 // Collapse the key field to a tidy "saved" chip once a key exists anywhere; the
@@ -17213,18 +17290,20 @@ function _reconNeedCard(p, c) {
   const kindPill = c.kind === 'bigcartel'
     ? `<span class="pill green recon-pill">Big Cartel ${escapeHtml(c.ref)}</span>`
     : `<span class="pill gold recon-pill">Direct sale</span>`;
-  const suggest = c.bookId ? `<span class="recon-suggest">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
-  const recDisabled = c.bookId ? '' : ' disabled';
+  const { pick, fits } = _reconSuggestion(p, c);
+  const pickId = pick && BOOKS[pick.bookId] ? pick.bookId : '';
+  const suggest = _reconSuggestPill(pick);
+  const recDisabled = pickId ? '' : ' disabled';
   return `<div class="card recon-card">
     <div class="recon-info"><div>${_reconAmountBadge(p)} ${kindPill}${suggest}${disputed}</div>${_reconMeta(p)}</div>
     <div class="recon-fields">
       <div class="form-group recon-f-book">
         <label for="recon-book-${idSafe}">Book</label>
-        <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+        <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(pickId, !c.bookId, fits)}</select>
       </div>
       <div class="form-group recon-f-qty">
         <label for="recon-qty-${idSafe}">Qty</label>
-        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'">
+        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, pickId)}" min="1" oninput="this.dataset.manual='1'">
       </div>
       <div class="form-group recon-f-num">
         <label for="recon-num-${idSafe}">Order #</label>
@@ -17247,7 +17326,7 @@ function _reconNeedCard(p, c) {
         <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
       </div>
     </div>
-    <div class="recon-hint" id="recon-hint-${idSafe}"${c.bookId ? ' hidden' : ''}>Choose a book to record this sale.</div>
+    <div class="recon-hint" id="recon-hint-${idSafe}"${pickId ? ' hidden' : ''}>Choose a book to record this sale.</div>
     <div id="recon-fx-${idSafe}" class="recon-fx" role="status" aria-live="polite">Preparing the exchange rate…</div>
   </div>`;
 }
@@ -17258,21 +17337,23 @@ function _reconGroupCard(items, gi) {
   const kindPill = c.kind === 'bigcartel'
     ? `<span class="pill green recon-pill">Big Cartel</span>`
     : `<span class="pill gold recon-pill">Direct sale</span>`;
-  const suggest = c.bookId ? `<span class="recon-suggest">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
-  const total = _stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
+  const { pick, fits } = _reconSuggestion(p, c);
+  const pickId = pick && BOOKS[pick.bookId] ? pick.bookId : '';
+  const suggest = _reconSuggestPill(pick);
+  const total =_stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
   const desc = p.description ? `<div class="recon-meta-desc">${escapeHtml(p.description)}</div>` : '';
-  const recDisabled = c.bookId ? '' : ' disabled';
+  const recDisabled = pickId ? '' : ' disabled';
   return `<div class="card recon-card recon-group">
     <div class="recon-info"><div>${_reconAmountBadge(p)} <span class="recon-count">× ${n}</span> ${kindPill}${suggest}</div>
       <div class="recon-meta">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
     <div class="recon-fields">
       <div class="form-group recon-f-book">
         <label for="recon-gbook-${gi}">Book (applies to all ${n})</label>
-        <select id="recon-gbook-${gi}" onchange="reconUpdateDefaults('${gi}', true, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+        <select id="recon-gbook-${gi}" onchange="reconUpdateDefaults('${gi}', true, true)">${_reconBookOptions(pickId, !c.bookId, fits)}</select>
       </div>
       <div class="form-group recon-f-qty">
         <label for="recon-gqty-${gi}">Qty each</label>
-        <input type="number" inputmode="numeric" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, c.bookId)}" min="1" oninput="this.dataset.manual='1'">
+        <input type="number" inputmode="numeric" id="recon-gqty-${gi}" value="${_reconDefaultQty(p, pickId)}" min="1" oninput="this.dataset.manual='1'">
       </div>
       <div class="form-group recon-f-amt">
         <label for="recon-gamount-${gi}">Stripe amount paid</label>
@@ -17291,7 +17372,7 @@ function _reconGroupCard(items, gi) {
         <button class="btn tag sm" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
       </div>
     </div>
-    <div class="recon-hint" id="recon-ghint-${gi}"${c.bookId ? ' hidden' : ''}>Choose a book to record these sales.</div>
+    <div class="recon-hint" id="recon-ghint-${gi}"${pickId ? ' hidden' : ''}>Choose a book to record these sales.</div>
     <div id="recon-gfx-${gi}" class="recon-fx" role="status" aria-live="polite">Preparing the exchange rate…</div>
     <div class="recon-note">${escapeHtml(p.date)} · Each payment keeps its own order number.</div>
   </div>`;
@@ -17403,6 +17484,20 @@ export function renderReconcile() {
     needsEl.innerHTML = _RECON_PAID_NOTE_HTML + html;
   } else {
     needsEl.innerHTML = _RECON_PAID_NOTE_HTML + shown.map(({ p, c }) => _reconNeedCard(p, c)).join('');
+  }
+
+  // A busy fair day leaves a dozen card taps that each need one press of
+  // Record. When several already have their book picked and add up to whole
+  // copies in the book's own currency, offer to record them all at once.
+  const ready = _reconSuggestedReady(shown);
+  window._reconReadyIds = ready.map(r => r.p.id);
+  if (ready.length > 1) {
+    const copies = ready.reduce((sum, r) => sum + r.qty, 0);
+    needsEl.insertAdjacentHTML('afterbegin', `<div class="card recon-card recon-bulk">
+      <div class="recon-info"><div><strong>${ready.length} payments are ready to record</strong></div>
+        <div class="recon-meta">Each has its book picked, from its link, a title typed on the card reader, or the only book at that price. ${copies} cop${copies === 1 ? 'y' : 'ies'} in all.</div></div>
+      <div class="recon-actions"><button class="btn gold sm" data-action="recon.recordSuggested">Record all ${ready.length}</button></div>
+    </div>`);
   }
 
   needsEl.querySelectorAll('[data-recon-default]').forEach(input => {
@@ -17747,6 +17842,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     const recorded = [];
     const cardSales = [];
     const refundSignals = [];
+    const disputeSignals = [];
 
     for (const payment of payments) {
       // Money that came back is checked first, and without asking the
@@ -17754,6 +17850,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
       // `recorded` before it ever looks for an invoice number, so a refund of a
       // charge the sweep settled would be skipped here and never mentioned.
       if (payment.refunded || payment.disputed) {
+        if (payment.disputed) disputeSignals.push({ id: '', chargeId: payment.id });
         if (payment.refunded) {
           refundSignals.push({
             chargeId: payment.id,
@@ -17877,6 +17974,17 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     }
     raiseRefundedStripeSales(refundSignals);
 
+    // Disputes come weeks after the sale, like refunds, so they are asked for
+    // by when they were opened. Listed before the charge flags so a dispute
+    // seen in both is raised with its id and reply deadline.
+    try {
+      disputeSignals.unshift(...await fetchStripeDisputesSince(stripeInvoiceSweepSince()));
+    } catch (error) {
+      // A restricted key without dispute access still gets the flags above.
+      console.warn('Stripe dispute check skipped', error);
+    }
+    raiseDisputedStripeSales(disputeSignals);
+
     // A sale recorded in the background (a card payment above, another
     // device) changes what an author owes on a book nobody has open. Re-make
     // any settle-up pay link whose amount went stale, so the author's Pay
@@ -17997,7 +18105,7 @@ async function autoRecordStripeSale(payment, rawClassification, { raise = true }
     classification,
     book,
     bookCurrency: book ? normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD') : '',
-    likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }),
+    likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true, bookIds: [classification.bookId] }),
     // Payments from before this version first ran were judged by the old
     // rules, under which a euro or door-price sale never recorded — she may
     // well have typed those in by hand since. They are never recorded now.
@@ -18013,7 +18121,7 @@ async function autoRecordStripeSale(payment, rawClassification, { raise = true }
     const currentBook = BOOKS[classification.bookId];
     if (!currentBook || normalizeCurrencyCode(getBookCurrencyCode(currentBook), 'CAD') !== options.bookCurrency) return null;
     plan = stripeSalePlan(payment, { ...options, book: currentBook,
-      likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }), conversionRate: conversion.rate,
+      likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true, bookIds: [classification.bookId] }), conversionRate: conversion.rate,
     });
   }
   if (plan.action === 'skip') return null;
@@ -18089,21 +18197,49 @@ async function recordReadyStripeSales(payments, { budgetMs = RECON_AUTO_BUDGET_M
   return recorded;
 }
 
-/** Refunds issued since `since`, one page, newest first. */
-async function fetchStripeRefundsSince(since) {
+/**
+ * Every Stripe object of one kind (refunds, disputes) made since `since`,
+ * newest first, following Stripe's pages. After a long break there can be
+ * more than one page, and a refund past the first hundred used to go unseen.
+ */
+async function _stripeListSince(resource, since, maxPages = 10) {
   const key = getReconStripeKey();
   if (!key) return [];
-  const params = new URLSearchParams({ limit: '100' });
-  if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
-  const resp = await fetch(`https://api.stripe.com/v1/refunds?${params.toString()}`, {
-    headers: { 'Authorization': 'Bearer ' + key },
-  });
-  if (!resp.ok) {
-    const err = await resp.json().catch(() => ({}));
-    throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+  const out = [];
+  let startingAfter = '';
+  for (let page = 0; page < maxPages; page++) {
+    const params = new URLSearchParams({ limit: '100' });
+    if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
+    if (startingAfter) params.set('starting_after', startingAfter);
+    const resp = await fetch(`https://api.stripe.com/v1/${resource}?${params.toString()}`, {
+      headers: { 'Authorization': 'Bearer ' + key },
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `HTTP ${resp.status}`);
+    }
+    const json = await resp.json();
+    const data = json.data || [];
+    out.push(...data);
+    if (!json.has_more || !data.length) break;
+    startingAfter = data[data.length - 1].id;
   }
-  const json = await resp.json();
-  return (json.data || []).map(r => {
+  return out;
+}
+
+/** Disputes (chargebacks) opened since `since`, newest first. */
+async function fetchStripeDisputesSince(since) {
+  return (await _stripeListSince('disputes', since)).map(d => ({
+    id: d.id,
+    chargeId: typeof d.charge === 'string' ? d.charge : (d.charge?.id || ''),
+    status: d.status,
+    dueBy: (Number(d.evidence_details?.due_by) || 0) * 1000,
+  })).filter(d => d.chargeId);
+}
+
+/** Refunds issued since `since`, newest first. */
+async function fetchStripeRefundsSince(since) {
+  return (await _stripeListSince('refunds', since)).map(r => {
     const cur = String(r.currency || '').toUpperCase();
     return {
       id: r.id,
@@ -18152,6 +18288,7 @@ function stripeRecordedSales() {
         refundNoted: h.refundNoted || '',
         refundPartial: !!h.refundPartial,
         refundedSoFar: Number(h.refundedSoFar) || 0,
+        disputeNoted: h.disputeNoted || '',
       });
     });
   });
@@ -18162,6 +18299,32 @@ function findStripeSaleRow(bookId, sheetsId) {
   // An empty id would match every row that never had one.
   if (!sheetsId) return null;
   return (states[bookId]?.hist || []).find(h => h?.sheetsId === sheetsId) || null;
+}
+
+// A recorded card sale the customer disputed with their bank (a chargeback).
+// Raised once per dispute, marked on the row so every device stays quiet
+// after it. Nothing is reversed: Stripe only holds the money while the
+// dispute runs, and the publisher can still win it by replying in Stripe.
+function raiseDisputedStripeSales(signals) {
+  const found = disputesToRaise(signals, stripeRecordedSales());
+  if (!found.length) return;
+  const touched = new Set();
+  found.forEach(item => {
+    const row = findStripeSaleRow(item.bookId, item.sheetsId);
+    if (row) { row.disputeNoted = item.disputeId || 'disputed'; touched.add(item.bookId); }
+  });
+  touched.forEach(bookId => saveState(bookId));
+  const said = describeDisputes(found, ms => fmtD(localDay(ms)));
+  if (!said.count) return;
+  pushAppAlert({
+    id: 'stripe-disputes',
+    icon: '⚠️',
+    title: said.title,
+    detail: said.detail,
+    tone: SYNC_TONES.PENDING,
+    actionLabel: 'Open disputes in Stripe',
+    action: "window.open('https://dashboard.stripe.com/disputes', '_blank', 'noopener')",
+  });
 }
 
 function raiseRefundedStripeSales(signals) {
@@ -18355,7 +18518,7 @@ function recordReaderSplitSale(payment, lines) {
     noteUnmatchedReaderPayment(payment);
     return { action: 'review', reason, chargeId: payment.id };
   };
-  if (_reconLikelyAlreadyLogged(payment)) return raise('maybe-rung-up');
+  if (_reconLikelyAlreadyLogged(payment, { bookIds: lines.map(line => line.bookId) })) return raise('maybe-rung-up');
   const plan = splitSalePlan(payment, lines, BOOKS, {
     bookCurrency: (book) => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'),
   });
@@ -19048,6 +19211,64 @@ function reconRecordGroup(gi) {
   if (n) showToast(`✓ Logged ${n}× sale${n === 1 ? '' : 's'} → ${BOOKS[bookId].title}`);
   renderReconcile();
 }
+
+// The shown worklist payments that can be recorded without any typing: a
+// direct sale with its book picked in advance, paid in that book's own
+// currency (no exchange rate to wait for), adding up to whole copies.
+function _reconSuggestedReady(shown = []) {
+  const out = [];
+  shown.forEach(({ p, c }) => {
+    if (c.kind !== 'direct' || p.refunded || p.disputed) return;
+    const pick = _reconSuggestion(p, c).pick;
+    const book = pick && BOOKS[pick.bookId];
+    if (!book) return;
+    const bookCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+    if (String(p.currency || '').toUpperCase() !== bookCur) return;
+    const unit = paidUnitPrice(p, book, bookCur);
+    const qty = unit ? wholeCopies(p.amount, unit.price) : 0;
+    if (!qty || qty > MAX_AUTO_QTY) return;
+    out.push({ p, bookId: book.id, qty });
+  });
+  return out;
+}
+
+// Bulk: record every payment the worklist has a book picked for. The list is
+// worked out again at the press, so a payment recorded meanwhile (by the
+// background check, or on another device) is not recorded twice.
+async function reconRecordSuggested() {
+  const wanted = new Set(window._reconReadyIds || []);
+  const payments = (window._reconPayments || []).filter(p => wanted.has(p.id));
+  const mem = getReconMemory();
+  const recordedIds = _reconRecordedChargeIds();
+  const ready = _reconSuggestedReady(payments
+    .map(p => ({ p, c: classifyStripePayment(p, { mem, recordedIds }) }))
+    .filter(({ c }) => c.kind === 'direct'));
+  if (!ready.length) { showToast('These payments are already recorded', 'warn'); renderReconcile(); return; }
+  const ok = await confirmDialog('Each one takes its copies off stock and adds to your earnings. You can void any of them from History.', {
+    title: `Record ${ready.length} card sale${ready.length === 1 ? '' : 's'}?`,
+    okLabel: `Record ${ready.length}`,
+    details: ready.map(r => [`${r.p.date} · ${_stripeFmtMoney(r.p.amount, r.p.currency)}`, `${r.qty} × ${BOOKS[r.bookId].title}`]),
+  });
+  if (!ok) return;
+  let n = 0;
+  const touched = new Set();
+  ready.forEach(({ p, bookId, qty }) => {
+    if (_reconRecordedChargeIds().has(p.id)) return;
+    const num = stripeOrderNumber(p);
+    try {
+      _reconApplyPaymentToBook(p, bookId, qty, { num, ...(p.cardPresent ? { chan: 'Book Fair', notes: 'Card reader' } : {}) });
+      mem.recorded[p.id] = { bookId, num, at: Date.now() };
+      _reconSession.logged++; n++;
+      touched.add(bookId);
+    } catch (e) { console.warn('Recording a suggested Stripe sale failed', e); }
+  });
+  saveReconMemory(mem);
+  if (touched.has(activeBook)) updateDash();
+  if (typeof window.renderAllOverview === 'function') window.renderAllOverview();
+  showToast(n ? `✓ Recorded ${n} card sale${n === 1 ? '' : 's'}` : 'Nothing was recorded', n ? 'ok' : 'warn');
+  renderReconcile();
+}
+registerActions({ 'recon.recordSuggested': () => reconRecordSuggested() });
 
 // Bulk: dismiss every payment in a "Group identical" row.
 function reconDismissGroup(gi) {

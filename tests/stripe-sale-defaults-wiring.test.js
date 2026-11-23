@@ -308,6 +308,31 @@ it('treats a register row in the same currency within 10% as possibly the same s
   expect(api._reconLikelyAlreadyLogged({ ...pay, amount: 55 }, { near: true })).toBe(false);
 });
 
+// A fair weekend: two $20 taps of the same book thirteen minutes apart. The
+// first one, recorded from Stripe, used to hold the second as "maybe rung up".
+it('never mistakes a sale recorded from another Stripe payment for this one', () => {
+  const states = { b1: { hist: [{ date: '2026-11-22', sheetsId: 'stripe-ch_first', payment: { currency: 'CAD', amount: 20, ref: 'ch_first' } }] } };
+  const api = buildHarness({ names: ['_reconLikelyAlreadyLogged', '_reconLoggedPayments'], deps: { states, normalizeCurrencyCode: currencyDeps.normalizeCurrencyCode }, returns: '{ _reconLikelyAlreadyLogged }' });
+  const second = { ...payment, id: 'ch_second', currency: 'CAD', amount: 20, created: Date.parse('2026-11-22T19:27:00Z') };
+  expect(api._reconLikelyAlreadyLogged(second, { near: true, bookIds: ['b1'] })).toBe(false);
+  expect(api._reconLikelyAlreadyLogged(second, { near: true })).toBe(false);
+});
+
+it('only holds a book payment for a hand-typed sale of the same book', () => {
+  const states = {
+    b1: { hist: [] },
+    b2: { hist: [{ date: '2026-11-22', payment: { currency: 'CAD', amount: 20 } }] },
+  };
+  const api = buildHarness({ names: ['_reconLikelyAlreadyLogged', '_reconLoggedPayments'], deps: { states, normalizeCurrencyCode: currencyDeps.normalizeCurrencyCode }, returns: '{ _reconLikelyAlreadyLogged }' });
+  const tap = { ...payment, currency: 'CAD', amount: 20, created: Date.parse('2026-11-22T19:14:00Z') };
+  // A $20 cash sale of another title is not this card sale…
+  expect(api._reconLikelyAlreadyLogged(tap, { near: true, bookIds: ['b1'] })).toBe(false);
+  // …but the same title rung up by hand still is, and so is anything for an untagged payment.
+  expect(api._reconLikelyAlreadyLogged(tap, { near: true, bookIds: ['b2'] })).toBe(true);
+  expect(api._reconLikelyAlreadyLogged(tap, { near: true, bookIds: [null] })).toBe(true);
+  expect(api._reconLikelyAlreadyLogged(tap, { near: true })).toBe(true);
+});
+
 it('answers the same from a prebuilt list of logged payments as from a fresh scan', () => {
   const states = {
     b1: { hist: [{ date: '2026-10-08', payment: { currency: 'eur', amount: 40 } }, { date: '2026-10-08', voided: true, payment: { currency: 'EUR', amount: 12 } }] },

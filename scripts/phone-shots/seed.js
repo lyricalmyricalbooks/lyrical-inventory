@@ -437,8 +437,13 @@ export const demoLocalStorage = {};
 // one already marked "not inventory" via demoReconMemory.
 const at = (iso) => Date.parse(iso + 'T15:00:00Z') / 1000;
 export const demoReconPayments = [
-  { id: 'pi_demo_direct1', amount: 40, currency: 'CAD', created: at('2026-10-09'), date: '2026-10-09', customer: 'Rosa Lind', email: 'rosa@example.com', description: 'Card reader sale', metadata: {} },
-  { id: 'pi_demo_direct2', amount: 40, currency: 'CAD', created: at('2026-10-09'), date: '2026-10-09', customer: '', email: '', description: 'Card reader sale', metadata: {} },
+  // Two identical untitled reader taps at a price only Meadow Hymns fits (2 × 22).
+  { id: 'pi_demo_direct1', amount: 44, currency: 'CAD', created: at('2026-10-09'), date: '2026-10-09', customer: 'Rosa Lind', email: 'rosa@example.com', description: '', cardPresent: true, metadata: {} },
+  { id: 'pi_demo_direct2', amount: 44, currency: 'CAD', created: at('2026-10-09'), date: '2026-10-09', customer: '', email: '', description: '', cardPresent: true, metadata: {} },
+  // A reader tap with part of a title typed, at a price that isn't the list price.
+  { id: 'pi_demo_named', amount: 25, currency: 'CAD', created: at('2026-10-08'), date: '2026-10-08', customer: '', email: '', description: 'Ember', cardPresent: true, metadata: {} },
+  // A tap at a price two books share: both are listed first.
+  { id: 'pi_demo_shared', amount: 72, currency: 'CAD', created: at('2026-10-08'), date: '2026-10-08', customer: '', email: '', description: '', cardPresent: true, metadata: {} },
   { id: 'pi_demo_usd', amount: 32, currency: 'USD', created: at('2026-10-07'), date: '2026-10-07', customer: 'Jun Park', email: 'jun@example.com', description: 'meadow', metadata: {} },
   { id: 'pi_demo_inv', amount: 180, currency: 'CAD', created: at('2026-10-05'), date: '2026-10-05', customer: 'Tidewater Books', email: 'orders@example.com', description: 'Payment for INV-2026-002', metadata: {} },
   { id: 'pi_demo_donation', amount: 15, currency: 'CAD', created: at('2026-10-03'), date: '2026-10-03', customer: 'A friend', email: '', description: 'Donation', metadata: {} },
