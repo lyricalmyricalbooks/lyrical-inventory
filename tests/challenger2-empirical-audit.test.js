@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
-import { roundCents, fmt, getContrastSafeText } from '../src/lib/money.js';
+import { roundCents, fmt } from '../src/lib/money.js';
+import { getContrastSafeText } from '../src/lib/color.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(path.join(__dirname, '../index.html'), 'utf8').replace(/\r\n/g, '\n');

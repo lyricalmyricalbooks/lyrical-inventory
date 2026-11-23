@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 import {
   deriveOnHand,
+  syncStoredStock,
   buildOrderTimeline,
   deduplicateDirectConsignmentSales,
   recalculateBookStatsFromHistory,
@@ -27,6 +28,7 @@ const harness = () => buildHarness({
   names: ['reconcileConsignmentChannel', 'reconcileStores', 'recomputeAfters'],
   deps: {
     deriveOnHand,
+    syncStoredStock,
     buildOrderTimeline,
     deduplicateDirectConsignmentSales,
     recalculateBookStatsFromHistory,

@@ -226,18 +226,17 @@ describe('Receipt import performance & correctness fixes', () => {
     });
 
     it('serializes the request body once, outside the per-model/per-retry loop', () => {
+      // The receipt body is built and memoised per thinking spelling in a
+      // cache the receipt caller owns; the shared model loop (askGemini) only
+      // ever asks for the string — otherwise every model + retry re-uploads
+      // the full multi-megabyte payload.
       const fnSrc = extractFn('_callGeminiForReceipts', true);
-      // The body must be built before the `for (const model of models)` loop,
-      // not inside the `send` closure — otherwise every model + retry
-      // re-uploads the full multi-megabyte payload.
-      // Bodies are memoised per thinking spelling in a cache that lives
-      // outside the loop, so a model or retry reuses the same string.
-      const forLoopIdx = fnSrc.indexOf('for (const model of chain)');
-      const cacheIdx = fnSrc.indexOf('const bodyCache = new Map(');
+      expect(fnSrc).toContain('const bodyCache = new Map(');
+      expect(fnSrc).toContain('return askGemini(');
+      const loopSrc = extractFn('askGemini', true);
+      const forLoopIdx = loopSrc.indexOf('for (const model of chain)');
       expect(forLoopIdx).toBeGreaterThanOrEqual(0);
-      expect(cacheIdx).toBeGreaterThanOrEqual(0);
-      expect(cacheIdx).toBeLessThan(forLoopIdx);
-      expect(fnSrc.slice(forLoopIdx)).not.toContain('JSON.stringify');
+      expect(loopSrc.slice(forLoopIdx)).not.toContain('JSON.stringify');
     });
 
     it('reads all non-thought text parts, not just parts[0]', () => {
@@ -246,7 +245,7 @@ describe('Receipt import performance & correctness fixes', () => {
     });
 
     it('never falls through to another model on an AbortError', () => {
-      const fnSrc = extractFn('_callGeminiForReceipts', true);
+      const fnSrc = extractFn('askGemini', true);
       expect(fnSrc).toMatch(/if \(e && e\.name === 'AbortError'\) throw e;/);
     });
   });

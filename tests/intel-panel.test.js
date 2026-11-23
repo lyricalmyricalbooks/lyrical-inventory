@@ -365,7 +365,7 @@ describe('when Google will not answer', () => {
       console: { warn: vi.fn() },
     };
     const ask = buildHarness({
-      names: ['backupProvider', 'askWithFallback'], deps, returns: 'askWithFallback',
+      names: ['backupProvider', 'askWithFallback', 'askGeminiOrBackup'], deps, returns: 'askWithFallback',
     });
     return { ask, ...deps };
   }
@@ -486,7 +486,7 @@ describe('when the publisher picks a model themselves', () => {
       console: { warn: vi.fn() },
     };
     const ask = buildHarness({
-      names: ['backupProvider', 'askWithFallback'], deps, returns: 'askWithFallback',
+      names: ['backupProvider', 'askWithFallback', 'askGeminiOrBackup'], deps, returns: 'askWithFallback',
     });
     return { ask, ...deps };
   }

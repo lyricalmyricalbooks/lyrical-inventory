@@ -12,6 +12,7 @@
 // already holds (the drafted receipts, the postage expenses) and a duplicate
 // check, so nothing here can change a figure in the books.
 
+import { fmtCode } from './money.js';
 import { plural } from './plural.js';
 import { isReadyToFile, READY_CONFIDENCE } from './receipt-ready.js';
 import { frequencyLabel } from './recurring.js';
@@ -22,10 +23,9 @@ export const REVIEW_STATE = { ready: 'ready', check: 'check', needsYou: 'needs-y
 
 const STATE_RANK = { 'needs-you': 0, check: 1, ready: 2 };
 
+// Blank, not "CAD 0.00", when there is no amount to show.
 function money(amount, currency) {
-  const n = Number(amount);
-  if (!Number.isFinite(n)) return '';
-  return `${String(currency || 'CAD').toUpperCase()} ${n.toFixed(2)}`;
+  return Number.isFinite(Number(amount)) ? fmtCode(amount, currency) : '';
 }
 
 /** A receipt's identity across reloads: its stable ref, else its email, else its position. */

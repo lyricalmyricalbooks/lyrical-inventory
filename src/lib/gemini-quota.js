@@ -13,17 +13,31 @@
 // So the cooldown, the model chain and the "this key can't use that" set live
 // here, shared, and every caller waits on the same pause.
 //
-// What deliberately did NOT move: the thinking-budget ladder, the
+// The request loop that walks that chain lives here too (askGemini), and so
+// does the "Google first, then the saved backup" rule (askGeminiOrBackup).
+// Each caller used to carry its own copy of both, and the copies drifted: the
+// assistant kept walking the chain after a billing-sounding server error that
+// the receipt scanner stopped on, and it reported a key that no model would
+// serve as a spent allowance, which rested Google until midnight. One copy
+// means a fix to how Google is asked reaches every caller at once.
+//
+// What deliberately did NOT move: the thinking-budget ladder's spellings, the
 // single-attempt byte cap and the JSON response-mime handling. Those are about
 // the shape of a receipt request, not about the account, and they stay with
-// _callGeminiForReceipts.
+// _callGeminiForReceipts, which hands them to askGemini as options.
 //
 // Names are unchanged from when this lived in src/features/receipts.js —
 // including GEMINI_RECEIPT_MODELS, which now backs every caller rather than
 // only the scanner. Renaming it would buy nothing and would break the suites
 // that pin the free-tier floor by matching this source.
 
-import { GEMINI_FREE_TIER_MODEL, GEMINI_ROUTED_MODELS, rankFreeGeminiModels } from './gemini-models.js';
+import {
+  GEMINI_FREE_TIER_MODEL,
+  GEMINI_ROUTED_MODELS,
+  geminiErrorBody,
+  geminiModelRefused,
+  rankFreeGeminiModels,
+} from './gemini-models.js';
 
 // Gemini 2.0 Flash and 2.0 Flash-Lite were retired on 2026-06-01 — keeping them
 // in the fallback chain meant every escalation re-uploaded the whole payload to
@@ -262,6 +276,243 @@ export function _geminiResting(now = Date.now()) {
 /** Forget a spent allowance — a new key, or a test starting clean. */
 export function _geminiClearRest() {
   _geminiRestUntil = 0;
+}
+
+// ── ASKING GOOGLE
+// Every Gemini request in the app goes through askGemini: the receipt scanner,
+// the email sweep and the assistant. Walking the model chain, waiting out the
+// shared pause, stepping past a model this key cannot use and stopping on
+// anything that would fail the same way everywhere are all decided here, once.
+
+/**
+ * Ask the first model in the chain that will answer.
+ *
+ * What it does with a failure, model by model:
+ *  - 429 or 5xx: retried twice with backoff; a 429 becomes the shared pause.
+ *  - Refused for this key ("limit: 0", a missing or retired model): that model
+ *    is remembered as unusable and the NEXT model is asked. This never stops
+ *    the scan — a newer Flash without a free allowance must not end a read
+ *    that an older, free one could do.
+ *  - A rejected key, a malformed request, or anything that reads as "this
+ *    would cost money": stops at once. Every model would answer the same, and
+ *    walking further only re-uploads the payload to be told so again.
+ *  - Anything else (an outage, an early stop, an empty answer): next model.
+ *
+ * @param {string} apiKey The publisher's own Gemini key.
+ * @param {object} o
+ * @param {(model: string, step: number) => string} o.body
+ *   The request, already serialised, for this model at this rung of the
+ *   caller's ladder (always 0 without one). Serialised by the caller so a big
+ *   upload can be built once and reused across models and retries.
+ * @param {(candidate: object, model: string, finish: string|undefined) => any} o.read
+ *   Turns Google's first candidate into the caller's result. Return nothing to
+ *   say the answer was empty, and the next model is asked.
+ * @param {{first: (model: string) => number, last: number, worked: (model: string, step: number) => void}} [o.ladder]
+ *   Request shapes to step down through when a model answers 400, before the
+ *   400 is believed. Without one, a 400 stops the walk straight away.
+ * @param {number} [o.singleAttemptBytes] A body bigger than this gets one real
+ *   attempt rather than one per model. A refused model does not use it up.
+ * @param {Function} [o.fetchImpl] Injected for tests; the global fetch otherwise.
+ * @param {AbortSignal} [o.signal]
+ */
+export async function askGemini(apiKey, { body, read, ladder = null, singleAttemptBytes = Infinity, fetchImpl = null, signal } = {}) {
+  // The free-tier gate, enforced at the point of use: whatever the chain ends
+  // up saying, a model that would be billed is never called.
+  const free = _geminiModelChain(apiKey);
+  if (!free.length) throw new Error('No free-tier reader is configured');
+  // Then skip what this key has already been refused — but never let that
+  // empty the chain, because a refusal that turns out to be temporary must not
+  // leave the app permanently unable to try.
+  const reachable = free.filter(m => !_geminiUnavailable.has(m));
+  const chain = reachable.length ? reachable : free;
+  const firstStep = (model) => (ladder ? ladder.first(model) : 0);
+  const lastStep = ladder ? ladder.last : 0;
+  const singleAttempt = body(chain[0], firstStep(chain[0])).length > singleAttemptBytes;
+  let attempted = false;
+  let refusedCount = 0;
+
+  let lastErr;
+  for (const model of chain) {
+    if (singleAttempt && attempted) break;
+    let step = firstStep(model);
+    let sendBody = body(model, step);
+    try {
+      const send = async () => {
+        // Nothing goes out while the pool is serving a rate-limit pause.
+        await _geminiAwaitCooldown();
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        // The key travels in the x-goog-api-key header, the only way Google's
+        // current guides send it, rather than in the address.
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        const init = { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: sendBody, signal };
+        return fetchImpl ? fetchImpl(url, init) : fetch(url, init);
+      };
+      let res = await send();
+      // Retry transient overload / rate-limit / server errors with exponential
+      // backoff. A single flat retry lands right back inside the same
+      // congestion window that caused the 429; jitter stops parallel callers
+      // from resonating.
+      for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
+        // A "limit: 0" refusal is about the model, not the moment: waiting and
+        // asking again gets the same answer, so go straight to the next model.
+        if (res.status === 429 && geminiModelRefused(429, (await geminiErrorBody(res))?.error?.message)) break;
+        const retryAfter = Number(res.headers?.get?.('retry-after'));
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000, 8000)
+          : (700 * Math.pow(2, attempt)) + Math.random() * 400;
+        // A 429 is the whole pool's problem, so it is published as a shared
+        // pause that send() already waits on. A 5xx is this one request's.
+        if (res.status === 429) _geminiNoteThrottle(wait);
+        else await new Promise(r => setTimeout(r, wait));
+        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        res = await send();
+      }
+
+      // Step down the caller's ladder until the model stops objecting. A 400
+      // raised on any rung but the last is NEVER fatal: the last rung is the
+      // shape that worked before the ladder existed. Only there does a 400
+      // mean the payload itself is bad.
+      const startStep = step;
+      while (!res.ok && res.status === 400 && step < lastStep) {
+        step++;
+        sendBody = body(model, step);
+        res = await send();
+      }
+      // Only a rung that actually WORKED is worth remembering. A request the
+      // model still rejects at the bottom was never about the ladder — a
+      // corrupt file, say.
+      if (res.ok && step !== startStep) ladder.worked(model, step);
+
+      if (!res.ok) {
+        let detail = `HTTP ${res.status} from ${model}`;
+        // Escalating to another model only helps when THIS model is the
+        // problem. A rejected key or a malformed payload fails identically on
+        // every model.
+        let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
+        // 404 means this key cannot reach that model at all — not enabled on
+        // the account yet, or retired. Worth remembering rather than
+        // re-discovering with a fresh upload every time.
+        if (res.status === 404) _geminiUnavailable.add(model);
+        let details;
+        try {
+          const err = await geminiErrorBody(res);
+          // Kept for _geminiSpentFor(): the quota id is what tells a spent
+          // day's allowance apart from a one-minute rate limit.
+          details = err?.error?.details;
+          if (err?.error?.message) {
+            detail = err.error.message;
+            // Anything that means "this would cost money" stops the whole
+            // chain on the spot. Walking further down it in that state is how
+            // a reader meant to be free quietly starts spending.
+            if (res.status === 429
+              || /prepayment|credits|billing|quota|API key|paid tier|FAILED_PRECONDITION|payment/i.test(detail)) {
+              shouldStop = true;
+            }
+          }
+        } catch (_) { /* a body that isn't JSON tells us nothing extra */ }
+        lastErr = new Error(detail);
+        lastErr.status = res.status;
+        if (Array.isArray(details)) lastErr.details = details;
+        // Google turned down this one model for this key — typically a newer
+        // Flash with no free allowance ("limit: 0"). That says nothing about
+        // the key or the request, so the next model is asked instead of
+        // stopping on a billing-sounding message it was never going to get
+        // past.
+        if (geminiModelRefused(res.status, detail)) {
+          _geminiUnavailable.add(model);
+          refusedCount++;
+          continue;
+        }
+        attempted = true;
+        // Marked so this iteration's own catch re-throws instead of recording
+        // it as one more failed model and moving on.
+        if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
+        continue;
+      }
+      attempted = true;
+      const data = await res.json();
+      const cand = data.candidates?.[0];
+      const finish = cand?.finishReason;
+      if (finish && finish !== 'STOP' && finish !== 'MAX_TOKENS') {
+        lastErr = new Error(`Gemini stopped early (${finish})`);
+        continue;
+      }
+      const out = read(cand, model, finish);
+      if (out) return out;
+      lastErr = new Error(`Empty response from ${model}`);
+    } catch (e) {
+      // A cancel must never be mistaken for a model failure worth retrying.
+      if (e && e.name === 'AbortError') throw e;
+      // Nor an error every model in the chain would give identically.
+      if (e && e.__fatal) throw e;
+      attempted = true;
+      lastErr = e;
+    }
+  }
+  if (refusedCount && refusedCount === chain.length) throw _geminiNoModelError(lastErr);
+  throw lastErr || new Error('All Gemini models failed');
+}
+
+// Every model in the chain was turned down for this key. Said in words the
+// publisher can act on, and deliberately not phrased as a quota or billing
+// problem: nothing was used up, so the app must not rest the key until
+// midnight or tell them their allowance is spent.
+function _geminiNoModelError(lastErr) {
+  return Object.assign(new Error(
+    'Google did not offer any of its reading models to this AI key on its free plan. '
+    + 'Check the key in Google AI Studio, or add an OpenRouter backup key in the Tax Centre config'
+  ), { __alreadyFriendly: true, status: 404, cause: lastErr });
+}
+
+/**
+ * Google first, the saved OpenRouter backup second — the one rule every AI
+ * caller follows.
+ *
+ *  - While Google's allowance is known to be spent (see _geminiResting) and
+ *    there is a backup, Google is not asked: it would only refuse, after
+ *    seconds of backoff, before the backup got the request anyway.
+ *  - Any other Google failure is remembered (_geminiNoteSpent) so every caller
+ *    learns of a spent allowance, then the backup is asked.
+ *  - A cancel is never a failure to fall back from.
+ *  - With no backup, Google's own error is thrown unchanged.
+ *
+ * What the caller says about a failure stays with the caller — a receipt toast
+ * and an assistant reply word it differently — so `bothFailed` builds the error
+ * thrown when the backup fails too.
+ *
+ * @param {object} o
+ * @param {(() => Promise<any>)|null} o.google  Ask Google; null when there is no Google key (or it is not to be used).
+ * @param {(() => Promise<any>)|null} o.backup  Ask the backup; null when there is none (or it is not to be used).
+ * @param {(why: {googleError: any, skipped: boolean}) => void} [o.onFallback]
+ *   Called just before the backup is asked. `skipped` is true when Google was
+ *   passed over because its allowance is spent.
+ * @param {(backupError: any, why: {googleError: any, skipped: boolean}) => any} [o.bothFailed]
+ *   The error to throw when the backup fails too. Defaults to the backup's own.
+ */
+export async function askGeminiOrBackup({ google, backup, onFallback, bothFailed }) {
+  let googleError = null;
+  let skipped = false;
+  if (google && !(backup && _geminiResting())) {
+    try {
+      return await google();
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
+      _geminiNoteSpent(error);
+      if (!backup) throw error;
+      googleError = error;
+    }
+  } else if (google) {
+    skipped = true;
+  }
+  if (!backup) throw new Error('No AI key is set');
+  const why = { googleError, skipped };
+  if (onFallback && (googleError || skipped)) onFallback(why);
+  try {
+    return await backup();
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    throw bothFailed ? bothFailed(error, why) : error;
+  }
 }
 
 // What the reader says when it fails is written for whoever wrote the reader,

@@ -28,7 +28,7 @@ import { confirmDialog } from '../lib/modal.js';
 import { buildAttentionSignals } from '../lib/attention-signals.js';
 import { INTEL_TOOL_SCHEMAS } from '../lib/publisher-intel-tools.js';
 import { friendlyChatError, runIntelTurn } from '../lib/gemini-chat.js';
-import { _geminiNoteSpent, _geminiResting } from '../lib/gemini-quota.js';
+import { askGeminiOrBackup } from '../lib/gemini-quota.js';
 import { friendlyOpenRouterError, runOpenRouterTurn } from '../lib/openrouter-chat.js';
 import { closeIntelExchange, trimIntelHistory } from '../lib/intel-history.js';
 import { EXPENSE_CATEGORIES } from './receipts.js';
@@ -539,57 +539,46 @@ async function askWithFallback(question, pref = 'auto') {
   if (pref === 'backup' && !backup) pref = 'auto';
   if (pref === 'gemini' && !hasGemini) pref = 'auto';
 
-  // A failure here is tagged so the caller reaches for friendlyOpenRouterError
-  // instead of the Gemini-specific friendlyChatError — an OpenRouter 401 read
-  // through Gemini's own error patterns falls through to raw API text instead
-  // of "the backup key was rejected".
-  // On auto, a Google allowance already known to be spent (by this panel or by
-  // a receipt scan — the account is shared) is not asked again until it resets:
-  // it would only refuse, after a few seconds of backoff, before the backup
-  // got the question anyway.
-  const googleSpent = pref === 'auto' && hasGemini && !!backup && _geminiResting();
-  if (pref === 'backup' || googleSpent) {
-    if (googleSpent) setIntelStatus('Google’s allowance is used up for now — asking your backup model…');
-    try {
-      return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
-    } catch (e) {
-      if (e && e.name !== 'AbortError') e.__viaOpenRouter = true;
-      throw e;
-    }
-  }
-
-  if (hasGemini) {
-    try {
-      return await runIntelTurn({ apiKey: TAX_CENTER.settings.geminiKey, ...shared });
-    } catch (e) {
-      if (e && e.name === 'AbortError') throw e;
-      _geminiNoteSpent(e);
-      if (pref === 'gemini' || !backup) throw e;
-      console.warn('Intelligence: Google failed, trying the backup model —', e && e.message);
+  // When Google is asked and when the backup takes over is the same rule the
+  // receipt scanner follows (askGeminiOrBackup in gemini-quota.js): on auto, a
+  // Google allowance already known to be spent — by this panel or by a receipt
+  // scan, the account is shared — is not asked again until it resets, and any
+  // other Google failure is recorded before the backup gets the question. A
+  // pin simply leaves the other provider out.
+  return askGeminiOrBackup({
+    google: hasGemini && pref !== 'backup'
+      ? () => runIntelTurn({ apiKey: TAX_CENTER.settings.geminiKey, ...shared })
+      : null,
+    backup: backup && pref !== 'gemini'
+      ? () => runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared })
+      : null,
+    onFallback: ({ googleError, skipped }) => {
+      if (skipped) {
+        setIntelStatus('Google’s allowance is used up for now — asking your backup model…');
+        return;
+      }
+      console.warn('Intelligence: Google failed, trying the backup model —', googleError && googleError.message);
       setIntelStatus('Google could not answer — asking the backup model…');
-      try {
-        return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
-      } catch (backupErr) {
-        if (backupErr && backupErr.name === 'AbortError') throw backupErr;
-        // Both failed. Report both, because "it did not work" without saying
-        // which half broke leaves nothing to act on.
+    },
+    bothFailed: (backupErr, { googleError }) => {
+      // Both failed. Report both, because "it did not work" without saying
+      // which half broke leaves nothing to act on.
+      if (googleError) {
         const combined = new Error(
-          `${friendlyChatError(e)} — and the backup could not either: ${friendlyOpenRouterError(backupErr)}`
+          `${friendlyChatError(googleError)} — and the backup could not either: ${friendlyOpenRouterError(backupErr)}`
         );
         combined.__alreadyFriendly = true;
-        throw combined;
+        return combined;
       }
-    }
-  }
-
-  // No Google key at all: the backup is not a fallback, it is the only option.
-  if (!backup) throw new Error('No AI key is set');
-  try {
-    return await runOpenRouterTurn({ apiKey: backup.key, model: backup.model, ...shared });
-  } catch (e) {
-    if (e && e.name !== 'AbortError') e.__viaOpenRouter = true;
-    throw e;
-  }
+      // Only the backup was asked. Tagged so the caller reaches for
+      // friendlyOpenRouterError instead of the Gemini-specific
+      // friendlyChatError — an OpenRouter 401 read through Gemini's own error
+      // patterns falls through to raw API text instead of "the backup key was
+      // rejected".
+      if (backupErr) backupErr.__viaOpenRouter = true;
+      return backupErr;
+    },
+  });
 }
 
 async function sendIntelMessage() {

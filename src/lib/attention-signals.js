@@ -25,7 +25,6 @@
 // fine, which is how a to-do list teaches people to ignore it.
 
 import { localDay } from './calendar-day.js';
-import { deriveOnHand } from './inventory.js';
 import { calcArtistEarnings } from './earnings.js';
 import { expenseMissingReceipt, expensesWithSettlements } from './receipt-storage.js';
 import { fmt, getBookCurrencyCode } from './money.js';
@@ -110,6 +109,8 @@ function openTaxCenter(subTab) {
 // new condition is a new function rather than another branch in a long one.
 
 function stockSignals(book, s, out) {
+  // The stored count is kept equal to what the records add up to on every
+  // load and save (syncStoredStock), so it is the one number to read.
   const onHand = intOf(s.stock);
   const threshold = intOf(book.threshold);
   const printed = intOf(book.maxPrint);
@@ -138,22 +139,6 @@ function stockSignals(book, s, out) {
       detail: `${book.title} has ${onHand} copies left. Worth thinking about the next print run.`,
       bookId: book.id,
       fix: { label: 'Open book', ...openBook(book.id) },
-    });
-  }
-
-  // The same comparison the per-book dashboard drift banner makes: the stored
-  // count against what the records themselves add up to.
-  const derived = deriveOnHand(s, book);
-  if (Number.isFinite(derived) && derived !== onHand) {
-    out.push({
-      id: `stock-drift:${book.id}`,
-      group: 'stock',
-      status: 'warn',
-      icon: '🧮',
-      label: "Stock count doesn't match the records",
-      detail: `${book.title} is recorded as ${onHand} on hand, but its sales and shipments add up to ${derived}. One of them needs a look.`,
-      bookId: book.id,
-      fix: { label: 'Review', ...openBook(book.id) },
     });
   }
 }

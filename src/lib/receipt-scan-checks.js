@@ -12,7 +12,7 @@
 // says what it found; the screen decides what to show and the owner decides
 // what to do about it. Pure, so every rule can be tested without a browser.
 
-import { fmt, getSym } from './money.js';
+import { fmt, fmtCode, getSym } from './money.js';
 
 const str = (v) => (v == null ? '' : String(v)).trim();
 
@@ -259,11 +259,11 @@ export function scanUncertainFields(reading) {
   return new Set(list.map(f => str(f).toLowerCase()).filter(f => SCAN_FIELDS.includes(f)));
 }
 
-/** Money as the summary prints it: "$43.49", or "AUD 50.00" where there is no symbol. */
+/** Money as the summary prints it: "CA$43.49", or "NZD 50.00" where there is no symbol. */
 export function scanMoney(n, cur) {
   const code = str(cur).toUpperCase();
   const value = Number(n) || 0;
-  return code && getSym(code) === code ? `${code} ${value.toFixed(2)}` : fmt(value, code || 'CAD');
+  return code && getSym(code) === code ? fmtCode(value, code) : fmt(value, code || 'CAD');
 }
 
 /**

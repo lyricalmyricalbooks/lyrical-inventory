@@ -8,6 +8,7 @@
 // at module-evaluation time — every export is a function called later. The
 // inline onclick handlers reach these through the Object.assign(window, …)
 // list in main.js's startup, as before.
+import { confirmDialog } from '../lib/modal.js';
 import {
   $,
   isTestBookId,
@@ -254,8 +255,8 @@ function selectSimSheetTab(tab) {
   renderMockSpreadsheet();
 }
 
-function clearSimulatedSheet() {
-  if (confirm("Are you sure you want to clear the simulated spreadsheet? This will not affect your local app database.")) {
+async function clearSimulatedSheet() {
+  if (await confirmDialog('Your books and sales in the app are not affected.', { title: 'Clear the practice spreadsheet?', okLabel: 'Clear it', danger: true })) {
     localStorage.removeItem('lm-mock-sheet-data');
     activeSimTab = 'Overview';
     renderMockSpreadsheet();

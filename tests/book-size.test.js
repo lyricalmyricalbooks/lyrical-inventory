@@ -58,7 +58,8 @@ describe('bookSizeReport', () => {
 describe('saving a nearly full book', () => {
   let app;
   beforeAll(async () => {
-    app = await loadApp({ books: [makeBook({ id: 'harbour' })] });
+    // No print run: the stored count is then the only count, so a change to it is a change to save.
+    app = await loadApp({ books: [makeBook({ id: 'harbour', maxPrint: null })] });
   }, 30000);
   beforeEach(() => { app.window._useFirestoreForBook = () => true; });
 

@@ -89,16 +89,16 @@ describe('importing a file, then undoing it', () => {
     expect(st().sold).toBe(4);
   });
 
-  it('offers the undo at the top of History and reverses the whole import', () => {
+  it('offers the undo at the top of History and reverses the whole import', async () => {
     app.window.renderHist();
     const notice = document.getElementById('hist-import-notice');
     expect(notice.hidden).toBe(false);
     expect(notice.textContent).toMatch(/Imported 3 orders from “old-orders.csv”/);
 
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const id = st().hist.find(h => h.num === 'A-1').importId;
-    app.window.undoImport(id);
-    confirmSpy.mockRestore();
+    const undoing = app.window.undoImport(id);
+    await app.answerConfirm(true); // the app's own dialog, not the browser's
+    await undoing;
 
     expect(st().hist.filter(h => h.importId === id).every(h => h.voided)).toBe(true);
     expect(st().sold).toBe(0);
@@ -141,9 +141,9 @@ describe('importing a file, then undoing it', () => {
     app.window.confirmImport();
     const w1 = st().hist.find(h => h.num === 'W-1');
     w1.webOrderId = 'order-77';
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    app.window.undoImport(w1.importId);
-    confirmSpy.mockRestore();
+    const undoing = app.window.undoImport(w1.importId);
+    await app.answerConfirm(true);
+    await undoing;
     expect(st().hist.find(h => h.num === 'W-1').voided).toBeFalsy();
     expect(st().hist.find(h => h.num === 'W-2').voided).toBe(true);
   });

@@ -15,23 +15,19 @@
 //     out a margin across a fair's costs and takings IS one, so this leaves the
 //     model's own default alone.
 //
-// What the two DO share is the account: the model chain, the "this key can't
-// reach that model" set and the rate-limit cooldown all live in
+// What the two DO share is the account and the way it is asked: the model
+// chain, the "this key can't reach that model" set, the rate-limit cooldown
+// and the request loop that walks them (askGemini) all live in
 // ./gemini-quota.js and are held in common. A 429 raised by a receipt scan
-// pauses this panel too, which is the point.
+// pauses this panel too, and a model refused with "limit: 0" is stepped past
+// here exactly as it is there.
 //
 // Nothing here is streamed. Nothing in this app streams today, and a tool loop
 // has little to stream anyway — most of a turn is spent running local
 // functions, not waiting on tokens.
 
-import {
-  _friendlyScanError,
-  _geminiAwaitCooldown,
-  _geminiModelChain,
-  _geminiNoteThrottle,
-  _geminiUnavailable,
-} from './gemini-quota.js';
-import { geminiErrorBody, geminiModelRefused, geminiUsesThinkingLevel } from './gemini-models.js';
+import { _friendlyScanError, askGemini } from './gemini-quota.js';
+import { geminiUsesThinkingLevel } from './gemini-models.js';
 import { runIntelTool } from './publisher-intel-tools.js';
 
 export const GEMINI_API_ROOT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -99,103 +95,21 @@ export function buildChatRequest({ contents, tools, systemInstruction, model }) 
 }
 
 /**
- * One HTTP round against one model, with the retry behaviour the receipt
- * scanner already proved out: transient 429/5xx get exponential backoff with
- * jitter, and a 429 is published to the SHARED cooldown so every other caller
- * on this key eases off too rather than retrying into the same window.
- */
-async function callModel(model, apiKey, body, { fetchImpl, signal }) {
-  const send = async () => {
-    await _geminiAwaitCooldown();
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    // The key travels in the x-goog-api-key header, the only way Google's
-    // current guides send it, rather than in the address.
-    return fetchImpl(
-      `${GEMINI_API_ROOT}/${model}:generateContent`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body), signal }
-    );
-  };
-
-  let res = await send();
-  for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
-    // A "limit: 0" refusal is about the model, not the moment: waiting and
-    // asking again gets the same answer, so go straight to the next model.
-    if (res.status === 429 && geminiModelRefused(429, (await geminiErrorBody(res))?.error?.message)) break;
-    const retryAfter = Number(res.headers?.get?.('retry-after'));
-    const wait = Number.isFinite(retryAfter) && retryAfter > 0
-      ? Math.min(retryAfter * 1000, 8000)
-      : (700 * Math.pow(2, attempt)) + Math.random() * 400;
-    if (res.status === 429) _geminiNoteThrottle(wait);
-    else await new Promise(r => setTimeout(r, wait));
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-    res = await send();
-  }
-  return res;
-}
-
-/**
  * Ask the first model in the chain that will answer.
  *
- * Escalating only helps when THIS model is the problem. A rejected key, a
- * malformed request or anything that means "this would cost money" fails
- * identically everywhere, so those stop the walk immediately rather than
- * spending two more metered requests to be told the same thing twice.
+ * The walk itself — retries, the shared pause, stepping past a model this key
+ * cannot use ("limit: 0"), stopping on a rejected key or anything that would
+ * cost money — is askGemini in ./gemini-quota.js, the same code the receipt
+ * scanner uses. This only shapes the request for each model and keeps the
+ * whole answer, tool calls included, rather than just its text.
  */
-async function askChain(apiKey, bodyFor, opts) {
-  const free = _geminiModelChain(apiKey);
-  if (!free.length) throw new Error('No free-tier model is available for this key');
-  const reachable = free.filter(m => !_geminiUnavailable.has(m));
-  const chain = reachable.length ? reachable : free;
-
-  let lastErr;
-  for (const model of chain) {
-    try {
-      const res = await callModel(model, apiKey, bodyFor(model), opts);
-      if (!res.ok) {
-        let detail = `HTTP ${res.status} from ${model}`;
-        let fatal = res.status === 400 || res.status === 401 || res.status === 403;
-        if (res.status === 404) _geminiUnavailable.add(model);
-        let details;
-        try {
-          const err = await geminiErrorBody(res);
-          details = err?.error?.details;
-          if (err?.error?.message) {
-            detail = err.error.message;
-            if (res.status === 429
-              || /prepayment|credits|billing|quota|API key|paid tier|FAILED_PRECONDITION|payment/i.test(detail)) {
-              fatal = true;
-            }
-          }
-        } catch (_) { /* a body that isn't JSON tells us nothing extra */ }
-        lastErr = new Error(detail);
-        lastErr.status = res.status;
-        // Tells a spent day's allowance from a one-minute limit (gemini-quota.js).
-        if (Array.isArray(details)) lastErr.details = details;
-        // This one model was turned down for this key (a newer Flash with no
-        // free allowance answers "limit: 0"): ask the next one rather than
-        // ending the question on a quota message.
-        if (geminiModelRefused(res.status, detail)) {
-          _geminiUnavailable.add(model);
-          continue;
-        }
-        if (fatal) throw lastErr;
-        continue;
-      }
-      const data = await res.json();
-      const cand = data.candidates?.[0];
-      const finish = cand?.finishReason;
-      if (finish && finish !== 'STOP' && finish !== 'MAX_TOKENS') {
-        lastErr = new Error(`Gemini stopped early (${finish})`);
-        continue;
-      }
-      return { parts: cand?.content?.parts || [], model, truncated: finish === 'MAX_TOKENS' };
-    } catch (e) {
-      if (e && e.name === 'AbortError') throw e;
-      if (e && e.status && (e.status === 400 || e.status === 401 || e.status === 403 || e.status === 429)) throw e;
-      lastErr = e;
-    }
-  }
-  throw lastErr || new Error('No model answered');
+function askChain(apiKey, bodyFor, { fetchImpl, signal }) {
+  return askGemini(apiKey, {
+    fetchImpl,
+    signal,
+    body: (model) => JSON.stringify(bodyFor(model)),
+    read: (cand, model, finish) => ({ parts: cand?.content?.parts || [], model, truncated: finish === 'MAX_TOKENS' }),
+  });
 }
 
 /**

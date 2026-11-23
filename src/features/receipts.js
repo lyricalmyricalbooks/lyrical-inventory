@@ -45,15 +45,11 @@ import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
 import {
   _friendlyScanError,
-  _geminiAwaitCooldown,
-  _geminiModelChain,
-  _geminiNoteSpent,
-  _geminiNoteThrottle,
-  _geminiResting,
-  _geminiUnavailable,
   _warmGeminiModelCache,
+  askGemini,
+  askGeminiOrBackup,
 } from '../lib/gemini-quota.js';
-import { geminiErrorBody, geminiModelRefused, geminiUsesThinkingLevel } from '../lib/gemini-models.js';
+import { geminiUsesThinkingLevel } from '../lib/gemini-models.js';
 import { followableUrl } from '../lib/receipt-links.js';
 import { MAX_RECEIPT_PICKS, mergeReceiptPicks, receiptLinkLabel, removeReceiptPick } from '../lib/receipt-picks.js';
 import { isReceiptAddition, receiptAdditionPayload, receiptLooksLikeImage, receiptRefName, removeExpenseReceipt } from '../lib/expense-receipts.js';
@@ -79,7 +75,7 @@ import {
   effectiveInterval,
   startWatch,
 } from '../lib/watch-schedule.js';
-import { PICKER_CURRENCIES, fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
+import { PICKER_CURRENCIES, fmt, fmtCode, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
 import { allCanonicalExpenses } from '../lib/expense-categories.js';
 import {
   checkReceiptMath,
@@ -3701,46 +3697,47 @@ function _geminiThinkingPatch(mode, budget) {
 // Accepts Gemini-style `parts` (e.g. `{ text }` and `{ inline_data: { mime_type, data } }`).
 // Runs directly from the browser using the publisher's saved keys.
 //
-// Once Google's allowance is known to be spent, a publisher with a backup skips
-// straight to it (see _geminiResting in gemini-quota.js) instead of paying three
-// refused requests and a few seconds of backoff on every receipt in a batch.
+// When Google is asked and when the backup takes over is decided once, for
+// every AI caller, by askGeminiOrBackup in gemini-quota.js — including skipping
+// straight to the backup once Google's allowance is known to be spent, instead
+// of paying three refused requests and a few seconds of backoff on every
+// receipt in a batch. What stays here is how a receipt failure is worded.
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
-  // Why Google's reader did not produce the answer, kept so that when the
-  // backup fails too the screen can name BOTH reasons. Showing only the
-  // backup's error left the publisher unable to tell a spent allowance from a
-  // rejected key on the side that normally does the work.
-  let googleWhy = '';
-  if (apiKey && !(key && _geminiResting())) {
-    try {
-      return await _callGeminiForReceipts(apiKey, parts, opts);
-    } catch (error) {
-      if (error?.name === 'AbortError') throw error;
-      _geminiNoteSpent(error);
-      if (!key) throw error;
-      googleWhy = _friendlyScanError(error);
-    }
-  } else if (apiKey) {
-    googleWhy = 'its free allowance is used up for now, so the backup was tried first';
-  }
-  if (!key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
-  try {
-    return await runOpenRouterRead({ ...opts, parts, apiKey: key,
-      model: TAX_CENTER.settings?.openRouterModel?.trim() || 'openrouter/free' });
-  } catch (error) {
-    if (error?.name === 'AbortError') throw error;
-    // The status travels with the friendly wording so the Gmail finder can tell
-    // a refused key (stop the scan) from one email that failed to read.
-    const backupWhy = `OpenRouter: ${friendlyOpenRouterError(error)}`;
-    const trimmed = text => String(text).replace(/[.\s]+$/, '');
-    throw Object.assign(new Error(googleWhy ? `Google: ${trimmed(googleWhy)}. ${backupWhy}` : backupWhy),
-      // classifyAs keeps the stop-the-scan decision on the backup's own wording:
-      // Google's text is there to be read, not to change what counts as fatal.
-      { __alreadyFriendly: true, status: error?.status, classifyAs: backupWhy });
-  }
+  if (!apiKey && !key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
+  return askGeminiOrBackup({
+    google: apiKey ? () => _callGeminiForReceipts(apiKey, parts, opts) : null,
+    backup: key
+      ? () => runOpenRouterRead({ ...opts, parts, apiKey: key,
+        model: TAX_CENTER.settings?.openRouterModel?.trim() || 'openrouter/free' })
+      : null,
+    bothFailed: (error, { googleError, skipped }) => {
+      // Why Google's reader did not produce the answer, kept so that when the
+      // backup fails too the screen can name BOTH reasons. Showing only the
+      // backup's error left the publisher unable to tell a spent allowance
+      // from a rejected key on the side that normally does the work.
+      const googleWhy = googleError
+        ? _friendlyScanError(googleError)
+        : (skipped ? 'its free allowance is used up for now, so the backup was tried first' : '');
+      // The status travels with the friendly wording so the Gmail finder can
+      // tell a refused key (stop the scan) from one email that failed to read.
+      const backupWhy = `OpenRouter: ${friendlyOpenRouterError(error)}`;
+      const trimmed = text => String(text).replace(/[.\s]+$/, '');
+      return Object.assign(new Error(googleWhy ? `Google: ${trimmed(googleWhy)}. ${backupWhy}` : backupWhy),
+        // classifyAs keeps the stop-the-scan decision on the backup's own
+        // wording: Google's text is there to be read, not to change what
+        // counts as fatal.
+        { __alreadyFriendly: true, status: error?.status, classifyAs: backupWhy });
+    },
+  });
 }
 
+// The receipt-shaped half of a Gemini read: one JSON answer against a schema,
+// thinking switched down, serialised once however many models or retries it
+// takes. Walking the model chain, the shared pause, stepping past a model this
+// key cannot use and stopping on a dead key all happen in askGemini
+// (gemini-quota.js) — the same code the assistant uses.
 async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
   const {
     signal,
@@ -3771,174 +3768,37 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
     return bodyCache.get(mode);
   };
 
-  // The free-tier gate, enforced at the point of use rather than trusted from
-  // the list above: whatever that list ends up saying, a model that would be
-  // billed is never called.
-  const free = _geminiModelChain(apiKey);
-  if (!free.length) throw new Error('No free-tier reader is configured');
-  // Then skip what this key has already been refused — but never let that
-  // empty the chain, because a refusal that turns out to be temporary must not
-  // leave the scanner permanently unable to try.
-  const reachable = free.filter(m => !_geminiUnavailable.has(m));
-  const chain = reachable.length ? reachable : free;
-  // Which spelling a model is asked in first: what it accepted before, else
-  // the named level for Gemini 3 and later, else the number.
-  const firstMode = (model) => _geminiThinkingMode.get(model)
-    ?? (geminiUsesThinkingLevel(model) ? GEMINI_THINKING_MODES.indexOf('level') : 0);
-  // A big upload gets one real attempt. A model that Google refuses outright
-  // (see geminiModelRefused) does not use it up: that answer comes back before
-  // any reading happens, and is remembered for the rest of the session.
-  const singleAttempt = bodyFor(GEMINI_THINKING_MODES[firstMode(chain[0])]).length > GEMINI_SINGLE_ATTEMPT_BYTES;
-  let attempted = false;
-  let refusedCount = 0;
-
-  let lastErr;
-  for (const model of chain) {
-    if (singleAttempt && attempted) break;
-    let modeIdx = firstMode(model);
-    let sendBody = bodyFor(GEMINI_THINKING_MODES[modeIdx]);
-    try {
-      const send = async () => {
-        // Nothing goes out while the pool is serving a rate-limit pause.
-        await _geminiAwaitCooldown();
-        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-        // The key travels in the x-goog-api-key header, the only way Google's
-        // current guides send it, rather than in the address.
-        return fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: sendBody, signal }
-        );
-      };
-      let res = await send();
-      // Retry transient overload / rate-limit / server errors with exponential
-      // backoff. A single flat 800ms retry lands right back inside the same
-      // congestion window that caused the 429, so the attempt was mostly
-      // wasted; jitter stops parallel email extractions from resonating.
-      for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
-        // A "limit: 0" refusal is about the model, not the moment: waiting and
-        // asking again gets the same answer, so go straight to the next model.
-        if (res.status === 429 && geminiModelRefused(429, (await geminiErrorBody(res))?.error?.message)) break;
-        const retryAfter = Number(res.headers?.get?.('retry-after'));
-        const wait = Number.isFinite(retryAfter) && retryAfter > 0
-          ? Math.min(retryAfter * 1000, 8000)
-          : (700 * Math.pow(2, attempt)) + Math.random() * 400;
-        // A 429 is the whole pool's problem, so it is published as a shared
-        // pause that send() already waits on. A 5xx is this one request's.
-        if (res.status === 429) _geminiNoteThrottle(wait);
-        else await new Promise(r => setTimeout(r, wait));
-        if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-        res = await send();
-      }
-
-      // Step down the thinking control until the model stops objecting. A 400
-      // raised while one of these fields is attached is NEVER fatal: the
-      // request shape at the bottom of the ladder is the one that worked
-      // before any of this existed, so a speed setting can never be what stops
-      // a receipt being read. Only once it is off does a 400 mean the payload
-      // itself is bad, and the handling below treats it that way.
-      const startMode = modeIdx;
-      while (!res.ok && res.status === 400 && modeIdx < GEMINI_THINKING_MODES.length - 1) {
-        modeIdx++;
-        sendBody = bodyFor(GEMINI_THINKING_MODES[modeIdx]);
-        res = await send();
-      }
-      // Only a mode that actually WORKED is worth remembering. A request the
-      // model still rejects with the control switched off was never about the
-      // control — a corrupt file, say — and recording 'off' for that would
-      // quietly cost every later scan in the session its speed-up to explain a
-      // failure it had nothing to do with.
-      if (res.ok && modeIdx !== startMode) _geminiThinkingMode.set(model, modeIdx);
-
-      if (!res.ok) {
-        let detail = `HTTP ${res.status} from ${model}`;
-        // Escalating to another model only helps when THIS model is the
-        // problem. A rejected key or a malformed payload fails identically on
-        // every model, so probing the chain just re-uploads the image twice
-        // more before showing the same error.
-        let shouldStop = res.status === 400 || res.status === 401 || res.status === 403;
-        // 404 means this key cannot reach that model at all — not enabled on
-        // the account yet, or retired. Worth remembering rather than
-        // re-discovering with a fresh upload on every future scan.
-        if (res.status === 404) _geminiUnavailable.add(model);
-        let details;
-        try {
-          const err = await geminiErrorBody(res);
-          // Kept for _geminiSpentFor(): the quota id is what tells a spent
-          // day's allowance apart from a one-minute rate limit.
-          details = err?.error?.details;
-          if (err?.error?.message) {
-            detail = err.error.message;
-            // Anything that means "this would cost money" stops the whole
-            // chain on the spot. Walking further down it in that state is how
-            // a scanner meant to be free quietly starts spending.
-            if (res.status === 429
-              || /prepayment|credits|billing|quota|API key|paid tier|FAILED_PRECONDITION|payment/i.test(detail)) {
-              shouldStop = true;
-            }
-          }
-        } catch (_) { }
-        lastErr = new Error(detail);
-        lastErr.status = res.status;
-        if (Array.isArray(details)) lastErr.details = details;
-        // Google turned down this one model for this key — typically a newer
-        // Flash with no free allowance ("limit: 0"). That says nothing about
-        // the key or the receipt, so the next model is asked instead of the
-        // scan stopping on a billing-sounding message it was never going to
-        // get past.
-        if (geminiModelRefused(res.status, detail)) {
-          _geminiUnavailable.add(model);
-          refusedCount++;
-          continue;
-        }
-        attempted = true;
-        // `throw` here lands in this iteration's own catch below, which used to
-        // record it as just another failed model and move on — so the
-        // stop-on-billing/quota check never actually stopped anything and a
-        // dead key still paid to upload the image three times. Mark it so the
-        // catch re-throws instead of swallowing.
-        if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
-        continue;
-      }
-      attempted = true;
-      const data = await res.json();
-      const cand = data.candidates?.[0];
-      // Newer flash models emit a thought part first. Reading only parts[0].text
-      // made a perfectly good answer look like a failure and escalated to the
-      // next model — another full upload.
+  return askGemini(apiKey, {
+    signal,
+    body: (_model, step) => bodyFor(GEMINI_THINKING_MODES[step]),
+    // Step down the thinking control until the model stops objecting. The
+    // last rung (no control at all) is the request shape that worked before
+    // any of this existed, so a speed setting can never be what stops a
+    // receipt being read. Only a rung that worked is remembered.
+    ladder: {
+      // Which spelling a model is asked in first: what it accepted before,
+      // else the named level for Gemini 3 and later, else the number.
+      first: (model) => _geminiThinkingMode.get(model)
+        ?? (geminiUsesThinkingLevel(model) ? GEMINI_THINKING_MODES.indexOf('level') : 0),
+      last: GEMINI_THINKING_MODES.length - 1,
+      worked: (model, step) => _geminiThinkingMode.set(model, step),
+    },
+    // A big upload gets one real attempt. A model that Google refuses outright
+    // (see geminiModelRefused) does not use it up: that answer comes back
+    // before any reading happens, and is remembered for the rest of the session.
+    singleAttemptBytes: GEMINI_SINGLE_ATTEMPT_BYTES,
+    read: (cand, model, finish) => {
+      // Newer flash models emit a thought part first. Reading only
+      // parts[0].text made a perfectly good answer look like a failure and
+      // escalated to the next model — another full upload.
       const text = (cand?.content?.parts || [])
         .filter(p => p && p.text && !p.thought)
         .map(p => p.text)
         .join('')
         .trim();
-      const finish = cand?.finishReason;
-      if (finish && finish !== 'STOP' && finish !== 'MAX_TOKENS') {
-        lastErr = new Error(`Gemini stopped early (${finish})`);
-        continue;
-      }
-      if (text) return { text, truncated: finish === 'MAX_TOKENS', model };
-      lastErr = new Error(`Empty response from ${model}`);
-    } catch (e) {
-      // A cancel must never be mistaken for a model failure worth retrying.
-      if (e && e.name === 'AbortError') throw e;
-      // Nor an error every model in the chain would give identically.
-      if (e && e.__fatal) throw e;
-      attempted = true;
-      lastErr = e;
-    }
-  }
-  if (refusedCount && refusedCount === chain.length) throw _geminiNoModelError(lastErr);
-  throw lastErr || new Error('All Gemini models failed');
-}
-
-// Every model in the chain was turned down for this key. Said in words the
-// publisher can act on, and deliberately not phrased as a quota or billing
-// problem: nothing was used up, so the app must not rest the key until
-// midnight or tell them their allowance is spent.
-function _geminiNoModelError(lastErr) {
-  return Object.assign(new Error(
-    'Google did not offer any of its reading models to this AI key on its free plan. '
-    + 'Check the key in Google AI Studio, or add an OpenRouter backup key in the Tax Centre config'
-  ), { __alreadyFriendly: true, status: 404, cause: lastErr });
+      return text ? { text, truncated: finish === 'MAX_TOKENS', model } : null;
+    },
+  });
 }
 
 // Structured output beats prompt rules: `enum` stops a near-miss category like
@@ -6501,18 +6361,17 @@ function _subscriptionPickHtml(r, i) {
   const result = _subscriptionMatch({ ...r, notSubscription: false });
   const m = result?.match;
   if (!m || m.paused) return '';
-  const money = (amount, currency) => `${String(currency || 'CAD').toUpperCase()} ${(Number(amount) || 0).toFixed(2)}`;
   const receiptAmount = !r.amountUnknown && Number(r.amount) > 0;
   // One value carries both answers — which subscription, and what the receipt
   // is against its charge — as "sub:<id>:<answer>".
   const opts = [];
   result.candidates.forEach(c => {
     const when = c.posted ? `on ${c.line.date}` : `due ${c.charge.date}`;
-    const charge = `${c.sub.desc} — ${money(c.amount, c.currency)} ${when}`;
+    const charge = `${c.sub.desc} — ${fmtCode(c.amount, c.currency)} ${when}`;
     if (c.covered) { opts.push([`sub:${c.subId}:keep`, `Already in my books (${charge} has its receipt) — skip it`]); return; }
     if (c.amountMatches) { opts.push([`sub:${c.subId}:keep`, `Proof for ${charge}`]); return; }
-    opts.push([`sub:${c.subId}:keep`, `Proof for ${charge} — keep ${money(c.amount, c.currency)}`]);
-    if (c.sameCurrency && receiptAmount) opts.push([`sub:${c.subId}:receipt`, `Proof for ${charge} — use ${money(r.amount, r.currency)} this time`]);
+    opts.push([`sub:${c.subId}:keep`, `Proof for ${charge} — keep ${fmtCode(c.amount, c.currency)}`]);
+    if (c.sameCurrency && receiptAmount) opts.push([`sub:${c.subId}:receipt`, `Proof for ${charge} — use ${fmtCode(r.amount, r.currency)} this time`]);
   });
   opts.push(['separate', 'A separate purchase — file it on its own']);
 

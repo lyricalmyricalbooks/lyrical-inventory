@@ -302,16 +302,11 @@ import {
   fmtWhole,
   fmtD,
   getBookCurrencyCode,
-  getContrastSafeText,
-  getPaperSafeText,
-  getAccentFillPair,
   getSym,
-  hexToRgba,
   isDirectToArtistSale,
   transferAmount,
   heldSaleForTransfer,
   transferQtyLabel,
-  lightenColor,
   normalizeCurrencyCode,
   paymentSummary,
   roundCents,
@@ -319,6 +314,13 @@ import {
   setSelectCurrency,
   PICKER_CURRENCIES,
 } from './lib/money.js';
+import {
+  getContrastSafeText,
+  getPaperSafeText,
+  getAccentFillPair,
+  hexToRgba,
+  lightenColor,
+} from './lib/color.js';
 import { sumMoney } from './lib/cents.js';
 import { localDay, localDayPlus, sheetDay } from './lib/calendar-day.js';
 import {
@@ -1046,7 +1048,6 @@ import {
   copyArtistSettlement,
   recordArtistSettlement,
   _revMemo,
-  dismissStockDrift,
   getArtistHeldHtml,
   getOwedCardDetails,
   getPayoutHistoryHtml,
@@ -1131,7 +1132,7 @@ import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale, stockToReturn, takeSaleStock } from './lib/inventory.js';
+import { deriveOnHand, syncStoredStock, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale, stockToReturn, takeSaleStock } from './lib/inventory.js';
 import { fairSyncPill } from './lib/fair-mode.js';
 import { histMirrorForLedger, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -3164,18 +3165,12 @@ function triggerCardAnimations() {
   });
 }
 // Money helpers (CURRENCY_SYMBOL_TO_CODE, CODE_TO_SYMBOL, getSym,
-// normalizeCurrencyCode, fmt, fmtNum, fmtD, getBookCurrencyCode,
-// paymentSummary, buildPaymentMeta) are imported from ./lib/money.js
+// normalizeCurrencyCode, fmt, fmtNum, getBookCurrencyCode,
+// paymentSummary, buildPaymentMeta) are imported from ./lib/money.js;
+// date displays (fmtD, fmtDateTime, fmtLongDate) from ./lib/dates.js.
 
 // LOCAL calendar day, not the UTC one (which is tomorrow on a Canadian evening).
 export const today = () => localDay();
-
-export const formatDateTime = (isoString) => {
-  if (!isoString) return '';
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString() + ' ' + d.toTimeString().slice(0, 5);
-};
 
 
 // ── PER-BOOK STATE
@@ -4105,6 +4100,13 @@ const _saveRuns = new Map();
 const _saveAgain = new Set();
 
 export async function saveState(bookId) {
+  // The count on hand is what the records add up to, set here before anything
+  // is saved or redrawn, so no screen can show a hand-adjusted figure.
+  // Only a book this device actually holds: a name like "__proto__" must never
+  // reach an object it doesn't own.
+  if (Object.prototype.hasOwnProperty.call(states, bookId) && Object.prototype.hasOwnProperty.call(BOOKS, bookId)) {
+    syncStoredStock(states[bookId], BOOKS[bookId]);
+  }
   // Whatever changed the book, it is being saved: everything that follows a
   // change (the Google Sheet's expense rows, the header counts) hears it here.
   // See wireBookEvents.
@@ -9618,7 +9620,7 @@ async function fetchOrders() {
   const lastScanDate = mem.lastScan ? new Date(mem.lastScan) : null;
   const appliedNums = new Set(mem.appliedNums || []);
   const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
-  const sinceDate = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const sinceDate = fmtD(new Date(Date.now() - daysBack * 86400000));
 
   // A Gmail scan is three retries deep at worst, so it can run for the better
   // part of a minute. Until now the queue kept showing its pre-scan content for
@@ -10309,7 +10311,7 @@ function confirmImport() {
 // voiding one sale is (stock and revenue reversed, the Google Sheet row
 // removed), so it can still be brought back row by row. Rows already paid out
 // in an author settlement are left alone and counted.
-function undoImport(importId) {
+async function undoImport(importId) {
   const s = getState(), book = getBook();
   const rows = (s.hist || []).filter(h => h.importId === importId && !h.voided);
   if (!rows.length) return;
@@ -10320,7 +10322,11 @@ function undoImport(importId) {
   const undoable = rows.filter(h => !isLocked(h));
   if (!undoable.length) { showToast('Every row of this import is in an author settlement or matched to a website order, so it stays.', 'warn', 5000); return; }
   const name = rows[0].importName ? ` from “${rows[0].importName}”` : '';
-  if (!confirm(`Undo this import${name}? ${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed.`)) return;
+  const ok = await confirmDialog(
+    `${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed. You can bring any of them back one by one from History.`,
+    { title: `Undo this import${name}?`, okLabel: 'Undo import', danger: true },
+  );
+  if (!ok) return;
   undoable.forEach(h => {
     voidHistEntry(s, book, h, { recompute: false });
     h.voidedReason = 'Import undone';
@@ -13550,9 +13556,7 @@ export function recomputeAfters(s, book) {
   // ledger, the store card and the Google Sheet all show the corrected one.
   reconcileConsignmentMirrors(s);
   recalculateBookStatsFromHistory(s);
-  if (bk && Number.isFinite(bk.maxPrint)) {
-    s.stock = deriveOnHand(s, bk);
-  }
+  syncStoredStock(s, bk);
   reconcileConsignmentChannel(s);
   reconcileStores(s);
   // Stock After mirrors the History view: a single running balance over the
@@ -19461,7 +19465,7 @@ Object.assign(window, {
   reconOnFilter, reconClearFilters, reconEditKey,
   toggleStripePaidNotify,
   generateBookStripeLink,
-  logout, switchTab, filterHelp, setHelpAudience, toggleAllHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
+  logout, switchTab, filterHelp, setHelpAudience, toggleAllHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand,
   showMoreHist, showAllHist,
   restateBookCurrency, onCurrencyModeChange, onCurrencyRateModeChange, refreshCurrencyPreview,
   toggleCurrentBookView,
@@ -20345,7 +20349,7 @@ function exposeLegacyInlineHandlers() {
     restoreDismissedTodoSignals, toggleSidebarAlerts,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
-    dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
+    updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
     getArtistHeldHtml, getPayoutHistoryHtml, renderProfitSharingBreakdown, toggleArtistPayoutForm,
     saveArtistPayout, editArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender,
     recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,

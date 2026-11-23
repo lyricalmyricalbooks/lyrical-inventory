@@ -34,6 +34,16 @@ export function deriveOnHand(s, book) {
   return Math.max(0, deriveOnHandRaw(s, book));
 }
 
+// One number for "books on hand": the stored count is only ever a copy of what
+// the records add up to. Every load, live update and merge already set it this
+// way (recomputeAfters); saveState does too, so the count a screen reads right
+// after a sale, the register's and the website's can never disagree. A book
+// with no print run has no baseline, so its stored count is the only count.
+/** @param {BookState} s @param {Book} book */
+export function syncStoredStock(s, book) {
+  if (s && book && Number.isFinite(book.maxPrint)) s.stock = deriveOnHand(s, book);
+}
+
 // The same walk without the floor at zero. A count below zero is a records
 // problem rather than a shelf, so the screens never show it — but the website
 // link sends this number, because the website subtracts its own sales from it

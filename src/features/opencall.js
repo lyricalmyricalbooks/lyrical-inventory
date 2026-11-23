@@ -17,7 +17,6 @@
 // throwing at click time.
 import {
   $,
-  formatDateTime,
   isAuthor,
   sheetsUrl,
   showToast,
@@ -35,6 +34,7 @@ import {
 } from './customers.js';
 import { confirmDialog } from '../lib/modal.js';
 import { escapeHtml, hasHtmlTag } from '../lib/html.js';
+import { fmtDateTime } from '../lib/dates.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
@@ -1655,7 +1655,7 @@ function ocLatestEmailsHtml_(c, cached, note = '') {
       const short = body.length > 420 ? body.slice(0, 420).replace(/\s\S*$/, '') + '…' : body;
       return `
         <article class="oc-latest-msg ${fromThem ? 'is-them' : 'is-you'}">
-          <div class="oc-latest-meta"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(formatDateTime(msg.date))}</span></div>
+          <div class="oc-latest-meta"><strong>${escapeHtml(who)}</strong><span>${escapeHtml(fmtDateTime(msg.date))}</span></div>
           <div class="oc-latest-body">${escapeHtml(short || '(no text)')}</div>
           ${(msg.attachments || []).length ? `<div class="oc-latest-files">${msg.attachments.map(att => `
             <button type="button" class="btn sm" onclick="downloadOcAttachment(${escapeHtml(JSON.stringify(String(msg.id)))}, ${escapeHtml(JSON.stringify(String(att.name)))}, this)" title="Download this attachment">📎 ${escapeHtml(att.name)} · ${Math.max(1, Math.round((att.size || 0) / 1024))} KB</button>`).join('')}</div>` : ''}
@@ -2003,7 +2003,7 @@ function ocAutomationHtml_(sched, lastScannedVal) {
             </select>
           </label>
           <label class="oc-check-line"><input type="checkbox" id="oc-sched-digest" ${sched.digest ? 'checked' : ''} ${sheetsUrl ? '' : 'disabled'} onchange="ocSetServerSchedule()"> Email me a summary when something is found <span id="oc-sched-status" class="oc-sched-status">${sched.enabled ? '● on' : ''}</span></label>
-          ${lastScannedVal ? `<div class="oc-last-scanned">Last checked: ${formatDateTime(lastScannedVal)}</div>` : ''}
+          ${lastScannedVal ? `<div class="oc-last-scanned">Last checked: ${fmtDateTime(lastScannedVal)}</div>` : ''}
         </fieldset>
         <fieldset class="oc-fieldset">
           <legend>Who emails come from</legend>
@@ -3505,7 +3505,7 @@ async function ocToggleInlineThread(cId, threadId, title) {
 
     const msgsHtml = data.messages.map((msg, idx) => {
       const isMe = msg.from.toLowerCase().includes('lyricalmyrical') || msg.from.toLowerCase().includes('me');
-      const dateStr = formatDateTime(msg.date);
+      const dateStr = fmtDateTime(msg.date);
       return `
         <div style="margin-bottom:12px;border-bottom:var(--stroke-hair) solid rgba(255,255,255,0.05);padding-bottom:8px;${idx === data.messages.length - 1 ? 'border-bottom:none;margin-bottom:0;padding-bottom:0;' : ''}">
           <div class="row-between" style="font-size:var(--text-xs);color:var(--text3);margin-bottom:4px;">

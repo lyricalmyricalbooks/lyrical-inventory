@@ -1,4 +1,5 @@
 import { escapeHtml } from './html.js';
+import { fmtLongDate } from './dates.js';
 
 const FIELDS = ['name', 'address', 'email', 'website', 'phone', 'recipient', 'date', 'subject', 'body', 'signoff', 'signature'];
 
@@ -46,7 +47,7 @@ function displayDate(iso) {
   if (!match) return line(iso);
   const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   if (date.getFullYear() !== Number(match[1]) || date.getMonth() !== Number(match[2]) - 1 || date.getDate() !== Number(match[3])) return line(iso);
-  return escapeHtml(new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: 'long', day: 'numeric' }).format(date));
+  return escapeHtml(fmtLongDate(date, 'en-CA'));
 }
 
 export function renderLetterhead(letter) {

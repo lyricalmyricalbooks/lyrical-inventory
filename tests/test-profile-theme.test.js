@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { extractDecl } from './helpers/extract-decl.js';
-import { hexToRgba } from '../src/lib/money.js';
+import { hexToRgba } from '../src/lib/color.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '..');

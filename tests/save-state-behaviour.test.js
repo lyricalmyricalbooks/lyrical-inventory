@@ -208,7 +208,9 @@ describe('when another device wrote in the meantime (merged result)', () => {
   function mergeWithOtherDevice({ conflicts = [] } = {}) {
     app.cloud.saveImpl = (bookId, json) => {
       const mine = JSON.parse(json);
-      const merged = { ...mine, hist: [OTHER, ...mine.hist], revenue: mine.revenue + 40 };
+      // As the real merge does (_normalizeMergedState), the other device's
+      // copy also comes off the count on hand.
+      const merged = { ...mine, hist: [OTHER, ...mine.hist], revenue: mine.revenue + 40, stock: mine.stock - OTHER.qty };
       app.cloud.books[bookId] = JSON.stringify(merged);
       return { ok: true, merged: true, state: merged, conflicts };
     };

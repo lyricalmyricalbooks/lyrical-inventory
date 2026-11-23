@@ -10,6 +10,8 @@
 //
 // Pure: no DOM, no ledger, no network.
 
+import { fmtCode } from './money.js';
+
 /** How sure the reader has to be of what it read before a receipt counts as easy. */
 export const READY_CONFIDENCE = 0.8;
 
@@ -30,13 +32,8 @@ export function isReadyToFile(draft = {}, { duplicate = false } = {}) {
   return !!String(draft.date || '').trim();
 }
 
-function money(draft) {
-  const amount = Number(draft.amount) || 0;
-  return `${String(draft.currency || 'CAD').toUpperCase()} ${amount.toFixed(2)}`;
-}
-
 function receiptLabel(draft) {
-  return `${draft.vendor || draft.description || 'Receipt'} ${money(draft)} → ${draft.category}`;
+  return `${draft.vendor || draft.description || 'Receipt'} ${fmtCode(draft.amount, draft.currency)} → ${draft.category}`;
 }
 
 /**
