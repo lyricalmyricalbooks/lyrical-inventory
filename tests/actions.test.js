@@ -79,8 +79,9 @@ const srcFiles = [];
 // 1,382 when this started (766 in index.html, 616 + the 18 the assistant
 // panel and the Big Cartel screen just dropped in src).
 // 758 / 614 after the phone bar, Today and All Books moved to named actions.
-const MAX_IN_INDEX_HTML = 758;
-const MAX_IN_SRC = 614;
+// 754 / 601 after the Payments list became one inbox.
+const MAX_IN_INDEX_HTML = 754;
+const MAX_IN_SRC = 601;
 
 // Screens already on named actions stay there.
 const DONE = ['src/features/intel.js', 'src/features/bigcartel.js'];

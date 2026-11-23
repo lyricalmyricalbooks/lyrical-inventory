@@ -45,11 +45,11 @@ describe('payment settings fold away', () => {
     expect(block).toContain('id="pm-global-list"');
   });
 
-  test('renderReconcile opens each fold once: wide screen, or no saved key', () => {
+  test('renderReconcile sets each fold once: Stripe settings open only with no saved key', () => {
     expect(main).toContain('_reconInitFolds(!!_reconSavedKey());');
     const init = fnBody('function _reconInitFolds(', 'function reconOnFilter(');
-    expect(init).toMatch(/matchMedia\?\.\('\(min-width: 769px\)'\)/);
-    expect(init).toMatch(/el\.open = wide \|\| !hasKey;/);
+    expect(init).toMatch(/\['recon-settings', !hasKey\], \['pm-settings', false\]/);
+    expect(init).toMatch(/el\.open = open;/);
     expect(init).toMatch(/dataset\.foldInit/);
   });
 });
@@ -85,21 +85,20 @@ describe('card and summary markup', () => {
     expect(main).toMatch(/const hint = document\.getElementById\(`\$\{prefix\}hint-\$\{id\}`\);/);
   });
 
-  test('#recon-summary renders a KPI strip with the lead figure marked', () => {
-    expect(main).toMatch(/summaryEl\.innerHTML = `<div class="kpi-grid recon-kpis">/);
-    expect(main).toMatch(/<div class="kpi is-lead"><div class="kpi-label">Need review<\/div>/);
-    expect(main).toMatch(/<div class="kpi-label">Reconciled<\/div>/);
-    expect(main).toMatch(/<div class="kpi-label">Total<\/div>/);
+  test('#recon-summary is one line of counts, not a dashboard', () => {
+    expect(main).toMatch(/summaryEl\.innerHTML = `<p class="recon-line">/);
+    expect(main).toMatch(/need\$\{needYou\.length === 1 \? 's' : ''\} you/);
   });
 
-  test('the explanatory paid-amount note is rendered once above the worklist, not per card', () => {
-    const cards = fnBody('function _reconNeedCard(', 'function _reconGroupCard(');
-    expect(cards).not.toMatch(/Stripe’s paid amount is preserved/);
-    expect(main).toMatch(/needsEl\.innerHTML = _RECON_PAID_NOTE_HTML \+ /);
+  test('the order number, amount, currency and rate fold away under Details on each row', () => {
+    const card = fnBody('function _reconNeedCard(', 'export function renderReconcile() {');
+    const details = card.slice(card.indexOf('<details class="recon-more">'));
+    for (const id of ['recon-num-', 'recon-amount-', 'recon-currency-', 'recon-rate-']) expect(details).toContain(id);
+    expect(card.slice(0, card.indexOf('<details class="recon-more">'))).toContain('recon-book-');
   });
 
-  test('the toolbar display is left to the stylesheet (not forced to flex inline)', () => {
-    expect(main).toContain("toolbarEl.style.display = needs.length ? '' : 'none';");
+  test('the search box shows only for a list long enough to need it, its layout left to the stylesheet', () => {
+    expect(main).toContain("toolbarEl.style.display = payments.length > 6 ? '' : 'none';");
   });
 });
 
@@ -150,15 +149,42 @@ describe('new CSS uses tokens only', () => {
   });
 });
 
-describe('Payments toolbar is inked on a phone', () => {
+describe('Payments search is inked on a phone', () => {
   const css = readFileSync('src/styles/phone.css', 'utf8');
   const rule = (sel) => [...css.matchAll(new RegExp('(?:^|\\n)\\s*' + sel.replace(/[.*+?^${}()|[\]\\>]/g, '\\$&') + '\\s*\\{([^}]*)\\}', 'g'))].map((m) => m[1]).join(' ');
-  test('frame, search and drop-downs use the 2px ink outline', () => {
-    expect(rule('#tab-reconcile .recon-toolbar')).toMatch(/border:\s*var\(--stroke\) solid var\(--border-strong\)/);
-    expect(rule('#tab-reconcile .recon-search, #tab-reconcile .recon-mini')).toMatch(/border:\s*var\(--stroke\) solid var\(--border-strong\)/);
+  test('the search box uses the 2px ink outline', () => {
+    expect(rule('#tab-reconcile .recon-search')).toMatch(/border:\s*var\(--stroke\) solid var\(--border-strong\)/);
   });
-  test('filter chips and tags are square, not lozenges', () => {
-    expect(rule('#tab-reconcile .recon-chip')).toMatch(/border-radius:\s*var\(--r2\)/);
+  test('tags are square, not lozenges', () => {
     expect(rule('#tab-reconcile .recon-pill')).toMatch(/border-radius:\s*var\(--r2\)/);
+  });
+});
+
+describe('one inbox instead of a toolbar of filters', () => {
+  test('search is the only control left above the list', () => {
+    const toolbar = panel.slice(panel.indexOf('id="recon-toolbar"'), panel.indexOf('</div>', panel.indexOf('id="recon-toolbar"')));
+    expect(toolbar).toContain('id="recon-search"');
+    for (const gone of ['recon-type', 'recon-sort', 'recon-group', 'recon-cur-chips', 'reconDismissAllShown']) {
+      expect(panel).not.toContain(gone);
+    }
+  });
+
+  test('the settings come after the list', () => {
+    expect(panel.indexOf('id="recon-settings"')).toBeGreaterThan(panel.indexOf('id="recon-matched"'));
+  });
+
+  test('the list is drawn as a Needs you section and a Ready section with one Confirm all button', () => {
+    const render = fnBody('export function renderReconcile() {', 'function _reconSection(');
+    expect(render).toMatch(/_reconSection\('need', 'Needs you'/);
+    expect(render).toMatch(/_reconSection\('ready', 'Ready'/);
+    expect(render).toMatch(/data-action="recon\.confirmReady">Confirm all \$\{ready\.length\}/);
+    expect(render).not.toMatch(/_reconFilter\.group|_reconBulk/);
+  });
+
+  test('Done is a fold with Undo on named actions, not inline handlers', () => {
+    const render = fnBody('export function renderReconcile() {', 'function _reconSection(');
+    expect(render).toMatch(/<details class="recon-fold recon-done"/);
+    expect(render).toMatch(/data-action="recon\.undo"/);
+    expect(render).not.toContain('onclick="(function(el)');
   });
 });
