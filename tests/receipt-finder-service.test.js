@@ -88,7 +88,7 @@ describe('server-side receipt extraction boundary', () => {
         { status: 200, body: JSON.stringify({ candidates: [{ finishReason: 'STOP', content: { parts: [{ text: '{"receipts":[]}' }] } }] }) }],
     });
     expect(run()).toEqual({ ok: true, receipts: [] });
-    const aiUrls = fetch.mock.calls.map(([url]) => url).filter(url => url.includes('generativelanguage.googleapis.com'));
+    const aiUrls = fetch.mock.calls.map(([url]) => url).filter(url => new URL(url).hostname === 'generativelanguage.googleapis.com');
     expect(aiUrls.map(u => u.match(/models\/([^:]+):/)[1]))
       .toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']);
   });
