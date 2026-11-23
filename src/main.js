@@ -4101,7 +4101,11 @@ const _saveAgain = new Set();
 export async function saveState(bookId) {
   // The count on hand is what the records add up to, set here before anything
   // is saved or redrawn, so no screen can show a hand-adjusted figure.
-  syncStoredStock(states[bookId], BOOKS[bookId]);
+  // Only a book this device actually holds: a name like "__proto__" must never
+  // reach an object it doesn't own.
+  if (Object.prototype.hasOwnProperty.call(states, bookId) && Object.prototype.hasOwnProperty.call(BOOKS, bookId)) {
+    syncStoredStock(states[bookId], BOOKS[bookId]);
+  }
   // Whatever changed the book, it is being saved: everything that follows a
   // change (the Google Sheet's expense rows, the header counts) hears it here.
   // See wireBookEvents.
