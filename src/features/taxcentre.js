@@ -60,6 +60,7 @@ import {
   subscriptionLines,
 } from '../lib/subscription-receipts.js';
 import { escapeHtml } from '../lib/html.js';
+import { fmtLongDate } from '../lib/dates.js';
 import { localDayPlus } from '../lib/calendar-day.js';
 import { csvRow, toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
@@ -2127,7 +2128,7 @@ async function exportTripPDF(tripName) {
     ? `<h2>Receipts</h2>${thumbs ? `<div class="thumbs">${thumbs}</div>` : ''}${missingList}`
     : '';
 
-  const printedOn = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const printedOn = fmtLongDate(new Date());
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Trip report — ${escapeHtml(name)}</title>

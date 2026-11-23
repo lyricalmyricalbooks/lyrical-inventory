@@ -84,6 +84,7 @@ function _stripeFriendlyType(t) {
 // Number.toLocaleString with options builds a fresh Intl.NumberFormat on every
 // call; _stripeFmtMoney runs per row in the Stripe tables and per payment on
 // every reconciliation search keystroke, so build the formatter once.
+// Not fmt(): Stripe rows print "USD 1,234.00" (code first, any Stripe currency) in the viewer's number style.
 const _STRIPE_MONEY_FMT = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function _stripeFmtMoney(amt, cur) {
   const sign = amt < 0 ? '-' : '';
@@ -875,6 +876,7 @@ async function reconcileStripeAgainstSales() {
   const years = [...new Set([...Object.keys(stripeByYear), ...Object.keys(salesByYear)].map(Number))].sort((a, b) => b - a);
   if (!years.length) { if (wrap) wrap.innerHTML = '<p class="sf-note">Neither Stripe nor your sales history has anything to compare yet.</p>'; return; }
 
+  // Not fmt(): bare figures under a CAD column heading, in the viewer's own number style.
   const fmtCad = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const bodyRows = years.map(y => {
     const stripe = stripeByYear[y] || 0;

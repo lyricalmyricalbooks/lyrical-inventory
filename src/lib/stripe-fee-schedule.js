@@ -115,7 +115,7 @@ export function startOfYear(year) {
 export function describeFeeSweep({ inserted = 0, updated = 0, totalCad = 0, reason = '' } = {}) {
   if (!inserted && !updated) return null;
 
-  const money = `${Number(totalCad || 0).toFixed(2)} CAD`;
+  const money = `${Number(totalCad || 0).toFixed(2)} CAD`; // Not fmt(): the card reads "12.00 CAD", code last.
   if (reason === 'year-boundary' || reason === 'year-end-day') {
     const closing = reason === 'year-boundary' ? 'last year' : 'this year';
     return {

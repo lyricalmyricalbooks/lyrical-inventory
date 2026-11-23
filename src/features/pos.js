@@ -141,6 +141,7 @@ function codeToSymbol(code) {
 // and the POS grid asks for two or three per book tile on every re-render, so
 // keep one formatter per currency code. An invalid code still throws at
 // construction (never cached), exactly as before.
+// Not fmt(): the till shows prices the browser's way (US dollars as "$", not "US$").
 const _posFormatters = new Map();
 function posFormat(amount, currencyCode) {
   let fmt = _posFormatters.get(currencyCode);

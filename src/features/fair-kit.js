@@ -27,6 +27,7 @@ import {
 import { codeToSymbol, convertCurrency, currencyToCode, posBooksMap, posResolveBook } from './pos.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
+import { fmtLongDate } from '../lib/dates.js';
 import { deriveOnHand } from '../lib/inventory.js';
 import { states } from '../core/store.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from '../lib/print-sheet-layout.js';
@@ -703,7 +704,7 @@ function printSalesTracker(opts = {}) {
   const includeNotes = !!document.getElementById('st-notes').checked;
 
   const dateLabel = dateValue
-    ? new Date(dateValue + 'T00:00:00').toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    ? fmtLongDate(new Date(dateValue + 'T00:00:00'))
     : '';
 
   const colHeaders = Array.from({ length: cols }, (_, i) => `<th class="num">${i + 1}</th>`).join('');

@@ -29,7 +29,8 @@ import {
 import { BOOKS } from '../core/store.js';
 import { posCart, renderPOS } from './pos.js';
 import { closeM, confirmDialog, openM } from '../lib/modal.js';
-import { hexToRgba, setSelectCurrency } from '../lib/money.js';
+import { setSelectCurrency } from '../lib/money.js';
+import { hexToRgba } from '../lib/color.js';
 
 // The register-only book the dialog is editing, or null when adding one.
 let editingPosBookId = null;

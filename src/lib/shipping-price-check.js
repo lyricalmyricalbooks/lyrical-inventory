@@ -23,6 +23,7 @@ function cents(n) {
   return Math.round((Number(n) || 0) * 100) / 100;
 }
 
+// Not fmt(): always unsigned (the sentence says "more" or "short") and never grouped.
 export function money(n) {
   return `$${cents(Math.abs(n)).toFixed(2)}`;
 }

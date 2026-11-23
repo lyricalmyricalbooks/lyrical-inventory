@@ -301,16 +301,11 @@ import {
   fmtWhole,
   fmtD,
   getBookCurrencyCode,
-  getContrastSafeText,
-  getPaperSafeText,
-  getAccentFillPair,
   getSym,
-  hexToRgba,
   isDirectToArtistSale,
   transferAmount,
   heldSaleForTransfer,
   transferQtyLabel,
-  lightenColor,
   normalizeCurrencyCode,
   paymentSummary,
   roundCents,
@@ -318,6 +313,13 @@ import {
   setSelectCurrency,
   PICKER_CURRENCIES,
 } from './lib/money.js';
+import {
+  getContrastSafeText,
+  getPaperSafeText,
+  getAccentFillPair,
+  hexToRgba,
+  lightenColor,
+} from './lib/color.js';
 import { sumMoney } from './lib/cents.js';
 import { localDay, localDayPlus, sheetDay } from './lib/calendar-day.js';
 import {
@@ -3162,18 +3164,12 @@ function triggerCardAnimations() {
   });
 }
 // Money helpers (CURRENCY_SYMBOL_TO_CODE, CODE_TO_SYMBOL, getSym,
-// normalizeCurrencyCode, fmt, fmtNum, fmtD, getBookCurrencyCode,
-// paymentSummary, buildPaymentMeta) are imported from ./lib/money.js
+// normalizeCurrencyCode, fmt, fmtNum, getBookCurrencyCode,
+// paymentSummary, buildPaymentMeta) are imported from ./lib/money.js;
+// date displays (fmtD, fmtDateTime, fmtLongDate) from ./lib/dates.js.
 
 // LOCAL calendar day, not the UTC one (which is tomorrow on a Canadian evening).
 export const today = () => localDay();
-
-export const formatDateTime = (isoString) => {
-  if (!isoString) return '';
-  const d = new Date(isoString);
-  if (isNaN(d.getTime())) return '';
-  return d.toLocaleDateString() + ' ' + d.toTimeString().slice(0, 5);
-};
 
 
 // ── PER-BOOK STATE
@@ -9619,7 +9615,7 @@ async function fetchOrders() {
   const lastScanDate = mem.lastScan ? new Date(mem.lastScan) : null;
   const appliedNums = new Set(mem.appliedNums || []);
   const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
-  const sinceDate = new Date(Date.now() - daysBack * 86400000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const sinceDate = fmtD(new Date(Date.now() - daysBack * 86400000));
 
   // A Gmail scan is three retries deep at worst, so it can run for the better
   // part of a minute. Until now the queue kept showing its pre-scan content for

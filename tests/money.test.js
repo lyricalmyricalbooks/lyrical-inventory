@@ -12,15 +12,17 @@ import {
   paymentSummary,
   buildPaymentMeta,
   cadEquivalentForSale,
-  hexToRgba,
   PAYMENT_TYPE_DIRECT_TO_ARTIST,
   isDirectToArtistSale,
+} from '../src/lib/money.js';
+import {
+  hexToRgba,
   getContrastColor,
   getAccentFillPair,
   lightenColor,
   darkenColor,
   getContrastSafeText,
-} from '../src/lib/money.js';
+} from '../src/lib/color.js';
 
 
 describe('getSym', () => {

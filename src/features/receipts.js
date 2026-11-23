@@ -79,7 +79,7 @@ import {
   effectiveInterval,
   startWatch,
 } from '../lib/watch-schedule.js';
-import { PICKER_CURRENCIES, fmt, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
+import { PICKER_CURRENCIES, fmt, fmtCode, fmtD, getBookCurrencyCode, normalizeCurrencyCode, putCurrencyFirst, roundCents, setSelectCurrency } from '../lib/money.js';
 import { allCanonicalExpenses } from '../lib/expense-categories.js';
 import {
   checkReceiptMath,
@@ -6501,18 +6501,17 @@ function _subscriptionPickHtml(r, i) {
   const result = _subscriptionMatch({ ...r, notSubscription: false });
   const m = result?.match;
   if (!m || m.paused) return '';
-  const money = (amount, currency) => `${String(currency || 'CAD').toUpperCase()} ${(Number(amount) || 0).toFixed(2)}`;
   const receiptAmount = !r.amountUnknown && Number(r.amount) > 0;
   // One value carries both answers — which subscription, and what the receipt
   // is against its charge — as "sub:<id>:<answer>".
   const opts = [];
   result.candidates.forEach(c => {
     const when = c.posted ? `on ${c.line.date}` : `due ${c.charge.date}`;
-    const charge = `${c.sub.desc} — ${money(c.amount, c.currency)} ${when}`;
+    const charge = `${c.sub.desc} — ${fmtCode(c.amount, c.currency)} ${when}`;
     if (c.covered) { opts.push([`sub:${c.subId}:keep`, `Already in my books (${charge} has its receipt) — skip it`]); return; }
     if (c.amountMatches) { opts.push([`sub:${c.subId}:keep`, `Proof for ${charge}`]); return; }
-    opts.push([`sub:${c.subId}:keep`, `Proof for ${charge} — keep ${money(c.amount, c.currency)}`]);
-    if (c.sameCurrency && receiptAmount) opts.push([`sub:${c.subId}:receipt`, `Proof for ${charge} — use ${money(r.amount, r.currency)} this time`]);
+    opts.push([`sub:${c.subId}:keep`, `Proof for ${charge} — keep ${fmtCode(c.amount, c.currency)}`]);
+    if (c.sameCurrency && receiptAmount) opts.push([`sub:${c.subId}:receipt`, `Proof for ${charge} — use ${fmtCode(r.amount, r.currency)} this time`]);
   });
   opts.push(['separate', 'A separate purchase — file it on its own']);
 

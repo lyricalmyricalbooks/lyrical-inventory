@@ -11766,6 +11766,7 @@ function updateShippingSimulation() {
   const postageCost = customPostage !== null && !isNaN(customPostage) ? customPostage : estimatedPostage;
 
 
+  // Not fmt(): this panel prints "$12.00 CAD" (symbol and code, no grouping).
   const formatCcy = (val) => `$${val.toFixed(2)} CAD`;
 
   simResultsPanel.innerHTML = `
