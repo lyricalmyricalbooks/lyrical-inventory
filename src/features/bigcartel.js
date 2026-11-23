@@ -561,11 +561,11 @@ async function loadBigCartelData() {
         list.innerHTML = `
           <tr>
             <td colspan="9" style="padding:0;border:none;">
-              <div class="empty-state bc-empty-state is-error">
+              <div class="empty-state sys-empty bc-empty-state is-error">
                 <div class="e-icon" aria-hidden="true">⚠️</div>
-                <strong class="bc-empty-title">Failed to Load Orders</strong>
-                <p class="bc-empty-msg">${escapeHtml(msg)}</p>
-                <div class="bc-empty-actions">
+                <strong>Big Cartel orders didn't load</strong>
+                <span>${escapeHtml(msg)}</span>
+                <div class="sys-empty-actions">
                   <button type="button" class="btn sm outline" data-action="bc.load" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;">
                     <span aria-hidden="true">🔄</span>
                     <span>Retry Connection</span>
@@ -1028,11 +1028,11 @@ function renderBigCartelOrders(orders, included = []) {
     list.innerHTML = `
       <tr>
         <td colspan="9" style="padding:0;border:none;">
-          <div class="empty-state bc-empty-state">
+          <div class="empty-state sys-empty bc-empty-state">
             <div class="e-icon" aria-hidden="true">📦</div>
-            <strong class="bc-empty-title">No Big Cartel Orders Found</strong>
-            <p class="bc-empty-msg">No customer transactions found for this account. Make sure your Big Cartel account is connected, then fetch your latest store orders.</p>
-            <div class="bc-empty-actions">
+            <strong>No Big Cartel orders yet</strong>
+            <span>No customer orders found for this shop. Make sure your Big Cartel account is connected, then fetch your latest orders.</span>
+            <div class="sys-empty-actions">
               <button type="button" class="btn sm gold" data-action="bc.load" style="min-height:var(--target-min);display:inline-flex;align-items:center;gap:6px;" title="Fetch latest orders from Big Cartel">
                 <span aria-hidden="true">🔄</span>
                 <span>Fetch Orders</span>

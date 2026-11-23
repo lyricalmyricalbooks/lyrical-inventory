@@ -9249,12 +9249,10 @@ function renderPostageMatchWorklist() {
   }
 
   if (!expenses.length) {
-    host.innerHTML = `<div class="postage-match-empty">
-      <span class="postage-match-empty-icon" aria-hidden="true">📮</span>
-      <div>
-        <strong>Every postage receipt is linked to an order.</strong>
-        <p>Log a counter receipt in the Tax Centre under Shipping &amp; Postage and it will appear here to match.</p>
-      </div>
+    host.innerHTML = `<div class="empty-state sys-empty postage-match-empty">
+      <div class="e-icon" aria-hidden="true">📮</div>
+      <strong>Every postage receipt is linked to an order</strong>
+      <span>Log a counter receipt in the Tax Centre under Shipping &amp; Postage and it will appear here to match.</span>
     </div>`;
     return;
   }

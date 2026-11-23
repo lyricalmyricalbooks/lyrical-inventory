@@ -1244,10 +1244,10 @@
   #tab-taxcenter #tc-cf-kpis > :last-child:nth-child(odd) { grid-column: 1 / -1; }
 
   /* An empty section is one line of text with its one button, not a tall dashed box. */
-  #tab-taxcenter #tc-pending-list .tc-pending-empty { padding: 0; background: none; border: 0; text-align: left; }
-  #tab-taxcenter #tc-pending-list .tc-pending-empty-icon,
-  #tab-taxcenter #tc-pending-list .tc-pending-empty-sub { display: none; }
-  #tab-taxcenter #tc-pending-list .tc-pending-empty-title { margin: 0; font-size: var(--text-sm); }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty { padding: 0; background: none; border: 0; text-align: left; align-items: flex-start; }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty > .e-icon,
+  #tab-taxcenter #tc-pending-list .tc-pending-empty > span { display: none; }
+  #tab-taxcenter #tc-pending-list .tc-pending-empty > strong { margin: 0; font-size: var(--text-sm); }
   #tab-taxcenter #tc-recurring-empty .empty-state { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); padding: 0; text-align: left; }
   #tab-taxcenter #tc-recurring-empty .empty-state > .e-icon,
   #tab-taxcenter #tc-recurring-empty .tc-empty-desk { display: none; }

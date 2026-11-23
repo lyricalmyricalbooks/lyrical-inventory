@@ -161,9 +161,8 @@
   border-top: var(--stroke-hair) solid var(--border-subtle);
 }
 
-.ri-empty { height: 100%; min-height: 240px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); text-align: center; color: var(--content-muted); font-size: var(--text-sm); }
-.ri-empty strong { font-size: var(--text-base); color: var(--content-primary); }
-.ri-empty-mark { font-size: var(--text-xl); color: var(--content-muted); }
+/* The shared .sys-empty look; it fills the detail pane so it sits centred. */
+.empty-state.sys-empty.ri-empty { height: 100%; min-height: 240px; box-sizing: border-box; }
 
 .ri-back { display: none; margin-bottom: var(--space-3); min-height: 44px; }
 .ri-footer { flex-wrap: wrap; }

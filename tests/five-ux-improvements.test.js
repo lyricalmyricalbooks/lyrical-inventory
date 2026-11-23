@@ -11,17 +11,15 @@ const taxcentreJs = readFileSync(path.join(__dirname, '../src/features/taxcentre
 
 describe('5 High-Impact UX Improvements Suite', () => {
   describe('1. Big Cartel Zero Blank State & Skeleton Loaders', () => {
-    it('defines .bc-empty-state and .bc-skeleton-row in style.css', () => {
-      expect(styleCss).toContain('.bc-empty-state');
+    it('defines .bc-empty-state (on the shared empty look) and .bc-skeleton-row in style.css', () => {
+      expect(styleCss).toContain('.empty-state.sys-empty.bc-empty-state');
       expect(styleCss).toContain('.bc-skeleton-row');
-      expect(styleCss).toContain('.bc-empty-title');
-      expect(styleCss).toContain('.bc-empty-msg');
     });
 
     it('renders semantic empty-state and skeleton rows in bigcartel.js', () => {
-      expect(bigcartelJs).toContain('bc-empty-state');
+      expect(bigcartelJs).toContain('empty-state sys-empty bc-empty-state');
       expect(bigcartelJs).toContain('bc-skeleton-row');
-      expect(bigcartelJs).toContain('No Big Cartel Orders Found');
+      expect(bigcartelJs).toContain('No Big Cartel orders yet');
       expect(bigcartelJs).not.toContain('<tr><td colspan="9" style="text-align:center; padding:3rem; color:var(--text3);">No orders found.</td></tr>');
     });
   });
