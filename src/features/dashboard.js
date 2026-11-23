@@ -56,7 +56,7 @@ import {
   unpaidSalesSummary,
 } from '../lib/earnings.js';
 import { escapeHtml, safeHttpUrl } from '../lib/html.js';
-import { deriveOnHand, deriveStockBreakdown, inventoryBreakdown } from '../lib/inventory.js';
+import { deriveStockBreakdown, inventoryBreakdown } from '../lib/inventory.js';
 import { rowsByKey } from '../lib/merge-state.js';
 import { confirmDialog } from '../lib/modal.js';
 import {
@@ -157,14 +157,6 @@ function recognizedRevenueOf(s) {
 }
 
 // ── DASHBOARD (per book)
-// Signature of an on-hand drift the publisher chose to dismiss for this session.
-// Cleared implicitly whenever the numbers change (the signature stops matching),
-// so a genuinely new discrepancy resurfaces rather than staying hidden forever.
-let _dismissedDriftSig = null;
-function dismissStockDrift() {
-  const b = $('d-stock-drift-banner');
-  if (b) { _dismissedDriftSig = b.dataset.sig || null; b.style.display = 'none'; }
-}
 
 /* ─── DASHBOARD — SALES BY CHANNEL ────────────────────────────────────────
    The table answers "where is the money coming from?". Until now it listed
@@ -273,7 +265,7 @@ function updateDash() {
   $('d-thresh-sub').textContent = 'threshold: ' + book.threshold + ' units';
   $('d-thresh-label').textContent = 'Alert at ' + book.threshold + ' units';
   animateCountValue('d-stock', s.stock); animateCountValue('h-stock', s.stock);
-  renderStockDriftBanner(s, book);
+  renderStockActions();
   animateCountValue('d-sold', s.sold + inventory.gratuities);
   const soldSplit = $('d-sold-split');
   if (soldSplit) soldSplit.textContent = `${s.sold} sold · ${inventory.gratuities} gifted`;
@@ -369,27 +361,10 @@ function updateDash() {
   renderProfitSharingBreakdown(activeBook);
 }
 
-// Surface on-hand drift: if the stored count disagrees with what the records
-// imply (a sale/return/consignment that didn't update inventory, or an
-// offline-merge hiccup), nudge toward the one-click repair instead of letting
-// a silently-wrong number sit on the dashboard. Reconciling on-hand is a
-// publisher action, so the banner and the repair button stay hidden for
-// authors — and the banner can be dismissed without forcing a recalculation.
-function renderStockDriftBanner(s, book) {
-  const driftBanner = $('d-stock-drift-banner');
-  if (driftBanner) {
-    const derivedOnHand = deriveOnHand(s, book);
-    const sig = `${activeBook}:${s.stock}:${derivedOnHand}`;
-    const show = !isAuthor() && derivedOnHand !== s.stock && _dismissedDriftSig !== sig;
-    if (show) {
-      const diff = derivedOnHand - s.stock;
-      $('d-stock-drift-value').textContent = `${s.stock} on file · ${derivedOnHand} per records (${diff > 0 ? '+' : ''}${diff})`;
-      driftBanner.dataset.sig = sig;
-      driftBanner.style.display = '';
-    } else {
-      driftBanner.style.display = 'none';
-    }
-  }
+// The on-hand count is always worked out from the records now (syncStoredStock),
+// so there is no stored-versus-records gap to warn about. The Recalculate
+// button stays for publishers as a manual check; authors don't see it.
+function renderStockActions() {
   const recalcWrap = $('d-recalc-onhand-wrap');
   if (recalcWrap) recalcWrap.style.display = isAuthor() ? 'none' : '';
 }
@@ -1777,7 +1752,6 @@ export {
   copyArtistSettlement,
   recordArtistSettlement,
   _revMemo,
-  dismissStockDrift,
   getArtistHeldHtml,
   getOwedCardDetails,
   getPayoutHistoryHtml,

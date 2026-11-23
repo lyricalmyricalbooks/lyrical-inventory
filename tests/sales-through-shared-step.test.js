@@ -112,3 +112,19 @@ describe('a spreadsheet import', () => {
     expect(app.main.getAllAppliedIds().has('A-1')).toBe(true);
   });
 });
+
+// One number for "books on hand": whatever a screen did to the stored count,
+// saving sets it to what the records add up to, so the register, the
+// dashboard and the website can't disagree.
+describe('the count on hand', () => {
+  it('is what the records add up to whenever the book is saved', async () => {
+    // A sale of 5 written straight into the history, with a hand-adjusted count.
+    st().hist.unshift({ num: 'H-1', chan: 'Book Fair', qty: 5, price: 40, date: '2026-10-20', sheetsId: 'evt-h1' });
+    st().stock = 999;
+    const saving = app.main.saveState('harbour');
+    expect(st().stock).toBe(85); // already right before the save finishes
+    await saving;
+    await app.settle();
+    expect(app.cloud.lastSave('harbour').state.stock).toBe(85);
+  });
+});

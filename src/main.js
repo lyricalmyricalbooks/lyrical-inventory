@@ -1045,7 +1045,6 @@ import {
   copyArtistSettlement,
   recordArtistSettlement,
   _revMemo,
-  dismissStockDrift,
   getArtistHeldHtml,
   getOwedCardDetails,
   getPayoutHistoryHtml,
@@ -1130,7 +1129,7 @@ import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
 import { OC_STAGES } from './lib/opencall.js';
-import { deriveOnHand, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale, stockToReturn, takeSaleStock } from './lib/inventory.js';
+import { deriveOnHand, syncStoredStock, buildOrderTimeline, inventoryBreakdown, deduplicateDirectConsignmentSales, recalculateBookStatsFromHistory, orderStockPreview, orderStockPreviewCopy, deriveStockBreakdown, transferAuthorStock, isVoidStale, stockToReturn, takeSaleStock } from './lib/inventory.js';
 import { fairSyncPill } from './lib/fair-mode.js';
 import { histMirrorForLedger, reconcileConsignmentMirrors, syncHistMirrorFromLedger, ledgerSaleIndexForHistMirror, consignmentSyncPayload, collectUniqueConsignmentStores, consignmentLedgerTotals, storeBalanceSlug, storeBalanceComparison } from './lib/consignment.js';
 import { reminderSettings, reminderBlockReason, invoiceReminderState, dueForReminder, dueForReminderTomorrow, buildReminderEmail, canSendNow, daysLate, describeReminderSweep, describeReminderNotice, sampleReminderInvoice } from './lib/payment-reminders.js';
@@ -4104,6 +4103,9 @@ const _saveRuns = new Map();
 const _saveAgain = new Set();
 
 export async function saveState(bookId) {
+  // The count on hand is what the records add up to, set here before anything
+  // is saved or redrawn, so no screen can show a hand-adjusted figure.
+  syncStoredStock(states[bookId], BOOKS[bookId]);
   // Whatever changed the book, it is being saved: everything that follows a
   // change (the Google Sheet's expense rows, the header counts) hears it here.
   // See wireBookEvents.
@@ -13549,9 +13551,7 @@ export function recomputeAfters(s, book) {
   // ledger, the store card and the Google Sheet all show the corrected one.
   reconcileConsignmentMirrors(s);
   recalculateBookStatsFromHistory(s);
-  if (bk && Number.isFinite(bk.maxPrint)) {
-    s.stock = deriveOnHand(s, bk);
-  }
+  syncStoredStock(s, bk);
   reconcileConsignmentChannel(s);
   reconcileStores(s);
   // Stock After mirrors the History view: a single running balance over the
@@ -19433,7 +19433,7 @@ Object.assign(window, {
   reconOnFilter, reconClearFilters, reconEditKey,
   toggleStripePaidNotify,
   generateBookStripeLink,
-  logout, switchTab, filterHelp, setHelpAudience, toggleAllHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand, dismissStockDrift,
+  logout, switchTab, filterHelp, setHelpAudience, toggleAllHelp, toggleBookDropdown, toggleHeaderMenu, closeHeaderMenus, toggleSideAccount, switchBook, forceSync, recalcOnHand,
   showMoreHist, showAllHist,
   restateBookCurrency, onCurrencyModeChange, onCurrencyRateModeChange, refreshCurrencyPreview,
   toggleCurrentBookView,
@@ -20317,7 +20317,7 @@ function exposeLegacyInlineHandlers() {
     restoreDismissedTodoSignals, toggleSidebarAlerts,
     toggleConGroup, toggleConGrouping, toggleAllConGroups, setConStatusFilter, onConSearchInput, clearConSearch, clearConSearchAndFilter, renderConsignmentTable,
     updatePublisherActionBanner, renderBookPendingAlert, heldGrossOf, recognizedRevenueOf,
-    dismissStockDrift, updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
+    updateDash, getProfitTiersHtml, getRevenueProgressHtml, getOwedCardDetails,
     getArtistHeldHtml, getPayoutHistoryHtml, renderProfitSharingBreakdown, toggleArtistPayoutForm,
     saveArtistPayout, editArtistPayout, deleteArtistPayout, renderAll, renderCurrent, scheduleRender,
     recordOrder, showMoreHist, showAllHist, renderConsignHistRow, renderHist,

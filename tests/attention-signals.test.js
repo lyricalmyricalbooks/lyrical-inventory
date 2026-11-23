@@ -107,18 +107,9 @@ describe('stock signals', () => {
     expect(ids(scan())).not.toContain('stock-getting-low:hound');
   });
 
-  it("flags a stored count that disagrees with the book's own records", () => {
-    // 100 printed, 10 sold → the records say 90, but the stored count says 100.
+  it('no longer raises a stored-versus-records warning (the stored count is kept in step)', () => {
     const result = scan({ state: { stock: 100, hist: [{ qty: 10, price: 25, date: '2026-01-01' }] } });
-    const drift = result.signals.find(s => s.id === 'stock-drift:hound');
-    expect(drift).toBeTruthy();
-    expect(drift.detail).toContain('100');
-    expect(drift.detail).toContain('90');
-  });
-
-  it('stays quiet when the count and the records agree', () => {
-    const result = scan({ state: { stock: 90, hist: [{ qty: 10, price: 25, date: '2026-01-01' }] } });
-    expect(ids(result)).not.toContain('stock-drift:hound');
+    expect(result.signals.some(s => s.id.startsWith('stock-drift'))).toBe(false);
   });
 });
 
