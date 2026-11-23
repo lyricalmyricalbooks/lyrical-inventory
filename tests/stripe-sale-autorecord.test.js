@@ -1,6 +1,6 @@
 // Which Stripe payments become sales without a button press.
 import { describe, it, expect } from 'vitest';
-import { describeCardSales, stripeSalePlan, paidUnitPrice, wholeCopies } from '../src/lib/stripe-sale-autorecord.js';
+import { booksFittingAmount, describeCardSales, describeDisputes, disputesToRaise, stripeSalePlan, paidUnitPrice, suggestedBook, wholeCopies } from '../src/lib/stripe-sale-autorecord.js';
 
 const book = { id: 'hound', title: 'The Hound', listPrice: 25 };
 const payment = (extra = {}) => ({ id: 'ch_1', amount: 50, currency: 'CAD', created: 2000, ...extra });
@@ -121,5 +121,67 @@ describe('what the alert says', () => {
 
   it('asks for help when nothing could be recorded', () => {
     expect(describeCardSales([{ action: 'review', reason: 'amount' }]).title).toBe('A card payment needs you');
+  });
+});
+
+describe('the book the Stripe worklist picks in advance', () => {
+  const books = {
+    hound: { id: 'hound', title: 'The Hound', listPrice: 25 },
+    arch: { id: 'arch', title: 'Archaeology', listPrice: 20 },
+    injured: { id: 'injured', title: 'Injured', listPrice: 20 },
+    altrove: { id: 'altrove', title: 'Altrove', listPrice: 55, priceOverrides: { EUR: 40 } },
+  };
+  const cad = () => 'CAD';
+
+  it('finds every book whose price the amount buys whole copies of', () => {
+    expect(booksFittingAmount({ amount: 50, currency: 'CAD' }, books, cad)).toEqual(['hound']);
+    expect(booksFittingAmount({ amount: 40, currency: 'CAD' }, books, cad)).toEqual(['arch', 'injured']);
+    expect(booksFittingAmount({ amount: 40, currency: 'EUR' }, books, cad)).toEqual(['altrove']);
+    expect(booksFittingAmount({ amount: 43, currency: 'CAD' }, books, cad)).toEqual([]);
+    expect(booksFittingAmount({ amount: 0, currency: 'CAD' }, books, cad)).toEqual([]);
+  });
+
+  it('leaves out an order too large to be one sale', () => {
+    expect(booksFittingAmount({ amount: 25 * 21, currency: 'CAD' }, books, cad)).toEqual([]);
+  });
+
+  it('prefers the link tag, then a title typed on the reader, then the only price that fits', () => {
+    expect(suggestedBook({ taggedId: 'hound', named: [{ bookId: 'arch' }], fits: ['injured'] })).toEqual({ bookId: 'hound', why: 'tag' });
+    expect(suggestedBook({ named: [{ bookId: 'arch' }], fits: ['injured'] })).toEqual({ bookId: 'arch', why: 'named' });
+    expect(suggestedBook({ fits: ['injured'] })).toEqual({ bookId: 'injured', why: 'price' });
+  });
+
+  it('suggests nothing when the price fits several books or two titles were typed', () => {
+    expect(suggestedBook({ fits: ['arch', 'injured'] })).toBeNull();
+    expect(suggestedBook({ named: [{ bookId: 'arch' }, { bookId: 'hound' }], fits: ['injured'] })).toBeNull();
+    expect(suggestedBook()).toBeNull();
+  });
+});
+
+describe('a recorded card sale disputed with the bank', () => {
+  const sale = (extra = {}) => ({ bookId: 'hound', sheetsId: 'stripe-ch_1', chargeId: 'ch_1', qty: 1, bookTitle: 'The Hound', ...extra });
+
+  it('raises a dispute on a recorded sale once, by the dispute it was', () => {
+    const disputes = [{ id: 'dp_1', chargeId: 'ch_1', dueBy: 1000 }];
+    expect(disputesToRaise(disputes, [sale()])).toEqual([{ ...sale(), disputeId: 'dp_1', dueBy: 1000 }]);
+    expect(disputesToRaise(disputes, [sale({ disputeNoted: 'dp_1' })])).toEqual([]);
+  });
+
+  it('treats a charge flagged as disputed and its dispute, seen later, as one', () => {
+    expect(disputesToRaise([{ id: '', chargeId: 'ch_1' }], [sale()])).toHaveLength(1);
+    expect(disputesToRaise([{ id: 'dp_1', chargeId: 'ch_1' }], [sale({ disputeNoted: 'disputed' })])).toEqual([]);
+  });
+
+  it('ignores disputes of payments that are not recorded sales, and voided rows', () => {
+    expect(disputesToRaise([{ id: 'dp_9', chargeId: 'ch_9' }], [sale()])).toEqual([]);
+    expect(disputesToRaise([{ id: 'dp_1', chargeId: 'ch_1' }], [sale({ voided: true })])).toEqual([]);
+  });
+
+  it('says what happens to the money and when to reply', () => {
+    const said = describeDisputes([{ ...sale(), dueBy: 5 }], () => 'Dec 3');
+    expect(said.title).toBe('A card sale is being disputed');
+    expect(said.detail).toContain('The Hound');
+    expect(said.detail).toContain('Reply in Stripe by Dec 3');
+    expect(describeDisputes([]).count).toBe(0);
   });
 });

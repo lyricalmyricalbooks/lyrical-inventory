@@ -7908,6 +7908,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .recon-f-book{flex:1 1 0;min-width:160px;}
 .recon-f-qty{width:70px;}
 .recon-group .recon-f-qty{width:80px;}
+/* "Ready to record" card above the worklist: room between the sentence and its button. */
+.recon-bulk .recon-actions{margin-top:var(--space-3);}
 .recon-f-num{width:280px;max-width:100%;}
 .recon-f-amt{width:120px;}
 .recon-f-cur{width:90px;}
