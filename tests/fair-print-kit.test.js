@@ -43,7 +43,9 @@ function pickMode(value) {
   document.querySelectorAll('input[name="fk-mode"]').forEach((el) => { el.checked = el.value === value; });
 }
 
-function makeHarness({ stripeKey = '' } = {}) {
+const STATES = { 'linked-a': { hist: [] }, 'linked-b': { hist: [] }, 'no-link': { hist: [] } };
+
+function makeHarness({ stripeKey = '', deriveOnHand = () => 7, states = STATES } = {}) {
   return buildHarness({
     names: [
       '_stOnHandHint', '_fkPackedTotal', '_stUpdatePackTotal',
@@ -57,7 +59,8 @@ function makeHarness({ stripeKey = '' } = {}) {
       getReconStripeKey: () => stripeKey,
       currencyToCode: () => 'EUR',
       convertCurrency: (amount) => amount,
-      deriveOnHand: () => 7,
+      deriveOnHand,
+      states,
       escapeHtml,
       estimateTallyPages,
       estimateQrPages,
@@ -71,7 +74,7 @@ function makeHarness({ stripeKey = '' } = {}) {
     `,
     returns: `{
       renderFairKitBookList, fairKitModeChanged, fairKitSelectionChanged,
-      _fkSelectionCounts, _fkPackedTotal, _fkMarkOverPacked,
+      _fkSelectionCounts, _fkPackedTotal, _fkMarkOverPacked, _stOnHandHint,
       addCustom: (b) => salesTrackerCustomBooks.push(b),
     }`,
   });
@@ -390,5 +393,24 @@ describe('fair kit summary warns before printing', () => {
     h.fairKitSelectionChanged();
     expect(qty.classList.contains('fk-over')).toBe(true);
     expect(document.getElementById('fk-summary').textContent).toContain('more copies than you have on hand');
+  });
+
+  // Regression: the hint used to pass the catalog entry as its own sales
+  // record, so it found no sales and showed the whole print run.
+  it('works the hint out from the book\'s sales record, not its print run', async () => {
+    const { deriveOnHand } = await import('../src/lib/inventory.js');
+    const book = { ...BOOKS['linked-a'], maxPrint: 100 };
+    const sold = Array.from({ length: 30 }, () => ({ qty: 1 }));
+    const h = buildHarness({
+      names: ['_stOnHandHint'],
+      deps: { deriveOnHand, states: { 'linked-a': { hist: sold, ledger: [] } } },
+      returns: '{ _stOnHandHint }',
+    });
+    expect(h._stOnHandHint(book)).toBe(70);
+  });
+
+  it('gives no hint for a book with no sales record (a register-only extra)', () => {
+    const h = makeHarness({ states: {} });
+    expect(h._stOnHandHint(BOOKS['linked-a'])).toBeNull();
   });
 });

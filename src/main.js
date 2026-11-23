@@ -9270,19 +9270,13 @@ function unapplyOne(id) {
   const h = state.hist[histIndex];
   if (h.webOrderId) { showToast(WEBSITE_SALE_LOCKED, 'warn', 5000); return; }
 
-  if (!h.voided) {
-    state.stock += stockToReturn(h);
-    state.sold = Math.max(0, state.sold - h.qty);
-    state.revenue = Math.max(0, state.revenue - h.qty * h.price);
-    if (state.chStats['Website']) {
-      state.chStats['Website'].txns = Math.max(0, state.chStats['Website'].txns - 1);
-      state.chStats['Website'].units = Math.max(0, state.chStats['Website'].units - h.qty);
-      state.chStats['Website'].revenue = Math.max(0, state.chStats['Website'].revenue - h.qty * h.price);
-      if (state.chStats['Website'].txns <= 0) delete state.chStats['Website'];
-    }
-  }
+  if (!h.voided) state.stock += stockToReturn(h);
 
   state.hist.splice(histIndex, 1);
+  // Totals and every later row's "stock after" are worked out again from the
+  // history, as reapplyOne does. Nudging the totals by hand left the later
+  // rows' stock counts (and the Google Sheet's copy of them) one order off.
+  recomputeAfters(state, book);
 
   if (state.doneIds) {
     state.doneIds = state.doneIds.filter(x => x !== id && x !== o.id);
@@ -9390,6 +9384,8 @@ export function applyOne(id, { deferRender = false } = {}) {
   // duplicate rows).
   const entry = addSaleToState(targetState, targetBk, {
     num: o.orderNum, chan: 'Website', qty: o.qty, price, notes: 'Big Cartel',
+    // A shop order came in on its own; the publisher didn't type it in.
+    enteredBy: 'Website',
     date: (o.date && o.date !== '—') ? o.date : today(),
     sheetsId: 'bc-' + String(o.orderNum).replace(/^#/, '').replace(/[^A-Za-z0-9-]/g, ''),
     extra, stamp: false,
@@ -9437,7 +9433,7 @@ export function commitRecoveredWebsiteOrder(bookId, form, buildEntry) {
   // stock, revenue and the Website totals and writes the row, in date order.
   const { num, notes, date, sheetsId, chan: _chan, qty: _qty, price: _price, after: _after, ...extra } =
     buildEntry({ stockAfter: Math.max(0, targetState.stock - qty) });
-  const entry = addSaleToState(targetState, targetBook, { num, chan: 'Website', qty, price, notes, date, sheetsId, extra, stamp: false });
+  const entry = addSaleToState(targetState, targetBook, { num, chan: 'Website', qty, price, notes, enteredBy: 'Website', date, sheetsId, extra, stamp: false });
   recomputeAfters(targetState, targetBook);
 
   // Record the number as seen so a later Gmail scan that finally turns up the
@@ -9904,23 +9900,28 @@ export async function healExpenseRates() {
     fixed++;
   }
   if (fixed) await window._fbSaveSettings('taxCenter', TAX_CENTER);
-  // Gifted-copy expenses on a foreign-currency book: amount is in the book's
+  // Book expenses. Any foreign one saved offline with no rate is flagged
+  // fxMissing (a gift, or a book expense edited offline) and filled in here.
+  // Gifted copies also get the older 1:1 repair: amount is in the book's
   // currency and no fxRate is stored, so "booked 1:1" shows as a CAD value
   // equal to the amount. Older builds did that whenever no rate was cached.
-  const needsGiftRate = (e) => {
-    if (!e || e.gratuity !== true || e.voided) return false;
+  const needsBookRate = (e) => {
+    if (!e || e.voided) return false;
     const cur = String(e.currency || 'CAD').toUpperCase();
-    if (cur === 'CAD' || !(Number(e.amount) > 0) || e.fxRate != null) return false;
-    if (e.fxMissing === true || e.baseAmount == null) return true;
+    if (cur === 'CAD' || e.amountUnknown || !(Number(e.amount) > 0)) return false;
+    if (e.fxMissing === true) return true;
+    if (e.gratuity !== true || e.fxRate != null) return false;
+    if (e.baseAmount == null) return true;
     return Math.abs(Number(e.baseAmount) - Number(e.amount)) < 0.005;
   };
   for (const [bookId, st] of Object.entries(states || {})) {
     if (isTestBookId(bookId)) continue;
     let bookFixed = 0;
     for (const e of (st && st.expenses) || []) {
-      if (!needsGiftRate(e)) continue;
+      if (!needsBookRate(e)) continue;
       const rate = await resolveExpenseRate(e.currency, e.date || today());
       if (!rate || rate === 1) continue;
+      if (!e.gratuity) e.fxRate = rate;
       e.baseAmount = roundCents((Number(e.amount) || 0) * rate);
       e.fxMissing = false;
       bookFixed++;
@@ -11667,8 +11668,17 @@ async function submitGratuity(ev) {
     let expVal = 0;
     if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
 
+    // The book is fixed now. The exchange-rate lookup below can take a moment,
+    // and switching books meanwhile used to save the gift to the book switched
+    // to (and leave it unsaved on its own). The rate is looked up before
+    // anything is changed, and the save names this book.
+    const bookId = activeBook;
     const s = getState();
     if (qty > s.stock) { showToast('⚠ Not enough stock on hand', 'warn'); return; }
+    const currency = getBookCurrencyCode(book);
+    // The rate for the gift's own date; with none to hand (offline) the CAD
+    // value is left empty and flagged for healExpenseRates — never 1:1.
+    const cadRate = (expenseIt && expVal > 0) ? await resolveExpenseRate(currency, date) : null;
     const num = 'GRAT-' + Date.now().toString().slice(-6);
     // Reduce stock only — no revenue, no sold count
     s.stock = Math.max(0, s.stock - qty);
@@ -11680,11 +11690,6 @@ async function submitGratuity(ev) {
     if (expenseIt && expVal > 0) {
       if (!s.expenses) s.expenses = [];
       const totalExp = qty * expVal;
-
-      const currency = getBookCurrencyCode(book);
-      // The rate for the gift's own date; with none to hand (offline) the CAD
-      // value is left empty and flagged for healExpenseRates — never 1:1.
-      const cadRate = await resolveExpenseRate(currency, date);
       const baseAmount = cadRate ? roundCents(totalExp * cadRate) : null;
 
       s.expenses.unshift({
@@ -11707,7 +11712,7 @@ async function submitGratuity(ev) {
     recomputeAfters(s, book);
     // Save first, then repaint: a screen failing to draw must never stop the
     // gift being saved (and a retry would then take the stock off twice).
-    saveState(activeBook);
+    saveState(bookId);
     guardScreen('after-gratuity', () => {
       renderHist();
       if (expenseIt) renderExpenses();

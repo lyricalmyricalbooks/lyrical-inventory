@@ -64,17 +64,44 @@ let _customerStripeMaybeMore = false;
 function refreshOpenCall() { openCallScreen.module()?.renderOpenCall(); }
 
 function _isCustomerSuppressed(email) { return _customerSuppress.has(_custEmailKey(email)); }
+
+// Whether the cloud copy of each list has actually been read this session.
+// On a bad connection at start-up the screen falls back to this device's copy
+// (often empty on a new phone). Saving that over the cloud copy would wipe the
+// unsubscribe list or the mailing list, so until the cloud copy has been read,
+// a save first reads it and merges this device's changes into it, and if it
+// still can't be read, the change stays on this device only.
+const _cloudRead = { customerSuppress: false, mailingList: false };
+async function _readCloudList(key) {
+  const data = await window._fbLoadSettings(key, { strict: true });
+  _cloudRead[key] = true;
+  return data;
+}
+
 async function loadCustomerSuppression() {
   try {
-    const stored = await window._fbLoadSettings('customerSuppress');
+    const stored = await _readCloudList('customerSuppress');
     if (stored && Array.isArray(stored.emails)) { _customerSuppress = new Set(stored.emails.map(_custEmailKey)); return; }
-  } catch (_) { }
+  } catch (_) { _cloudRead.customerSuppress = false; }
   try {
     const local = JSON.parse(localStorage.getItem(CUSTOMER_SUPPRESS_KEY) || '[]');
     if (Array.isArray(local)) _customerSuppress = new Set(local.map(_custEmailKey));
   } catch (_) { }
 }
 async function _persistCustomerSuppression() {
+  if (!_cloudRead.customerSuppress) {
+    try {
+      const cloud = await _readCloudList('customerSuppress');
+      // A union: never drops someone who unsubscribed on another device. (An
+      // un-unsubscribe made while the list couldn't be read is the one change
+      // this can undo, and that is the safe way round.)
+      if (cloud && Array.isArray(cloud.emails)) cloud.emails.forEach(e => _customerSuppress.add(_custEmailKey(e)));
+    } catch (_) {
+      try { localStorage.setItem(CUSTOMER_SUPPRESS_KEY, JSON.stringify(Array.from(_customerSuppress))); } catch (_) { }
+      showToast('Saved on this device only. The unsubscribe list could not be reached; try again when online.', 'warn', 6000);
+      return;
+    }
+  }
   const emails = Array.from(_customerSuppress);
   await window._fbSaveSettings('customerSuppress', { emails });
   try { localStorage.setItem(CUSTOMER_SUPPRESS_KEY, JSON.stringify(emails)); } catch (_) { }
@@ -108,13 +135,34 @@ function mailingListHas(email) { return !!MAILING_LIST.subs[_custEmailKey(email)
 
 async function loadMailingList() {
   let data = null;
-  data = await window._fbLoadSettings('mailingList');
+  try { data = await _readCloudList('mailingList'); } catch (_) { _cloudRead.mailingList = false; }
   if (!data) { try { data = JSON.parse(localStorage.getItem(MAILING_LIST_KEY) || 'null'); } catch (_) { } }
-  if (data && typeof data === 'object') {
-    MAILING_LIST = { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd, removed: (data.removed && typeof data.removed === 'object') ? data.removed : {} };
-  }
+  if (data && typeof data === 'object') MAILING_LIST = _mailingListShape(data);
+}
+function _mailingListShape(data) {
+  return { subs: (data.subs && typeof data.subs === 'object') ? data.subs : {}, autoAdd: !!data.autoAdd, removed: (data.removed && typeof data.removed === 'object') ? data.removed : {} };
+}
+// This device's list folded into the cloud copy: this device decides for every
+// address it knows about (on the list, or removed), and the cloud copy fills in
+// the addresses only it has, so nothing added elsewhere is lost.
+function _mergeMailingLists(cloud, local) {
+  const subs = { ...cloud.subs, ...local.subs };
+  const removed = { ...cloud.removed, ...local.removed };
+  Object.keys(local.removed).forEach(k => { delete subs[k]; });
+  Object.keys(local.subs).forEach(k => { delete removed[k]; });
+  return { subs, autoAdd: local.autoAdd, removed };
 }
 async function _persistMailingList() {
+  if (!_cloudRead.mailingList) {
+    try {
+      const cloud = await _readCloudList('mailingList');
+      if (cloud && typeof cloud === 'object') MAILING_LIST = _mergeMailingLists(_mailingListShape(cloud), MAILING_LIST);
+    } catch (_) {
+      try { localStorage.setItem(MAILING_LIST_KEY, JSON.stringify(MAILING_LIST)); } catch (_) { }
+      showToast('Saved on this device only. The mailing list could not be reached; try again when online.', 'warn', 6000);
+      return;
+    }
+  }
   await window._fbSaveSettings('mailingList', MAILING_LIST);
   try { localStorage.setItem(MAILING_LIST_KEY, JSON.stringify(MAILING_LIST)); } catch (_) { }
 }
@@ -1565,6 +1613,7 @@ export {
   mailingListHas,
   loadMailingList,
   _persistMailingList,
+  _mergeMailingLists,
   _mailingUpsert,
   addManualSubscriber,
   addBuyerToMailingList,

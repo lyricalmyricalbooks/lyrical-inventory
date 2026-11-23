@@ -403,88 +403,91 @@ window._fbSave = async (bookId, json, opts = {}) => {
       // base it was made on in `opts.base`.
       const base = opts.base || { ...hashes };
 
-      // Read the server's current copy of every part we're about to change.
-      // getDocFromServer (not getDoc) on purpose: with persistent local cache
-      // enabled, getDoc can answer from cache, which would compare our base
-      // against our own stale copy and defeat the whole check.
-      let snaps;
+      // The merge, as a pure step over the server's copies (`snaps`, in the
+      // order of `dirty`): which parts to write, and the merged state if
+      // another device's change had to be folded in.
+      const mergeForSave = (snaps) => {
+        const emptyFor = emptyPart;
+        const merged = { ...parts };
+        const conflicts = [];
+        let didMerge = false;
+
+        dirty.forEach((p, i) => {
+          const snap = snaps[i];
+          const remoteJson = snap.exists() ? snap.data().data : null;
+          const baseJson = Object.prototype.hasOwnProperty.call(base, p) ? base[p] : null;
+          if (remoteJson === baseJson) return; // nobody else touched it
+
+          // Diverged. A null base (this device never read the part — a fresh tab
+          // that wrote before loading, or a change queued by an older build) is
+          // treated as empty and flagged as unknown, which makes the merge a
+          // union: it may keep a row the other device deleted, but it will never
+          // drop one (dropping loses money) or count a sale both sides already
+          // hold twice (doubling invents it).
+          didMerge = true;
+          const remoteVal = remoteJson != null ? (safeParse(remoteJson) ?? emptyFor(p)) : emptyFor(p);
+          const baseVal = baseJson != null ? (safeParse(baseJson) ?? emptyFor(p)) : emptyFor(p);
+          const res = mergePart(p, baseVal, remoteVal, parts[p], { baseKnown: baseJson != null });
+          merged[p] = res.value;
+          res.conflicts.forEach(c => conflicts.push(c));
+        });
+
+        let stitched = stitchState(merged);
+
+        // Let the app recompute the values derived from the merged rows (stock,
+        // revenue, per-entry running balance) before any of it is persisted, so
+        // the stored blob is self-consistent in a single write.
+        if (didMerge && typeof window._normalizeMergedState === 'function') {
+          try { stitched = window._normalizeMergedState(bookId, stitched) || stitched; }
+          catch (e) { console.error('[FB] merge normalize failed', e); }
+        }
+
+        // A part just read from the server is compared with what the server
+        // holds, not with this device's last-known copy: when the merge happens
+        // to land back on that copy (say the totals came out as they were
+        // before the other device's change), comparing with it skipped the
+        // write and left the server's part out of step with the rest.
+        const serverJson = {};
+        dirty.forEach((p, i) => { serverJson[p] = snaps[i].exists() ? snaps[i].data().data : null; });
+        const finalParts = splitState(stitched);
+        const pending = [];
+        Object.keys(finalParts).forEach(p => {
+          const partJson = JSON.stringify(finalParts[p]);
+          const known = Object.prototype.hasOwnProperty.call(serverJson, p) ? serverJson[p] : hashes[p];
+          if (known !== partJson) pending.push({ part: p, partJson });
+        });
+        return { pending, didMerge, stitched, conflicts };
+      };
+
+      // Read the server's current copy of every part we're about to change,
+      // merge, and write, as ONE transaction. Reading first and writing in a
+      // separate step left a gap: another device's save landing between the
+      // read and the write was overwritten without being merged, and its sale
+      // was gone. A transaction's reads always go to the server (never this
+      // device's cache), and if any part it read changes before the commit,
+      // Firestore refuses the commit and runs the whole merge again on the
+      // newer copy. So everything below runs once per attempt and must not
+      // change anything outside the transaction until it has committed.
+      let readDone = false;
+      let result;
       try {
-        snaps = await Promise.all(dirty.map(p => getDocFromServer(doc(fs, 'books', bookId, 'data', p))));
-      } catch (readErr) {
+        result = await runTransaction(fs, async (tx) => {
+          const snaps = await Promise.all(dirty.map(p => tx.get(doc(fs, 'books', bookId, 'data', p))));
+          readDone = true;
+          const outcome = mergeForSave(snaps);
+          outcome.pending.forEach(({ part, partJson }) => {
+            tx.set(doc(fs, 'books', bookId, 'data', part), { data: partJson, ts: Date.now() });
+          });
+          return outcome;
+        });
+      } catch (txErr) {
+        if (readDone) throw txErr; // the write itself failed: handled below as before
         // Can't see the server, so we can't know what we'd be overwriting.
         // Leave the write unmade; saveState queues it and retries with backoff.
-        console.warn('[FB] pre-write read failed, not overwriting', readErr);
+        console.warn('[FB] pre-write read failed, not overwriting', txErr);
         return { ok: false, merged: false, reason: 'read-failed' };
       }
-
-      const emptyFor = emptyPart;
-      const merged = { ...parts };
-      const conflicts = [];
-      let didMerge = false;
-
-      dirty.forEach((p, i) => {
-        const snap = snaps[i];
-        const remoteJson = snap.exists() ? snap.data().data : null;
-        const baseJson = Object.prototype.hasOwnProperty.call(base, p) ? base[p] : null;
-        if (remoteJson === baseJson) return; // nobody else touched it
-
-        // Diverged. A null base (this device never read the part — a fresh tab
-        // that wrote before loading, or a change queued by an older build) is
-        // treated as empty and flagged as unknown, which makes the merge a
-        // union: it may keep a row the other device deleted, but it will never
-        // drop one (dropping loses money) or count a sale both sides already
-        // hold twice (doubling invents it).
-        didMerge = true;
-        const remoteVal = remoteJson != null ? (safeParse(remoteJson) ?? emptyFor(p)) : emptyFor(p);
-        const baseVal = baseJson != null ? (safeParse(baseJson) ?? emptyFor(p)) : emptyFor(p);
-        const res = mergePart(p, baseVal, remoteVal, parts[p], { baseKnown: baseJson != null });
-        merged[p] = res.value;
-        res.conflicts.forEach(c => conflicts.push(c));
-      });
-
-      let stitched = stitchState(merged);
-
-      // Let the app recompute the values derived from the merged rows (stock,
-      // revenue, per-entry running balance) before any of it is persisted, so
-      // the stored blob is self-consistent in a single write.
-      if (didMerge && typeof window._normalizeMergedState === 'function') {
-        try { stitched = window._normalizeMergedState(bookId, stitched) || stitched; }
-        catch (e) { console.error('[FB] merge normalize failed', e); }
-      }
-
-      // A part just read from the server is compared with what the server
-      // holds, not with this device's last-known copy: when the merge happens
-      // to land back on that copy (say the totals came out as they were
-      // before the other device's change), comparing with it skipped the
-      // write and left the server's part out of step with the rest.
-      const serverJson = {};
-      dirty.forEach((p, i) => { serverJson[p] = snaps[i].exists() ? snaps[i].data().data : null; });
-      const finalParts = splitState(stitched);
-      const pending = [];
-      Object.keys(finalParts).forEach(p => {
-        const partJson = JSON.stringify(finalParts[p]);
-        const known = Object.prototype.hasOwnProperty.call(serverJson, p) ? serverJson[p] : hashes[p];
-        if (known !== partJson) pending.push({ part: p, partJson });
-      });
-
-      // One atomic batch rather than a setDoc per part. These parts are not
-      // independent — a sale writes a `hist` row AND the `metadata` stock count
-      // derived from it — so the previous Promise.all could half-succeed and
-      // leave the book internally inconsistent: stock decremented with no sale
-      // recorded, or a ledger row whose running balance never moved. A batch
-      // either lands entirely or not at all, and the not-at-all case is already
-      // handled (the caller queues and retries).
-      //
-      // Bounded by ALL_PARTS (9 documents), so Firestore's 500-write batch
-      // limit is not reachable here.
-      if (pending.length) {
-        const batch = writeBatch(fs);
-        const ts = Date.now();
-        pending.forEach(({ part, partJson }) => {
-          batch.set(doc(fs, 'books', bookId, 'data', part), { data: partJson, ts });
-        });
-        await batch.commit();
-      }
+      const { pending, didMerge, stitched, conflicts } = result;
 
       // Advance the base only once the server has actually taken the write.
       // Updating it alongside the setDoc call (as this did before) meant a
@@ -1007,7 +1010,13 @@ window._fbLoadSettings = async (key, opts) => {
     }
     const s = await get(ref(db, `lyrical/settings/${key}`));
     return s.exists() ? safeParse(s.val().data) : null;
-  } catch (e) { console.error("fbLoadSettings failed", e); return null; }
+  } catch (e) {
+    console.error("fbLoadSettings failed", e);
+    // `strict` callers need to tell "couldn't read it" apart from "there is
+    // none yet": saving an empty list over one that was never read wipes it.
+    if (opts && opts.strict) throw e;
+    return null;
+  }
 };
 
 // ─────────────────────────────────────────────

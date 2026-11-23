@@ -80,6 +80,23 @@ export const getDocsFromCache = async () => emptySnap();
 export const deleteDoc = async () => {};
 export const onSnapshot = fsHook('onSnapshot', () => noop);
 export const writeBatch = fsHook('writeBatch', () => ({ set: noop, update: noop, delete: noop, commit: async () => {} }));
-export const runTransaction = async (_fs, fn) =>
-  fn({ get: async () => emptySnap(), set: noop, update: noop, delete: noop });
+// Without a store-specific transaction, a transaction reads through the hooked
+// getDocFromServer and commits its writes through the hooked writeBatch, so a
+// suite that fakes those two still sees the code that now runs inside one.
+export const runTransaction = fsHook('runTransaction', async (_fs, fn) => {
+  const sets = [];
+  const tx = {
+    get: (ref) => getDocFromServer(ref),
+    set: (ref, data) => { sets.push([ref, data]); return tx; },
+    update: () => tx,
+    delete: () => tx,
+  };
+  const out = await fn(tx);
+  if (sets.length) {
+    const batch = writeBatch(null);
+    sets.forEach(([ref, data]) => batch.set(ref, data));
+    await batch.commit();
+  }
+  return out;
+});
 export const deleteField = () => ({ __deleteField: true });

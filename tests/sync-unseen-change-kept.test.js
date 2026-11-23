@@ -156,3 +156,23 @@ describe('a change for a book no longer in the catalogue', () => {
     expect(cloudHist()).toContain('S-kept');
   });
 });
+
+// Two phones saving in the same split second: the other phone's sale lands
+// after this one read the cloud but before it wrote. The read and the write
+// are one transaction, so the cloud refuses the stale write and the merge runs
+// again on the newer copy, keeping both sales.
+describe('another phone saving in the same split second', () => {
+  it('keeps both sales', async () => {
+    store.setSilent(true);
+    store.beforeNextCommit(() => {
+      const hist = store.read(`books/${BOOK}/data/hist`) || [];
+      store.docs.set(`books/${BOOK}/data/hist`, { data: JSON.stringify([sale('P-other-phone'), ...hist]), ts: Date.now() });
+    });
+    state().hist.unshift(sale('T-this-phone'));
+    await app.main.saveState(BOOK);
+    await app.settle(20);
+    store.setSilent(false);
+
+    expect(cloudHist()).toEqual(['P-other-phone', 'T-this-phone']);
+  });
+});

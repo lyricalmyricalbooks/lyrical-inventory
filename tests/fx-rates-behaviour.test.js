@@ -7,6 +7,7 @@ import { loadApp, makeBook } from './helpers/load-app.js';
 import { FX_HISTORY_KEY } from '../src/lib/sale-fx.js';
 
 const EUR_BOOK = 'altrove';
+const CAD_BOOK = 'harbour';
 let app;
 
 /**
@@ -48,7 +49,7 @@ function fakeRates({ live = {}, byDate = {}, series = {}, backup = {} } = {}) {
 }
 
 beforeAll(async () => {
-  app = await loadApp({ books: [makeBook({ id: EUR_BOOK, currency: '€' })] });
+  app = await loadApp({ books: [makeBook({ id: EUR_BOOK, currency: '€' }), makeBook({ id: CAD_BOOK, title: 'Harbour Lights' })] });
 }, 30000);
 
 afterEach(() => {
@@ -155,5 +156,42 @@ describe('warmSaleFxHistory', () => {
     const again = fakeRates();
     expect(await app.main.warmSaleFxHistory()).toBe(false);
     expect(again).toHaveLength(0);
+  });
+});
+
+describe('healExpenseRates on book expenses', () => {
+  it('fills in a foreign book expense edited offline, not only gifted copies', async () => {
+    app.main.TAX_CENTER.businessExpenses = [];
+    const s = app.main.states[EUR_BOOK];
+    s.expenses = [{ id: 31, currency: 'EUR', amount: 20, fxRate: null, baseAmount: null, fxMissing: true, date: '2025-06-02' }];
+    fakeRates({ byDate: { 'EUR@2025-06-02': 1.5 } });
+    expect(await app.main.healExpenseRates()).toBe(1);
+    expect(s.expenses[0]).toMatchObject({ baseAmount: 30, fxRate: 1.5, fxMissing: false });
+  });
+});
+
+describe('logging a gifted copy', () => {
+  it('saves the gift to its own book even if another book is opened while the rate loads', async () => {
+    await app.resetBook(EUR_BOOK, { hist: [], expenses: [], stock: 50 });
+    await app.resetBook(CAD_BOOK, { hist: [], expenses: [], stock: 50 });
+    app.main.switchBook(EUR_BOOK);
+    let open;
+    const gate = new Promise(resolve => { open = resolve; });
+    vi.stubGlobal('fetch', vi.fn(async () => { await gate; return { ok: false, status: 404, json: async () => ({}) }; }));
+    document.getElementById('g-qty').value = '2';
+    document.getElementById('g-ref').value = 'Reviewer';
+    document.getElementById('g-expense-cb').checked = true;
+    document.getElementById('g-exp-val').value = '10';
+    const done = app.window.submitGratuity();
+    await app.settle();
+    app.main.switchBook(CAD_BOOK);
+    open();
+    await done;
+    await app.settle(20);
+
+    expect(app.main.states[EUR_BOOK].hist[0]).toMatchObject({ chan: 'Gratuity', qty: 2 });
+    expect(app.main.states[CAD_BOOK].hist).toHaveLength(0);
+    expect(app.cloud.lastSave(EUR_BOOK).state.hist[0]).toMatchObject({ chan: 'Gratuity', qty: 2 });
+    expect(app.cloud.savesFor(CAD_BOOK).every(sv => !sv.state.hist.length)).toBe(true);
   });
 });

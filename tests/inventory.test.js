@@ -373,7 +373,7 @@ describe('recalculateBookStatsFromHistory', () => {
     expect(s.chStats.Manual).toEqual({ txns: 1, units: 2, revenue: 20 });
   });
 
-  it('includes gratuities in channel stats but excludes them from global sold/revenue', () => {
+  it('counts gifted copies as gifts, not as sales of the channel they were handed out in', () => {
     const s = state({
       hist: [
         { qty: 2, price: 10 },
@@ -387,10 +387,10 @@ describe('recalculateBookStatsFromHistory', () => {
     expect(s.sold).toBe(2);
     expect(s.revenue).toBe(20);
 
-    // Channel stats include gratuities
+    // A comp handed out at a fair table is a gift, not a fair sale.
     expect(s.chStats).toEqual({
-      Manual: { txns: 2, units: 3, revenue: 40 }, // 2*10 (regular) + 1*20 (gratuity)
-      Direct: { txns: 1, units: 1, revenue: 0 }   // 1*0 (gratuity)
+      Manual: { txns: 1, units: 2, revenue: 20 },
+      Gratuity: { txns: 2, units: 2, revenue: 20 },
     });
   });
 

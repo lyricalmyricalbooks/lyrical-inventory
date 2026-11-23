@@ -28,6 +28,7 @@ import { codeToSymbol, convertCurrency, currencyToCode, posBooksMap, posResolveB
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { escapeHtml } from '../lib/html.js';
 import { deriveOnHand } from '../lib/inventory.js';
+import { states } from '../core/store.js';
 import { computeTallyRowHeights, computeQrCardSize, estimateTallyPages, estimateQrPages } from '../lib/print-sheet-layout.js';
 import {
   QR_PRESET_PRICE_CURRENCIES,
@@ -57,11 +58,16 @@ let salesTrackerQtyBrought = {};
 
 // Best-effort "on hand" hint shown next to the packing-quantity field, so the
 // seller has a ceiling in view without the field silently capping their entry.
-// Never throws: a POS-only extra book carries none of deriveOnHand's expected
-// fields, and a missing hint is fine where a broken modal is not.
+// The count is worked out from the book's own sales record (states[id]), not
+// from the catalog entry: passing the catalog entry as its own record found no
+// sales at all and showed the whole print run. A POS-only extra has no record,
+// so it gets no hint. Never throws: a missing hint is fine where a broken modal
+// is not.
 function _stOnHandHint(book) {
   try {
-    const n = deriveOnHand(book, book);
+    const state = book && states[book.id];
+    if (!state) return null;
+    const n = deriveOnHand(state, book);
     return Number.isFinite(n) ? n : null;
   } catch {
     return null;
