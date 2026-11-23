@@ -247,6 +247,9 @@ function renderOrders() {
   }
 
   const expanded = new Set([...list.querySelectorAll('.phone-order-details[open]')].map(el => el.dataset.order));
+  // Order ids and numbers come from parsed receipt emails, so they reach the
+  // markup escaped: a quote in one must not end the attribute or the call.
+  const jsArg = (v) => escapeHtml(JSON.stringify(String(v ?? '')));
   const postage = linkablePostageExpenses();
   list.innerHTML = visible.map(o => {
     const done = isApplied(o);
@@ -259,14 +262,14 @@ function renderOrders() {
     const listCur = BOOKS[o.bookId]?.currency || cur;
     const priceMismatch = !done && !cancelled && o.price && Math.abs(o.price - listPrice) > 0.5;
     const priceWarn = priceMismatch
-      ? `<span style="font-size:var(--text-2xs);color:var(--amber);margin-left:6px;">⚠ paid ${listCur}${o.price} (list ${listCur}${listPrice})</span>`
+      ? `<span style="font-size:var(--text-2xs);color:var(--amber);margin-left:6px;">⚠ paid ${escapeHtml(listCur)}${escapeHtml(String(o.price))} (list ${escapeHtml(listCur)}${escapeHtml(String(listPrice))})</span>`
       : '';
     const shippingBadge = renderOrderShippingSummary(o, postage);
     const bookLabel = o.bookId && BOOKS[o.bookId]
       ? `<span style="font-size:var(--text-2xs);background:${BOOKS[o.bookId].accent}22;color:${BOOKS[o.bookId].accent};border-radius:var(--r-pill);padding:2px 8px;margin-right:6px;">${escapeHtml(BOOKS[o.bookId].title)}</span>`
       : '';
     const viewEmailBtn = o.id
-      ? `<a href="https://mail.google.com/mail/u/0/#all/${o.id}" target="_blank" class="btn sm" style="font-size:var(--text-2xs);opacity:.7;">📧 View</a>`
+      ? `<a href="https://mail.google.com/mail/u/0/#all/${encodeURIComponent(o.id)}" target="_blank" class="btn sm" style="font-size:var(--text-2xs);opacity:.7;">📧 View</a>`
       : '';
 
     let cardClass = 'order-card';
@@ -281,13 +284,13 @@ function renderOrders() {
 
     let actionsHtml = viewEmailBtn;
     if (done) {
-      actionsHtml += `<button class="btn sm danger-btn" onclick="unapplyOne('${o.id}')" title="Revert this applied order back to New status">Unapply</button>
-                      <button class="btn sm" onclick="reapplyOne('${o.id}')" title="Update this applied order with the latest receipt totals">Reapply</button>`;
+      actionsHtml += `<button class="btn sm danger-btn" onclick="unapplyOne(${jsArg(o.id)})" title="Revert this applied order back to New status">Unapply</button>
+                      <button class="btn sm" onclick="reapplyOne(${jsArg(o.id)})" title="Update this applied order with the latest receipt totals">Reapply</button>`;
     } else if (cancelled) {
-      actionsHtml += `<button class="btn sm gold" onclick="restoreOrder('${o.orderNum}')" title="Restore this order to New status">Restore</button>`;
+      actionsHtml += `<button class="btn sm gold" onclick="restoreOrder(${jsArg(o.orderNum)})" title="Restore this order to New status">Restore</button>`;
     } else {
-      actionsHtml += `<button class="btn sm" onclick="cancelOrder('${o.orderNum}')" title="Cancel/dismiss this order" style="color:var(--text3);border-color:var(--border);background:transparent;">Cancel</button>
-                      <button class="btn sm gold" onclick="applyOne('${o.id}')">Apply</button>`;
+      actionsHtml += `<button class="btn sm" onclick="cancelOrder(${jsArg(o.orderNum)})" title="Cancel/dismiss this order" style="color:var(--text3);border-color:var(--border);background:transparent;">Cancel</button>
+                      <button class="btn sm gold" onclick="applyOne(${jsArg(o.id)})">Apply</button>`;
     }
 
     return `<div class="${cardClass}">
@@ -303,7 +306,7 @@ function renderOrders() {
         ${statusPill}
       </div>
       <div class="order-row order-card-bottom">
-        <span class="order-summary">${bookLabel}<span>Qty ${o.qty}</span><span>${fmt(o.price || listPrice, listCur)}</span>${shippingBadge}${priceWarn}</span>
+        <span class="order-summary">${bookLabel}<span>Qty ${escapeHtml(String(o.qty))}</span><span>${fmt(o.price || listPrice, listCur)}</span>${shippingBadge}${priceWarn}</span>
         <div class="order-actions">
           ${actionsHtml}
         </div>
@@ -349,10 +352,19 @@ function restoreOrder(orderNum) {
   showToast(`✓ Order ${orderNum} restored to New`, 'ok');
 }
 
+// The book an order goes to: the one its receipt named, else the open book.
+// Own keys only, so a parsed id such as "__proto__" can never stand for a
+// book and lead a write onto Object.prototype.
+function orderBookId(o) {
+  const own = (obj, key) => !!key && Object.prototype.hasOwnProperty.call(obj, key);
+  const id = own(BOOKS, o.bookId) ? o.bookId : activeBook;
+  return own(BOOKS, id) && own(states, id) ? id : null;
+}
+
 function unapplyOne(id) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
-  const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
+  const targetBook = orderBookId(o);
   const state = states[targetBook];
   const book = BOOKS[targetBook];
   if (!state || !book) { showToast('Cannot find book for this order', 'err'); return; }
@@ -399,7 +411,7 @@ function unapplyOne(id) {
 function reapplyOne(id) {
   const o = orders.find(x => x.id === id);
   if (!o) return;
-  const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
+  const targetBook = orderBookId(o);
   const state = states[targetBook];
   const book = BOOKS[targetBook];
   if (!state || !book) { showToast('Cannot find book for this order', 'err'); return; }
@@ -450,7 +462,7 @@ function applyOne(id, { deferRender = false } = {}) {
   const alreadyDone = _checkedIds.has(id) || _checkedIds.has(o.orderNum);
   if (alreadyDone) { showToast('Order already applied', 'warn'); return; }
   // Use the matched book if it differs from active
-  const targetBook = o.bookId && BOOKS[o.bookId] ? o.bookId : activeBook;
+  const targetBook = orderBookId(o);
   const targetState = states[targetBook];
   const targetBk = BOOKS[targetBook];
   if (!targetState || !targetBk) { showToast('Cannot find book for this order', 'err'); return; }

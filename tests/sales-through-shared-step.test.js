@@ -75,6 +75,34 @@ describe('a website order found by the scan', () => {
   });
 });
 
+describe('an order whose receipt carries odd text', () => {
+  it('draws a quote in the order number as text, and its buttons still reach that order', () => {
+    app.main.orders.length = 0;
+    app.main.orders.push({
+      id: "bc-'q\"", orderNum: "#WEB-'x\"<b>", bookId: 'harbour', hasBook: true, qty: 1, price: 40,
+      date: '2026-10-01', customer: 'Rae', email: 'rae@example.com', shippingPaid: 0,
+    });
+    app.window.switchTab('website');
+    const list = document.getElementById('orders-list');
+    expect(list.querySelector('.order-num b')).toBeNull();
+    const apply = [...list.querySelectorAll('button')].find(b => b.textContent.trim() === 'Apply');
+    apply.click();
+    expect(row("#WEB-'x\"<b>")).toBeTruthy();
+  });
+
+  it('never treats a book id like "__proto__" as a book', () => {
+    app.main.orders.length = 0;
+    app.main.orders.push({
+      id: 'bc-proto', orderNum: '#WEB-P', bookId: '__proto__', hasBook: true, qty: 1, price: 40,
+      date: '2026-10-01', customer: 'Rae', email: 'rae@example.com', shippingPaid: 0,
+    });
+    app.window.applyOne('bc-proto');
+    expect(Object.prototype.doneIds).toBeUndefined();
+    // It falls back to the open book, as an order with no book named does.
+    expect(row('#WEB-P')).toBeTruthy();
+  });
+});
+
 describe('a website order recovered from a postage label', () => {
   it('moves the totals the same way and keeps Stock After in date order', () => {
     const form = { qty: 1, price: 40, orderNumber: 'GPW-7', date: '2026-10-03', customer: 'Sam', shippingPaid: 12 };
