@@ -10306,7 +10306,7 @@ function confirmImport() {
 // voiding one sale is (stock and revenue reversed, the Google Sheet row
 // removed), so it can still be brought back row by row. Rows already paid out
 // in an author settlement are left alone and counted.
-function undoImport(importId) {
+async function undoImport(importId) {
   const s = getState(), book = getBook();
   const rows = (s.hist || []).filter(h => h.importId === importId && !h.voided);
   if (!rows.length) return;
@@ -10317,7 +10317,11 @@ function undoImport(importId) {
   const undoable = rows.filter(h => !isLocked(h));
   if (!undoable.length) { showToast('Every row of this import is in an author settlement or matched to a website order, so it stays.', 'warn', 5000); return; }
   const name = rows[0].importName ? ` from “${rows[0].importName}”` : '';
-  if (!confirm(`Undo this import${name}? ${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed.`)) return;
+  const ok = await confirmDialog(
+    `${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed. You can bring any of them back one by one from History.`,
+    { title: `Undo this import${name}?`, okLabel: 'Undo import', danger: true },
+  );
+  if (!ok) return;
   undoable.forEach(h => {
     voidHistEntry(s, book, h, { recompute: false });
     h.voidedReason = 'Import undone';

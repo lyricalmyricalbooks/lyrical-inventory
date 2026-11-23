@@ -25,7 +25,6 @@
 // fine, which is how a to-do list teaches people to ignore it.
 
 import { localDay } from './calendar-day.js';
-import { deriveOnHand } from './inventory.js';
 import { calcArtistEarnings } from './earnings.js';
 import { expenseMissingReceipt, expensesWithSettlements } from './receipt-storage.js';
 import { fmt, getBookCurrencyCode } from './money.js';

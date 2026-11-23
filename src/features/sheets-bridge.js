@@ -343,7 +343,7 @@ async function emailArtistForPayment() {
   const book = getBook();
   const to = (book.authorEmail || '').trim();
   if (!to) { showToast('No artist email on file for this book', 'warn'); return; }
-  if (!confirm(`Send a payment-request email to ${to}?`)) return;
+  if (!(await confirmDialog(`The artist gets an email asking for this book's payment.`, { title: `Send a payment request to ${to}?`, okLabel: 'Send email' }))) return;
   const title = book.title || activeBook;
   const authorName = book.author || '';
   const currency = book.currency || 'CAD';
