@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as router from '../src/lib/openrouter-chat.js';
+import * as quota from '../src/lib/gemini-quota.js';
+import { runIntelTurn } from '../src/lib/gemini-chat.js';
+import { geminiUsesThinkingLevel } from '../src/lib/gemini-models.js';
 import { buildHarness } from './helpers/extract-decl.js';
 
 const good = () => ({ ok: true, status: 200, json: async () => ({ model: 'selected/model', choices: [{ message: { content: '{"total":12}' }, finish_reason: 'stop' }] }) });
@@ -52,7 +55,7 @@ describe('receipt fallback', () => {
   function reader(primary, settings = { geminiKey: 'g', openRouterKey: 'b' }, { resting = false } = {}) {
     const backup = vi.fn(async () => ({ text: '{"total":12}', via: 'openrouter' }));
     const noteSpent = vi.fn();
-    const call = buildHarness({ names: ['_callAiForReceipts'], deps: { TAX_CENTER: { settings }, _callGeminiForReceipts: primary, runOpenRouterRead: backup, friendlyOpenRouterError: router.friendlyOpenRouterError, _friendlyScanError: e => `friendly(${e.message})`,
+    const call = buildHarness({ names: ['_callAiForReceipts', 'askGeminiOrBackup'], deps: { TAX_CENTER: { settings }, _callGeminiForReceipts: primary, runOpenRouterRead: backup, friendlyOpenRouterError: router.friendlyOpenRouterError, _friendlyScanError: e => `friendly(${e.message})`,
       _geminiResting: () => resting, _geminiNoteSpent: noteSpent }, returns: '_callAiForReceipts' });
     return { call, backup, noteSpent };
   }
@@ -134,7 +137,7 @@ describe('provider boundary integration', () => {
         : good();
     };
     const read = buildHarness({
-      names: ['_callAiForReceipts', '_callGeminiForReceipts', 'geminiModelRefused', 'geminiUsesThinkingLevel', 'geminiErrorBody', '_geminiNoModelError', 'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode', '_geminiThinkingPatch', 'GEMINI_SINGLE_ATTEMPT_BYTES'],
+      names: ['_callAiForReceipts', 'askGeminiOrBackup', '_callGeminiForReceipts', 'askGemini', 'geminiModelRefused', 'geminiUsesThinkingLevel', 'geminiErrorBody', '_geminiNoModelError', 'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode', '_geminiThinkingPatch', 'GEMINI_SINGLE_ATTEMPT_BYTES'],
       deps: { TAX_CENTER: { settings: { openRouterKey: 'backup-test-key' } },
         fetch: fetchImpl, DOMException, _geminiModelChain: () => ['gemini-test'],
         _geminiUnavailable: new Set(), _geminiAwaitCooldown: async () => {}, _geminiNoteThrottle: () => {},
@@ -147,5 +150,142 @@ describe('provider boundary integration', () => {
     expect(backup).toHaveLength(1);
     expect(backup[0].headers.Authorization).toBe('Bearer backup-test-key');
     expect(JSON.stringify(backup)).not.toContain('google-test-key');
+  });
+});
+
+// ── One AI reader ───────────────────────────────────────────────────────────
+// Receipt scanning and the assistant used to walk Google's models with two
+// hand-kept copies of the same loop, and the copies drifted. Both now go
+// through askGemini and askGeminiOrBackup in gemini-quota.js. These run the
+// two real callers against one stubbed network and check they do the same
+// thing: step past a model that answers "limit: 0", and hand over to the
+// backup the same way when Google cannot answer at all.
+describe('receipt scanning and the assistant share one Gemini reader', () => {
+  const CHAIN = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+  const json = (status, body) => ({ ok: status >= 200 && status < 300, status, headers: { get: () => null }, json: async () => body });
+  const zero = (model) => json(429, { error: { code: 429, status: 'RESOURCE_EXHAUSTED', message: `Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: ${model}` } });
+  const answer = (text) => json(200, { candidates: [{ finishReason: 'STOP', content: { parts: [{ text }] } }] });
+  const backupAnswer = (content) => json(200, { model: 'backup/model', choices: [{ message: { content }, finish_reason: 'stop' }] });
+
+  /** A network where `refuses(model)` decides which Google models answer "limit: 0". */
+  function network(refuses, { quotaSpent = false } = {}) {
+    const seen = [];
+    const fetchImpl = vi.fn(async (url) => {
+      const u = String(url);
+      if (u.includes('openrouter.ai')) { seen.push('openrouter'); return backupAnswer('{"total":7}'); }
+      const model = u.match(/models\/([^:]+):generateContent/)[1];
+      seen.push(model);
+      if (quotaSpent) return json(429, { error: { code: 429, message: 'You exceeded your current quota, please check your plan and billing details' } });
+      return refuses(model) ? zero(model) : answer('{"total":7}');
+    });
+    return { fetchImpl, seen };
+  }
+
+  function receiptReader(settings) {
+    return buildHarness({
+      names: ['_callAiForReceipts', '_callGeminiForReceipts', 'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode', '_geminiThinkingPatch', 'GEMINI_SINGLE_ATTEMPT_BYTES'],
+      deps: {
+        TAX_CENTER: { settings }, DOMException,
+        // The real shared module, not stand-ins: this is what the scanner runs.
+        askGemini: quota.askGemini, askGeminiOrBackup: quota.askGeminiOrBackup, _friendlyScanError: quota._friendlyScanError,
+        geminiUsesThinkingLevel, runOpenRouterRead: router.runOpenRouterRead, friendlyOpenRouterError: router.friendlyOpenRouterError,
+      },
+      returns: '_callAiForReceipts',
+    });
+  }
+
+  function assistant(settings) {
+    const setIntelStatus = vi.fn();
+    const ask = buildHarness({
+      names: ['backupProvider', 'askWithFallback'],
+      deps: {
+        TAX_CENTER: { settings }, INTEL_HISTORY: [], INTEL_TOOL_SCHEMAS: [],
+        intelContext: () => ({}), systemInstruction: () => 'sys', intelAbort: { signal: undefined },
+        setIntelStatus, console: { warn: () => {} },
+        askGeminiOrBackup: quota.askGeminiOrBackup, runIntelTurn, runOpenRouterTurn: router.runOpenRouterTurn,
+        friendlyChatError: quota._friendlyScanError, friendlyOpenRouterError: router.friendlyOpenRouterError,
+      },
+      returns: 'askWithFallback',
+    });
+    return { ask, setIntelStatus };
+  }
+
+  beforeEach(() => {
+    // The chain and the "this key can't use that" set are shared on purpose,
+    // so each test starts both callers from the same clean slate.
+    quota._geminiUnavailable.clear();
+    quota._geminiClearRest();
+    try { localStorage.removeItem('lm_gemini_models'); } catch (_) { /* no storage */ }
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('both step past models that answer "limit: 0" instead of stopping', async () => {
+    const refuses = (m) => m === 'gemini-3.8-flash' || m === 'gemini-3.6-flash';
+
+    const scan = network(refuses);
+    vi.stubGlobal('fetch', scan.fetchImpl);
+    const read = await receiptReader({ geminiKey: 'g' })('g', [{ text: 'Read this receipt' }]);
+    expect(read).toMatchObject({ text: '{"total":7}', model: 'gemini-3.5-flash-lite' });
+
+    quota._geminiUnavailable.clear();
+    const chat = network(refuses);
+    vi.stubGlobal('fetch', chat.fetchImpl);
+    const reply = await assistant({ geminiKey: 'g' }).ask('How did the fair go?');
+    expect(reply).toMatchObject({ text: '{"total":7}', model: 'gemini-3.5-flash-lite' });
+
+    // Same models, same order, and nothing sent to the backup by either.
+    expect(scan.seen).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite']);
+    expect(chat.seen).toEqual(scan.seen);
+  });
+
+  it('both reach 2.5 Flash, the last free rung, when every newer model says "limit: 0"', async () => {
+    const refuses = (m) => m !== 'gemini-2.5-flash';
+    const scan = network(refuses);
+    vi.stubGlobal('fetch', scan.fetchImpl);
+    expect((await receiptReader({ geminiKey: 'g' })('g', [{ text: 'x' }])).model).toBe('gemini-2.5-flash');
+
+    quota._geminiUnavailable.clear();
+    const chat = network(refuses);
+    vi.stubGlobal('fetch', chat.fetchImpl);
+    expect((await assistant({ geminiKey: 'g' }).ask('q')).model).toBe('gemini-2.5-flash');
+    expect(scan.seen).toEqual(CHAIN);
+    expect(chat.seen).toEqual(CHAIN);
+  });
+
+  it('both hand over to the backup the same way when no Google model will serve the key', async () => {
+    const settings = { geminiKey: 'g', openRouterKey: 'b' };
+    const scan = network(() => true);
+    vi.stubGlobal('fetch', scan.fetchImpl);
+    expect((await receiptReader(settings)('g', [{ text: 'x' }])).via).toBe('openrouter');
+
+    quota._geminiUnavailable.clear();
+    const chat = network(() => true);
+    vi.stubGlobal('fetch', chat.fetchImpl);
+    const { ask, setIntelStatus } = assistant(settings);
+    expect((await ask('q')).via).toBe('openrouter');
+    expect(setIntelStatus).toHaveBeenCalledWith(expect.stringMatching(/backup/i));
+
+    expect(scan.seen).toEqual([...CHAIN, 'openrouter']);
+    expect(chat.seen).toEqual(scan.seen);
+    // A key no model will serve has used nothing up, so neither caller may
+    // rest Google until midnight on the strength of it.
+    expect(quota._geminiResting()).toBe(false);
+  });
+
+  it('a spent allowance seen by one caller sends the other straight to the backup', async () => {
+    const settings = { geminiKey: 'g', openRouterKey: 'b' };
+    const scan = network(() => false, { quotaSpent: true });
+    vi.stubGlobal('fetch', scan.fetchImpl);
+    expect((await receiptReader(settings)('g', [{ text: 'x' }])).via).toBe('openrouter');
+    // An ordinary quota refusal stops the walk: every model would say the same.
+    expect(scan.seen.filter(m => m !== 'gemini-3.8-flash')).toEqual(['openrouter']);
+    expect(quota._geminiResting()).toBe(true);
+
+    const chat = network(() => false);
+    vi.stubGlobal('fetch', chat.fetchImpl);
+    const { ask, setIntelStatus } = assistant(settings);
+    expect((await ask('q')).via).toBe('openrouter');
+    expect(chat.seen).toEqual(['openrouter']);
+    expect(setIntelStatus).toHaveBeenCalledWith(expect.stringMatching(/used up/i));
   });
 });

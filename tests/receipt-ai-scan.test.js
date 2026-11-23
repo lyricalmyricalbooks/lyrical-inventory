@@ -632,7 +632,7 @@ describe('Gemini transport — retry and error classification', () => {
   function callHarness(fetchImpl, waits = []) {
     return buildHarness({
       names: [
-        '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
+        '_callGeminiForReceipts', 'askGemini', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
         'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode',
         '_geminiThinkingPatch', '_geminiCooldownUntil', 'GEMINI_FREE_TIER_MODEL',
         '_geminiUnavailable', '_geminiModelChain', 'GEMINI_ROUTED_MODELS', 'geminiModelRefused', 'geminiUsesThinkingLevel', 'geminiErrorBody', '_geminiNoModelError', '_readGeminiModelCache',
