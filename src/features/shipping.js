@@ -37,7 +37,6 @@ import { bigCartelTrackingByOrder, shipmentDate, trackingToStamp } from '../lib/
 import {
   $,
   TAX_CENTER,
-  commitRecoveredWebsiteOrder,
   _fxRateCache,
   addLog,
   fetchHistoricalRate,
@@ -45,9 +44,7 @@ import {
   getAllStores,
   isAuthor,
   normalizeCountryCode,
-  orders,
   renderHist,
-  renderOrders,
   saveCatalogWithDeletions,
   saveState,
   sheetsUrl,
@@ -58,6 +55,7 @@ import {
 import { BOOKS, BOOK_LIST, states, activeBook, getState, getBook } from '../core/store.js';
 import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt } from './receipts.js';
 import { openReviewInbox } from './review-inbox.js';
+import { commitRecoveredWebsiteOrder, orders, renderOrders } from './website-orders.js';
 import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/carriers/label-duplicate-guard.js';
 import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
 import { websiteShipmentNote } from './website-link.js';

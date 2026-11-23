@@ -12,6 +12,8 @@ const html = read('index.html');
 const css = read('src/style.css');
 const phone = read('src/styles/phone.css');
 const main = read('src/main.js');
+// The Website orders queue moved out of main.js into its own feature module.
+const websiteOrders = read('src/features/website-orders.js');
 const opencall = read('src/features/opencall.js');
 const websiteLink = read('src/features/website-link.js');
 
@@ -98,15 +100,16 @@ describe('Phone polish sweep (round 4)', () => {
 
   describe('#32 Website Scan Gmail and Apply all', () => {
     it('leaves one Scan Gmail button on the screen', () => {
-      const at = main.indexOf('No orders found for this book');
-      expect(main.slice(at, at + 400)).not.toMatch(/fetchOrders\(\)/);
+      const at = websiteOrders.indexOf('No orders found for this book');
+      expect(at).toBeGreaterThan(-1);
+      expect(websiteOrders.slice(at, at + 400)).not.toMatch(/fetchOrders\(\)/);
       expect(html).not.toMatch(/Ready to scan for new orders[\s\S]{0,400}fetchOrders\(\)/);
     });
 
     it('explains why Apply all is greyed out, under the button', () => {
       expect(html).toMatch(/<p class="apply-all-hint" id="apply-all-hint">Scan Gmail first to find new orders\.<\/p>/);
-      expect(main).toMatch(/function setApplyAllHint\(text\)/);
-      expect(main).toMatch(/setApplyAllHint\(canApply \? '' : /);
+      expect(websiteOrders).toMatch(/function setApplyAllHint\(text\)/);
+      expect(websiteOrders).toMatch(/setApplyAllHint\(canApply \? '' : /);
     });
   });
 

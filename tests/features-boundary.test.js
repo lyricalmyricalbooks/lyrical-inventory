@@ -28,7 +28,9 @@ const MAIN_IMPORT_BUDGET = {
   // mailing-list change goes through main.js's openCallScreen loader instead of
   // a static import of opencall.js, which would have pulled the whole screen
   // back into the first download.
-  'customers.js': 10,
+  // 10 -> 8 when the Website orders screen moved out to website-orders.js:
+  // the scanned order list and the applied-ids cache come from that sibling.
+  'customers.js': 8,
   // 23 -> 24 for commitRecoveredWebsiteOrder: the reconciliation worklist can
   // now rebuild a website order the Gmail scan missed, and writing one to the
   // ledger touches the applied-ids cache, the scan memory and the Sheets sync —
@@ -41,7 +43,10 @@ const MAIN_IMPORT_BUDGET = {
   // revealed behind whatever the publisher is actually looking at — a button
   // that appears to do nothing. No cheaper route exists: app-shell navigation
   // is main.js's, and nothing already across this seam can perform it.
-  'shipping.js': 19,
+  // 19 -> 16 when the Website orders screen moved out to website-orders.js:
+  // commitRecoveredWebsiteOrder, the scanned order list and renderOrders come
+  // from that sibling.
+  'shipping.js': 16,
   // 16 -> 19 when the storefront became the ledger's reconciliation source.
   // Comparing Big Cartel's orders against the ledger and adding a missing one
   // needs three main.js internals and no more: commitRecoveredWebsiteOrder (the
@@ -53,7 +58,10 @@ const MAIN_IMPORT_BUDGET = {
   // 19 -> 20 for isAuthor, when new orders started being recorded without a
   // button press: an unattended ledger write has to check the role itself,
   // because no person is there to have been refused the button.
-  'bigcartel.js': 16,
+  // 16 -> 12 when the Website orders screen moved out to website-orders.js:
+  // applyOne, commitRecoveredWebsiteOrder and the scan memory come from that
+  // sibling.
+  'bigcartel.js': 12,
   // +1 for ensurePdfJs: the printable trip report rasterises PDF receipts, and
   // that primitive stays in main.js. The receipt-file primitives it used to
   // take from main.js now come from receipts.js instead. Dropped again when the
@@ -168,7 +176,14 @@ const MAIN_IMPORT_BUDGET = {
   // repaints history, re-syncs an un-voided row to the Sheet, forgets the
   // applied-order cache, and reads the open book and role for recordOrder;
   // plus today / sheetsUrl.
-  'sales-ledger.js': 8,
+  // 8 -> 7 when the Website orders screen moved out: invalidateAppliedIds
+  // comes from website-orders.js, which owns the cache.
+  'sales-ledger.js': 7,
+  // Set at extraction: the Gmail scan and its queue read the Sheets URL,
+  // write through saveState and recomputeAfters, log to the scan log, and
+  // refuse to revert a sale the website owns (WEBSITE_SALE_LOCKED); plus
+  // $ / showToast / today.
+  'website-orders.js': 8,
   // Set at creation. The switcher shows only for the publisher in their own
   // view (isPublisherSession, isAuthor) and says so with a toast; a deep link
   // from the website finds the order's sales in the books (BOOKS, BOOK_LIST,
@@ -337,6 +352,12 @@ const MIN_EXPORTS = {
   // Written as a feature module from the start: start it (button, shortcuts)
   // and open it (from a #search= link or the book deep link's fallback).
   'app-search.js': 2,
+  // A carve-out whose surface is one screen: the queue and its buttons
+  // (scan, apply, apply all, unapply, reapply, cancel / restore), the scanned
+  // order list, the scan memory and applied-ids cache the ledger and the Big
+  // Cartel bridge share, the recovered-order write path, and the relative time
+  // the activity feed borrows. Its parsing helpers stay private.
+  'website-orders.js': 15,
 };
 
 describe('feature modules are the only home of what they own', () => {

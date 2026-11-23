@@ -20,10 +20,8 @@
 import {
   $,
   fetchStripePaymentsForReconcile,
-  getAllAppliedIds,
   getReconStripeKey,
   openCallScreen,
-  orders,
   renderCustomersStat,
   sheetsUrl,
   showToast,
@@ -31,6 +29,7 @@ import {
 } from '../main.js';
 import { BOOKS, BOOK_LIST, states } from '../core/store.js';
 import { codeToSymbol } from './pos.js';
+import { getAllAppliedIds, orders } from './website-orders.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';

@@ -12,7 +12,7 @@
 // syncHistoryVoidDeletion keeps the Sheet in step with a void.
 //
 // Lifted out of src/main.js verbatim, apart from the applied-order-number
-// cache, which this module can't reassign: it calls main.js's
+// cache, which this module can't reassign: it calls website-orders.js's
 // invalidateAppliedIds() instead. The active book stays owned by main.js;
 // callers that need a different book use withActiveBook() there. Nothing here
 // runs at module-evaluation time, which is what makes the main.js <-> feature
@@ -22,7 +22,6 @@
 // honest: an identifier that isn't imported fails the build rather than
 // throwing at click time.
 import {
-  invalidateAppliedIds,
   isAuthor,
   recomputeAfters,
   renderHist,
@@ -39,6 +38,7 @@ import { channelStats, hasOwnChannel } from '../lib/channel-mix.js';
 import { cadEquivalentForSale, getBookCurrencyCode, heldTransferIndexForSale, normalizeCurrencyCode } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
+import { invalidateAppliedIds } from './website-orders.js';
 
 function recordOrder(num, chan, qty, price, notes, payment = null, { date, enteredBy: enteredByOverride, extra } = {}) {
   const enteredBy = enteredByOverride || (isAuthor() ? 'Artist' : 'Publisher');
