@@ -1493,8 +1493,8 @@
       <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payments</div>
       <div class="section-hed sec-head-title">Stripe payments to reconcile</div>
       <p class="section-subcopy">
-        Pulls your recent Stripe payments and checks each one against your inventory. Invoices (INV-…), Big Cartel
-        orders, and SKU-tagged links match automatically — the rest land in a short worklist where you pick the book and log the sale.
+        The app sorts every Stripe payment for you. Sales through a book’s own link, or with a title typed on the card reader,
+        are recorded by themselves. You only pick the book for the rest, and confirm the ones the app has already worked out.
       </p>
     </div>
     <div class="sec-head-badges">
@@ -1503,7 +1503,17 @@
     </div>
   </div>
 
-  <!-- Payment settings: folded on a phone once a Stripe key is saved (see _reconInitFolds). -->
+  <div id="recon-status" class="recon-status"></div>
+  <div id="recon-summary" class="recon-summary"></div>
+  <div id="recon-toolbar" class="recon-toolbar" style="display:none;">
+    <input type="search" id="recon-search" class="recon-search" placeholder="Find a payment: name, email, note or amount" aria-label="Find a payment" autocomplete="off" oninput="reconOnFilter()">
+  </div>
+  <div id="recon-needs"><div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments.</div></div>
+  <div id="recon-matched"></div>
+
+  <!-- Settings sit under the list: the Stripe key, the automatic recording,
+       the card-reader codes and alerts. Folded on a phone once a key is saved
+       (see _reconInitFolds). -->
   <details class="recon-fold" id="recon-settings">
     <summary>Payment settings · Stripe key, short codes, alerts</summary>
     <div class="recon-fold-body">
@@ -1528,29 +1538,6 @@
       </label>
     </div>
   </details>
-
-  <div id="recon-status" class="recon-status"></div>
-  <div id="recon-toolbar" class="recon-toolbar" style="display:none;">
-    <input type="search" id="recon-search" class="recon-search" placeholder="Search name, email, note, amount…" autocomplete="off" oninput="reconOnFilter()">
-    <div id="recon-cur-chips" class="recon-chips"></div>
-    <select id="recon-type" class="recon-mini" onchange="reconOnFilter()" title="Filter by type">
-      <option value="all">All types</option>
-      <option value="direct">Direct sale</option>
-      <option value="bigcartel">Big Cartel</option>
-      <option value="invoice">Invoice</option>
-    </select>
-    <select id="recon-sort" class="recon-mini" onchange="reconOnFilter()" title="Sort the worklist">
-      <option value="date-desc">Newest first</option>
-      <option value="date-asc">Oldest first</option>
-      <option value="amt-desc">Amount: high → low</option>
-      <option value="amt-asc">Amount: low → high</option>
-    </select>
-    <label class="recon-toggle" title="Collapse identical payments into one row you can log in bulk"><input type="checkbox" id="recon-group" onchange="reconOnFilter()"> Group identical</label>
-    <button class="btn tag sm" onclick="reconDismissAllShown()" title="Dismiss every payment currently shown as not-inventory">Dismiss all shown</button>
-  </div>
-  <div id="recon-summary" class="recon-summary"></div>
-  <div id="recon-needs"><div class="empty-state"><div class="e-icon">💳</div>Press <strong>Sync from Stripe</strong> to pull your payments.</div></div>
-  <div id="recon-matched"></div>
 
   <!-- Accepted Payment Methods: folded like the settings above; open on a wide screen. -->
   <div class="divider recon-divider"></div>

@@ -119,7 +119,7 @@ describe('the worklist Record button cannot record a charge twice', () => {
     const p = { id: 'ch_9', amount: 20, currency: 'CAD', date: '2026-10-05' };
     const deps = {
       _reconFindPayment: () => p,
-      _reconRecordedChargeIds: () => new Set(['ch_9']),
+      _reconAlreadyRecorded: (id) => id === 'ch_9',
       _reconApplyPaymentToBook: vi.fn(),
       showToast: vi.fn(),
       renderReconcile: vi.fn(),

@@ -995,51 +995,29 @@
   #tab-reconcile .recon-fold-body .toggle-row { gap: var(--space-3); }
   #tab-reconcile .recon-fold-body .toggle-title { font-weight: 800; }
 
-  /* KPI strip: the lead figure takes the first row, the other two share the second. */
-  /* The global .kpi-grid phone rule forces one column with !important; this
-     screen wants the lead on its own row and the two others side by side. */
-  #tab-reconcile .recon-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: var(--space-2); }
-  #tab-reconcile .recon-kpis .kpi { padding: var(--space-3); }
-  #tab-reconcile .recon-kpis .kpi.is-lead { grid-column: 1 / -1; }
+  /* Search: static (not stuck under the app header), full width, the same
+     2px ink outline as the cards. Focus keeps its gold border. */
+  #tab-reconcile .recon-toolbar { position: static; display: block; padding: 0; border: 0; background: none; }
+  #tab-reconcile .recon-search { width: 100%; min-width: 0; min-height: var(--target-min); border: var(--stroke) solid var(--border-strong); background: var(--surface-raised); }
+  #tab-reconcile .recon-search:focus { border-color: var(--gold); }
 
-  /* Toolbar: static (not stuck under the app header), search full width,
-     type and sort side by side, the group toggle and dismiss on one row. */
-  #tab-reconcile .recon-toolbar { position: static; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3); }
-  #tab-reconcile .recon-search { grid-column: 1 / -1; width: 100%; min-width: 0; min-height: var(--target-min); }
-  #tab-reconcile .recon-chips { grid-column: 1 / -1; }
-  #tab-reconcile .recon-chips:empty { display: none; }
-  #tab-reconcile .recon-chip { min-height: var(--target-min); display: inline-flex; align-items: center; }
-  #tab-reconcile .recon-mini { width: 100%; min-width: 0; min-height: var(--target-min); }
-  #tab-reconcile .recon-toggle { min-height: var(--target-min); grid-column: 1; gap: var(--space-2); font-size: var(--text-sm); white-space: nowrap; }
-  #tab-reconcile .recon-toolbar > .btn { grid-column: 2; min-height: var(--target-min); justify-content: center; white-space: nowrap; padding-inline: var(--space-2); }
-
-  /* Toolbar reads as one inked slab: the frame, search, drop-downs and filter chips take the 2px ink
-     outline of the cards and buttons around them (not a faint hairline); chips are square, not lozenges.
-     Focus keeps its gold border (the base :focus rules are the same specificity or lower here). */
-  #tab-reconcile .recon-toolbar { border: var(--stroke) solid var(--border-strong); }
-  #tab-reconcile .recon-search, #tab-reconcile .recon-mini { border: var(--stroke) solid var(--border-strong); background: var(--surface-raised); }
-  #tab-reconcile .recon-search:focus, #tab-reconcile .recon-mini:focus { border-color: var(--gold); }
-  #tab-reconcile .recon-chip { border: var(--stroke) solid var(--border-strong); border-radius: var(--r2); background: var(--surface-raised); }
-  #tab-reconcile .recon-chip.active { background: var(--ink); border-color: var(--ink); }
+  /* Section heads: the button takes the full width under the name. */
+  #tab-reconcile .recon-sec-action { flex: 1 0 100%; order: 4; }
+  #tab-reconcile .recon-sec-action .btn { width: 100%; min-height: var(--target-min); justify-content: center; }
   #tab-reconcile .recon-pill { border-radius: var(--r2); border: var(--stroke-hair) solid currentColor; text-transform: uppercase; letter-spacing: var(--tracking-caps); }
 
-  /* Need cards: one column of fields, book first, Qty beside the amount,
-     Currency beside the rate, Order # last, then the actions. Cells sit on the
-     bottom edge so a label that wraps to two lines (Stripe amount paid, Automatic
-     exchange rate) doesn't push its box below its neighbour's. */
+  /* Payment rows: the book and its copies side by side, then Record and
+     "Not a book sale" side by side. Under Details, the order number on its
+     own row, then amount, currency and rate in pairs. Cells sit on the bottom
+     edge so a label that wraps to two lines doesn't push its box below its
+     neighbour's. */
   #tab-reconcile .recon-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); align-items: end; }
+  #tab-reconcile .recon-fields:not(.recon-more-fields) { grid-template-columns: minmax(0, 1fr) 88px; }
   #tab-reconcile .recon-fields > .form-group,
   #tab-reconcile .recon-fields > .recon-actions { width: auto; max-width: none; min-width: 0; flex: none; }
-  #tab-reconcile .recon-fields > .recon-f-book,
   #tab-reconcile .recon-fields > .recon-f-num,
   #tab-reconcile .recon-fields > .recon-actions { grid-column: 1 / -1; }
-  #tab-reconcile .recon-f-book { order: 1; }
-  #tab-reconcile .recon-f-qty { order: 2; }
-  #tab-reconcile .recon-f-amt { order: 3; }
-  #tab-reconcile .recon-f-cur { order: 4; }
-  #tab-reconcile .recon-f-rate { order: 5; }
-  #tab-reconcile .recon-f-num { order: 6; }
-  #tab-reconcile .recon-actions { order: 7; display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  #tab-reconcile .recon-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
   #tab-reconcile .recon-fields input,
   #tab-reconcile .recon-fields select { min-height: var(--target-min); }
   #tab-reconcile .recon-actions .btn { width: 100%; height: auto; min-height: var(--target-min); justify-content: center; }
@@ -1049,7 +1027,6 @@
   #tab-reconcile .recon-variant { flex-direction: column; align-items: stretch; }
   #tab-reconcile .recon-variant .recon-actions { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   #tab-reconcile .recon-variant .recon-actions .btn { min-height: var(--target-min); }
-  #tab-reconcile .recon-matched-toggle { width: 100%; min-height: var(--target-min); justify-content: center; }
 }
 
 /* ─── CONSIGNMENT ON A PHONE ──────────────────────────────────────────────

@@ -11,6 +11,8 @@ const currencyDeps = {
   BOOKS, roundCents, stripeOrderNumber,
   getBookCurrencyCode: book => book.currency,
   normalizeCurrencyCode: (value, fallback) => String(value || fallback).toUpperCase(),
+  _reconSaleKey: id => id,
+  getReconMemory: () => ({ recorded: {}, dismissed: {}, reopened: {} }),
 };
 
 it('writes the original money, converted total, and automatic order number to the ledger boundary', () => {
@@ -202,22 +204,63 @@ it.each(['disabled', 'dismissed'])('does not record when the owner changed the p
   expect(api.writes).toHaveLength(0);
 });
 
-it('assigns individual references when recording a group and skips payments already in the ledger', () => {
-  const payments = [payment, { ...payment, id: 'ch_Second42' }, { ...payment, id: 'ch_Already42' }];
-  const fields = { 'recon-gbook-0': 'b1', 'recon-gqty-0': '1', 'recon-gamount-0': '40', 'recon-gcurrency-0': 'EUR', 'recon-grate-0': '1.55' };
-  const mem = { recorded: {}, dismissed: {} };
-  const rows = [];
-  const api = buildHarness({ names: ['reconRecordGroup', '_reconReadSaleInputs', '_reconApplyPaymentToBook'], deps: {
-    ...currencyDeps, window: { _reconPayments: payments, _reconGroupMap: { 0: payments.map(p => p.id) } },
-    document: { getElementById: id => fields[id] == null ? null : { value: fields[id], dataset: { source: 'Frankfurter' } } },
-    _reconRecordedChargeIds: () => new Set(['ch_Already42']),
-    getReconMemory: () => mem, saveReconMemory: () => {}, _reconSession: { logged: 0 },
-    _reconApplySaleToBook: (...args) => rows.push(args), showToast: () => {}, renderReconcile: () => {}, activeBook: 'other',
-  }, returns: '{ reconRecordGroup }' });
-  api.reconRecordGroup(0);
-  expect(rows.map(args => args[6].num)).toEqual(['STRIPE-Test42', 'STRIPE-Second42']);
-  expect(mem.recorded.ch_Second42.num).toBe('STRIPE-Second42');
-  expect(mem.recorded.ch_Already42).toBeUndefined();
+it('never records by itself a payment she undid from the Payments list', async () => {
+  const api = autoRecorder(async () => ({ rate: 1.55, source: 'Frankfurter', date: '2026-10-07' }));
+  const outcome = await buildHarness({ names: ['autoRecordStripeSale'], deps: {
+    ...currencyDeps, stripeSaleAutoEnabled: () => true,
+    getReconMemory: () => ({ recorded: {}, dismissed: {}, reopened: { [payment.id]: true } }),
+  }, returns: '{ autoRecordStripeSale }' }).autoRecordStripeSale({ ...payment, created: 2000 }, { kind: 'direct', bookId: 'b1' });
+  expect(outcome).toBe(null);
+  expect(api.writes).toHaveLength(0);
+});
+
+describe('Confirm all in the Ready section', () => {
+  function confirmAll({ fields, recorded = [], confirm = true, rate } = {}) {
+    const payments = [payment, { ...payment, id: 'ch_Second42' }, { ...payment, id: 'ch_Already42' }];
+    const mem = { recorded: {}, dismissed: {}, reopened: { ch_Second42: true } };
+    const rows = [];
+    const asked = [];
+    const api = buildHarness({ names: ['reconConfirmReady', '_reconRowPick', '_reconApplyPaymentToBook', '_reconMarkRecorded'], deps: {
+      ...currencyDeps, window: { _reconPayments: payments, _reconReadyIds: payments.map(p => p.id) },
+      document: { getElementById: id => fields[id] == null ? null : { value: fields[id], dataset: { source: 'Frankfurter' } } },
+      _reconRecordedChargeIds: () => new Set(recorded), _reconAlreadyRecorded: id => recorded.includes(id),
+      classifyStripePayment: p => ({ kind: recorded.includes(p.id) ? 'recorded' : 'direct' }), _reconIsPickable: () => true,
+      confirmDialog: async (msg, opts) => { asked.push(opts); return confirm; },
+      resolveStripeRate: async () => rate || {}, _stripeFmtMoney: (a, c) => `${c} ${a}`,
+      getReconMemory: () => mem, saveReconMemory: () => {}, _reconSession: { logged: 0 },
+      _reconApplySaleToBook: (...args) => rows.push(args), showToast: () => {}, renderReconcile: () => {}, activeBook: 'other',
+      updateDash: () => {},
+    }, returns: '{ reconConfirmReady }' });
+    return { ...api, rows, mem, asked };
+  }
+
+  it('records each row with the book, copies and order number it shows, and skips one already recorded', async () => {
+    const all = confirmAll({ recorded: ['ch_Already42'], fields: {
+      'recon-book-ch_Test42': 'b1', 'recon-qty-ch_Test42': '2', 'recon-num-ch_Test42': 'FAIR-1', 'recon-rate-ch_Test42': '1.55',
+      'recon-book-ch_Second42': 'b1', 'recon-qty-ch_Second42': '1', 'recon-rate-ch_Second42': '1.5',
+      'recon-book-ch_Already42': 'b1',
+    } });
+    await all.reconConfirmReady();
+    expect(all.asked[0].details).toHaveLength(2);
+    expect(all.rows.map(args => [args[1], args[6].num])).toEqual([[2, 'FAIR-1'], [1, 'STRIPE-Second42']]);
+    expect(all.rows[0][3]).toMatchObject({ amount: 40, currency: 'EUR', rate: 1.55 });
+    expect(all.mem.recorded.ch_Second42.num).toBe('STRIPE-Second42');
+    // Recorded again after an Undo: no longer waiting to be recorded.
+    expect(all.mem.reopened.ch_Second42).toBeUndefined();
+    expect(all.mem.recorded.ch_Already42).toBeUndefined();
+  });
+
+  it('records nothing when she cancels the confirm', async () => {
+    const all = confirmAll({ confirm: false, fields: { 'recon-book-ch_Test42': 'b1', 'recon-rate-ch_Test42': '1.55' } });
+    await all.reconConfirmReady();
+    expect(all.rows).toHaveLength(0);
+  });
+
+  it('looks up the payment day’s rate for a row whose rate has not loaded yet', async () => {
+    const all = confirmAll({ rate: { rate: 1.6, source: 'Frankfurter', date: '2026-10-07' }, fields: { 'recon-book-ch_Test42': 'b1' } });
+    await all.reconConfirmReady();
+    expect(all.rows[0][3]).toMatchObject({ rate: 1.6, rateSource: 'Frankfurter', rateDate: '2026-10-07' });
+  });
 });
 
 it('records a sale through the app’s own euro link as one copy, converted at the day’s rate', async () => {
