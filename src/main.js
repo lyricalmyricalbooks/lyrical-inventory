@@ -16842,13 +16842,18 @@ function _reconFindInvoice(num) {
 // `near` widens "same amount" to within 10%: before recording on its own, a
 // register row in euros holds a live-converted figure (€37.42 for a €40 copy),
 // so an exact match would miss the very sale it is guarding against.
+// `bookIds`, when the payment says which book(s) it paid for, limits the
+// comparison to sales of those books: at a fair most books cost the same, and
+// a $20 sale of one title is no reason to hold a $20 tap for another.
 // A caller checking a whole list without recording anything in between may
 // pass `logged` from _reconLoggedPayments(), so each payment doesn't re-walk
 // every book's history (and re-parse every row's date).
-function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayments() } = {}) {
+function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayments(), bookIds = null } = {}) {
   const target = Math.round(p.amount * 100);
   const slack = near ? target * 0.1 : 0;
-  for (const { cents, time } of logged.get(p.currency) || []) {
+  const only = Array.isArray(bookIds) && bookIds.filter(Boolean).length ? new Set(bookIds) : null;
+  for (const { cents, time, bookId } of logged.get(p.currency) || []) {
+    if (only && !only.has(bookId)) continue;
     if (Math.abs(cents - target) > slack) continue;
     if (Math.abs((time - p.created) / 86400000) <= 3) return true;
   }
@@ -16856,17 +16861,23 @@ function _reconLikelyAlreadyLogged(p, { near = false, logged = _reconLoggedPayme
 }
 
 // The paid history rows _reconLikelyAlreadyLogged compares against, read in
-// one pass: per currency, each row's amount in cents and its sale day's time.
+// one pass: per currency, each row's amount in cents, its sale day's time and
+// its book. A row recorded from a Stripe payment is left out: it belongs to a
+// different charge (this one would already read as recorded), so it can't be
+// a hand-typed copy of this one. Counting it held every later card sale at the
+// same price for three days, so at a fair the second $20 tap waited behind the
+// first, and the third behind the second.
 function _reconLoggedPayments() {
   const byCurrency = new Map();
-  for (const s of Object.values(states)) {
-    for (const h of (s.hist || [])) {
+  for (const [bookId, s] of Object.entries(states)) {
+    for (const h of (s?.hist || [])) {
       if (h.voided || h.gratuity) continue;
+      if (typeof h.sheetsId === 'string' && h.sheetsId.startsWith('stripe-')) continue;
       const pay = h.payment;
       if (!pay || !pay.amount) continue;
       const cur = normalizeCurrencyCode(pay.currency || '', '');
       if (!byCurrency.has(cur)) byCurrency.set(cur, []);
-      byCurrency.get(cur).push({ cents: Math.round(pay.amount * 100), time: new Date(h.date).getTime() });
+      byCurrency.get(cur).push({ cents: Math.round(pay.amount * 100), time: new Date(h.date).getTime(), bookId });
     }
   }
   return byCurrency;
@@ -17997,7 +18008,7 @@ async function autoRecordStripeSale(payment, rawClassification, { raise = true }
     classification,
     book,
     bookCurrency: book ? normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD') : '',
-    likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }),
+    likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true, bookIds: [classification.bookId] }),
     // Payments from before this version first ran were judged by the old
     // rules, under which a euro or door-price sale never recorded — she may
     // well have typed those in by hand since. They are never recorded now.
@@ -18013,7 +18024,7 @@ async function autoRecordStripeSale(payment, rawClassification, { raise = true }
     const currentBook = BOOKS[classification.bookId];
     if (!currentBook || normalizeCurrencyCode(getBookCurrencyCode(currentBook), 'CAD') !== options.bookCurrency) return null;
     plan = stripeSalePlan(payment, { ...options, book: currentBook,
-      likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true }), conversionRate: conversion.rate,
+      likelyLogged: _reconLikelyAlreadyLogged(payment, { near: true, bookIds: [classification.bookId] }), conversionRate: conversion.rate,
     });
   }
   if (plan.action === 'skip') return null;
@@ -18355,7 +18366,7 @@ function recordReaderSplitSale(payment, lines) {
     noteUnmatchedReaderPayment(payment);
     return { action: 'review', reason, chargeId: payment.id };
   };
-  if (_reconLikelyAlreadyLogged(payment)) return raise('maybe-rung-up');
+  if (_reconLikelyAlreadyLogged(payment, { bookIds: lines.map(line => line.bookId) })) return raise('maybe-rung-up');
   const plan = splitSalePlan(payment, lines, BOOKS, {
     bookCurrency: (book) => normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD'),
   });
