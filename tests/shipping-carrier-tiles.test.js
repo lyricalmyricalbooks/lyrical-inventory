@@ -102,7 +102,7 @@ describe('shipping carrier tiles in the app', () => {
     app.main.TAX_CENTER.settings = {};
     shipping.renderCarrierTiles();
     expect(tile('shippo').classList.contains('is-unconnected')).toBe(true);
-    expect(tile('chitchats').querySelector('.ship-carrier-status').textContent).toMatch(/Tax Centre/);
+    expect(tile('chitchats').querySelector('.ship-carrier-status').textContent).toMatch(/Settings, Shipping/);
     expect(tile('canadapost').querySelector('.ship-carrier-status').textContent).toMatch(/estimates only/);
   });
 

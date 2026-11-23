@@ -3705,7 +3705,7 @@ function _geminiThinkingPatch(mode, budget) {
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
-  if (!apiKey && !key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
+  if (!apiKey && !key) throw new Error('Add a Gemini or OpenRouter key in Settings › AI and receipts');
   return askGeminiOrBackup({
     google: apiKey ? () => _callGeminiForReceipts(apiKey, parts, opts) : null,
     backup: key
@@ -4280,7 +4280,7 @@ async function loadReceiptFileForScan(receiptRef) {
  */
 async function readShippingFieldsFromReceipt(receiptRef, { signal } = {}) {
   const apiKey = TAX_CENTER.settings?.geminiKey || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) throw new Error('add your Gemini or OpenRouter key in the Tax Centre config first');
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) throw new Error('add your Gemini or OpenRouter key in Settings › AI and receipts first');
   const file = await loadReceiptFileForScan(receiptRef);
   if (!file) throw new Error('the receipt file could not be opened from your folder');
   const parsed = await _extractReceiptFromFile(apiKey, file, {
@@ -4959,7 +4959,7 @@ function renderBatchExpenseModal() {
   if (scanHint) {
     scanHint.textContent = canScan
       ? 'Reads the vendor, date, total, currency and category off every receipt you added.'
-      : 'Add a Gemini or OpenRouter key in the Tax Centre config to read receipts automatically.';
+      : 'Add a Gemini or OpenRouter key in Settings › AI and receipts to read receipts automatically.';
   }
 
   renderBatchExpenseRows();

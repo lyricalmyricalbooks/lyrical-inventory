@@ -465,6 +465,7 @@ import {
   renderDeductionGaps,
   restoreDeductionGaps,
   snoozeDeductionGap,
+  _tcRenderStatusHeaders,
 } from './features/taxcentre.js';
 import {
   reconcileApplyBigCartel,
@@ -560,7 +561,6 @@ import {
   toggleShipQueueHidden,
   clearShippoDestSelection,
   getRecentShippingOrders,
-  saveShippoApiKey,
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,
@@ -5672,7 +5672,7 @@ const SHELL_TAB_LABELS = {
   dashboard: 'Dashboard', website: 'Website Orders', manual: 'Manual Entry',
   consignment: 'Consignment', history: 'History', expenses: 'Expenses',
   pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
-  customers: 'Customers', opencall: 'Open Call', sheets: 'Sheets', backups: 'Backups',
+  customers: 'Customers', opencall: 'Open Call', sheets: 'Settings', backups: 'Backups',
   myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
   bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence', today: 'Today', help: 'Help'
 };
@@ -5832,11 +5832,9 @@ export function openMoreSheet() {
   if (!sheet || !body || !sidebar) return;
   body.replaceChildren();
   renderBookChips(document.getElementById('more-sheet-books'), { onPick: closeMoreSheet });
-  const first = document.createElement('div');
-  first.className = 'o3-grouplabel';
-  first.textContent = 'Inventory';
-  body.appendChild(first);
-  // The phone side menu opens from the header as well as from More, so Today leads it.
+  // The sidebar's six groups (Sell, Books, Orders and shipping, Money, People,
+  // Settings and help) carry their own labels. The phone side menu opens from
+  // the header as well as from More, so Today leads it.
   const home = document.createElement('button');
   home.type = 'button';
   home.className = 'snav more-sheet-home';
@@ -15604,7 +15602,7 @@ window.renderBookPaymentConfig = renderBookPaymentConfig;
 // ── PROFIT SHARING LOGIC
 let psActiveBookId = null;
 let psSimGross = null;   // "what-if" gross revenue for the live earnings preview
-let activeSettingsSubTab = 'catalog';
+let activeSettingsSubTab = 'home';
 const LETTERHEAD_KEY = 'lm-letterhead';
 const LETTERHEAD_FIELDS = ['name', 'address', 'email', 'website', 'phone', 'recipient', 'date', 'subject', 'signoff', 'signature', 'accent'];
 let letterheadLogo = '';
@@ -15710,9 +15708,80 @@ function printLetterhead() {
 
 Object.assign(window, { previewLetterhead, saveLetterhead, loadLetterheadLogo, removeLetterheadLogo, printLetterhead, formatLetterhead, pasteLetterheadPlainText });
 
+// ── Settings › All settings ────────────────────────────────────────────────
+// One row per part of the set-up, with where it stands. Parts kept on this
+// screen open their own section; the rest open the screen they still live on.
+// Statuses are read from what the other screens already show (the key cards'
+// pills, the Sheet badge), so this list can never disagree with them.
+const SETTINGS_PILL_TONE = { ok: 'is-ready', need: 'is-attention', plain: 'is-idle' };
+
+function settingsPillState(keys) {
+  const pills = keys.map((k) => document.getElementById(`tc-service-status-${k}`)).filter(Boolean);
+  const ready = pills.filter((p) => p.classList.contains('is-ready')).length;
+  const attention = pills.some((p) => p.classList.contains('is-attention'));
+  return { ready, total: pills.length, attention };
+}
+
+function settingsHomeRows() {
+  const ship = settingsPillState(['shippo', 'canadapost', 'chitchats', 'zonos']);
+  const ai = settingsPillState(['gemini']);
+  const sheetBadge = document.getElementById('sheets-badge2');
+  const sheetOn = !!sheetBadge && !sheetBadge.classList.contains('off');
+  const bookCount = BOOK_LIST.length;
+  return [
+    { title: 'Books and profit', sub: 'Book list, print runs and author profit shares',
+      status: bookCount === 1 ? '1 book' : `${bookCount} books`, tone: 'plain', part: 'catalog' },
+    { title: 'Shipping', sub: 'Shippo, Canada Post, Chit Chats and Zonos keys',
+      status: ship.total ? `${ship.ready} of ${ship.total} set` : 'Open',
+      tone: ship.attention ? 'need' : ship.ready ? 'ok' : 'plain', part: 'shipping' },
+    { title: 'AI and receipts', sub: 'Gemini key, backup key and model',
+      status: ai.ready ? 'Set' : 'Needs a key', tone: ai.ready ? 'ok' : 'need', part: 'ai' },
+    { title: 'Google Sheet', sub: 'A copy of every sale and expense',
+      status: sheetOn ? 'Connected' : 'Not connected', tone: sheetOn ? 'ok' : 'plain', part: 'sync' },
+    { title: 'Letterhead', sub: 'Letters on your own stationery', status: 'Open', tone: 'plain', part: 'letterhead' },
+    { title: 'Big Cartel', sub: 'Shop orders and stock, on the Big Cartel screen', status: 'Open', tone: 'plain', screen: 'bigcartel' },
+    { title: 'Payments', sub: 'Stripe and the card reader, on the Payments screen', status: 'Open', tone: 'plain', screen: 'reconcile' },
+    { title: 'Notifications', sub: 'What the app tells you about, on this device', status: 'Open', tone: 'plain', screen: 'notifications' },
+    { title: 'Backups', sub: 'Download or restore everything', status: 'Open', tone: 'plain', screen: 'backups' },
+  ];
+}
+
+function renderSettingsHome() {
+  const list = document.getElementById('settings-home-list');
+  if (!list) return;
+  // Fill the key cards first so their pills, which the rows read, are current.
+  _tcRenderStatusHeaders();
+  list.innerHTML = settingsHomeRows().map((r) => `
+    <button type="button" class="settings-home-row" data-action="settings.go" ${r.part ? `data-part="${r.part}"` : `data-screen="${r.screen}"`}>
+      <span class="settings-home-text"><span class="settings-home-title">${escapeHtml(r.title)}</span><span class="settings-home-sub">${escapeHtml(r.sub)}</span></span>
+      <span class="tc-service-status ${SETTINGS_PILL_TONE[r.tone]}">${escapeHtml(r.status)}</span>
+      <span class="settings-home-chev" aria-hidden="true">›</span>
+    </button>`).join('');
+}
+
+/** Open Settings at one part, e.g. from the Shipping screen's "Change in Settings". */
+function openSettingsSection(sub = 'home', focusId = '') {
+  if (isAuthor()) return;
+  switchTab('sheets');
+  switchSettingsSubTab(sub);
+  if (focusId) setTimeout(() => document.getElementById(focusId)?.focus(), 60);
+}
+window.openSettingsSection = openSettingsSection;
+
+registerActions({
+  // A row on Settings › All settings: a part of this screen, or another screen.
+  'settings.go': (el) => {
+    const { part, screen } = el.dataset;
+    if (part) switchSettingsSubTab(part);
+    else if (screen === 'notifications') openNotificationsPanel();
+    else if (screen) switchTab(screen);
+  },
+  'settings.open': (el) => openSettingsSection(el.dataset.part || 'home'),
+});
+
 function switchSettingsSubTab(subTabName) {
   activeSettingsSubTab = subTabName;
-  const subTabs = ['profit', 'catalog', 'sync', 'letterhead'];
+  const subTabs = ['home', 'profit', 'catalog', 'shipping', 'ai', 'sync', 'letterhead'];
   subTabs.forEach(tab => {
     const btn = document.getElementById('btn-subtab-' + tab);
     const sec = document.getElementById('settings-sec-' + tab);
@@ -15730,6 +15799,8 @@ function switchSettingsSubTab(subTabName) {
     updateSheetsTabUI();
   }
   if (subTabName === 'letterhead') loadLetterhead();
+  if (subTabName === 'home') renderSettingsHome();
+  if (subTabName === 'shipping' || subTabName === 'ai') _tcRenderStatusHeaders();
 }
 window.switchSettingsSubTab = switchSettingsSubTab;
 
@@ -20533,7 +20604,7 @@ function exposeLegacyInlineHandlers() {
     filterCustomers, customerPullStripe, customerPullDeeper, copyCustomerEmails,
     exportCustomersCSV, checkAppUpdate, dismissAppUpdate, fetchRecentChanges, showWhatsNew,
     initStartup, setupGate, renderWebAnalytics, updateModalAccentPreview, normalizeCountryCode,
-    getAllStores, getBookPresetSpecs, initShippingTab, getRecentShippingOrders, saveShippoApiKey,
+    getAllStores, getBookPresetSpecs, initShippingTab, getRecentShippingOrders,
     editShippoApiKey, onShippoPreFillDestChange, prefillShippingFromBigCartelOrder, onShippoBookPresetChange,
     onShippoAutoQuoteToggle, applyOrderPrefill, isCanadaPostRate,
     moneyAmount, roundShippingCharge, buildShippingChargePrediction,
@@ -20630,7 +20701,6 @@ window.prefillShippingFromBigCartelOrder = prefillShippingFromBigCartelOrder;
 window.extractBigCartelAddress = extractBigCartelAddress;
 window.getFallbackShippingPhone = getFallbackShippingPhone;
 window.initShippingTab = initShippingTab;
-window.saveShippoApiKey = saveShippoApiKey;
 window.editShippoApiKey = editShippoApiKey;
 window.onShippoPreFillDestChange = onShippoPreFillDestChange;
 window.renderCustomShippoDestPicker = renderCustomShippoDestPicker;

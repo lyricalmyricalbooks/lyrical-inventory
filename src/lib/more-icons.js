@@ -5,7 +5,7 @@ const ICON_FOR_TAB = {
   today: 'today', dashboard: 'dashboard', todo: 'todo', website: 'orders', manual: 'order',
   consignment: 'consignment', history: 'history', expenses: 'expenses', intel: 'intel', pos: 'sell',
   taxcenter: 'tax', reconcile: 'payments', qrcodes: 'qr', customers: 'customers', opencall: 'opencall',
-  webanalytics: 'analytics', shipping: 'shipping', sheets: 'sheets', bigcartel: 'bigcartel',
+  webanalytics: 'analytics', shipping: 'shipping', sheets: 'settings', bigcartel: 'bigcartel',
   backups: 'backups', help: 'help',
 };
 

@@ -267,7 +267,7 @@ export function assessLiveShippingReadiness({
     } else {
       add('duty', 'U.S. duty', CHECK_WARN,
         'No prepaid duty for this parcel. It can still be sent, but the customer is billed on delivery and may refuse it.',
-        'Save a Zonos Account Key in the Tax Centre\u2019s Zonos section to make this automatic, or buy the declaration in the Zonos Prepay app.');
+        'Save a Zonos Account Key in Settings \u203a Shipping, in the Zonos part to make this automatic, or buy the declaration in the Zonos Prepay app.');
     }
   }
 

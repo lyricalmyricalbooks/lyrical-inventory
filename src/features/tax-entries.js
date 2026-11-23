@@ -803,7 +803,7 @@ async function snapReceiptChosen(input) {
   }
   const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
   if (!hasKey) {
-    showToast('📷 Photo attached. To have it read automatically, add an AI key in Tax Centre → Integrations.', 'warn', 6000);
+    showToast('📷 Photo attached. To have it read automatically, add an AI key in Settings › AI and receipts.', 'warn', 6000);
     return;
   }
   await scanReceiptWithAI();

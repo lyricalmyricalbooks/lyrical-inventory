@@ -3930,46 +3930,10 @@ function getRecentShippingOrders() {
   return orders;
 }
 
-function saveShippoApiKey() {
-  const keyInput = $('ship-api-key-input');
-  if (!keyInput) return;
-  const token = keyInput.value.trim();
-  if (!token) {
-    showToast('⚠️ Enter a valid Shippo token', 'warn');
-    return;
-  }
-
-  if (!TAX_CENTER.settings) {
-    TAX_CENTER.settings = { baseCurrency: 'CAD', geminiKey: '' };
-  }
-  TAX_CENTER.settings.shippoKey = token;
-
-  saveTaxCenter()
-    .then(() => {
-      showToast('✓ Shippo API key saved');
-      keyInput.value = '';
-      initShippingTab();
-      // Sync to Tax Center UI if present
-      const tcKeyEl = $('tc-shippo-key');
-      if (tcKeyEl) tcKeyEl.value = token;
-    })
-    .catch(e => {
-      console.error(e);
-      showToast('❌ Failed to save API key', 'err');
-    });
-}
-
+// The Shippo key is typed once, in Settings › Shipping, which the Tax Centre's
+// postage import reads too. This screen only shows whether it is there.
 function editShippoApiKey() {
-  const setupGroup = $('ship-key-setup-group');
-  const activeGroup = $('ship-key-active-group');
-  const keyInput = $('ship-api-key-input');
-
-  if (setupGroup) setupGroup.style.display = 'flex';
-  if (activeGroup) activeGroup.style.display = 'none';
-  if (keyInput) {
-    keyInput.value = TAX_CENTER.settings?.shippoKey || '';
-    keyInput.focus();
-  }
+  window.openSettingsSection?.('shipping', 'tc-shippo-key');
 }
 
 // ─── One-touch order → parcel → quote ─────────────────────────────────────
@@ -5221,7 +5185,7 @@ async function verifyShippedTrackingPinsHandler() {
   const isTest = !!TAX_CENTER.settings?.cpTestMode;
 
   if (!apiKey || !apiSecret) {
-    showToast('⚠ Add your Canada Post API key and secret in Tax Centre settings first', 'warn');
+    showToast('⚠ Add your Canada Post API key and secret in Settings › Shipping first', 'warn');
     return;
   }
 
@@ -5849,7 +5813,7 @@ async function calculateChitChatsRatesHandler() {
   const account = chitChatsAccount();
   card.style.display = 'block';
   if (!account.clientId || !account.token || TAX_CENTER.settings?.ccEnabled === false) {
-    renderChitChatsPortal('Connect and enable Chit Chats in Tax Centre → Integrations first.'); return;
+    renderChitChatsPortal('Connect and turn on Chit Chats in Settings › Shipping first.'); return;
   }
   if (!navigator.onLine) { renderChitChatsPortal('You are offline. Saved labels remain available; rates and purchases need a connection.'); return; }
   _ccBusy = true;
@@ -7029,7 +6993,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
 
   const billingWarning = isTest
     ? 'Sandbox Test Mode is on, but Canada Post serves test and live from the same address. '
-      + 'If the key saved in Tax Centre is a production key, this buys a real label and charges your account.'
+      + 'If the key saved in Settings is a production key, this buys a real label and charges your account.'
     : 'This charges your live Canada Post account and cannot be undone from here — '
       + 'a label bought by mistake has to be refunded through Canada Post.';
 
@@ -7359,7 +7323,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   <strong style="font-size:var(--text-sm);color:var(--text);">This U.S. parcel has no duty declaration, so the duty is not paid.</strong><br>
                   U.S. customs can hold the parcel or bill your customer for the duty on delivery.
                   Buy a declaration in the Zonos Prepay app and add its ID before you drop this parcel
-                  off, or save your Zonos account key in Tax Centre so every future U.S. label gets one
+                  off, or save your Zonos account key in Settings so every future U.S. label gets one
                   automatically.
                 </div>
               </div>
@@ -8464,7 +8428,7 @@ function renderCarrierTiles() {
     // Canada Post still answers without an account, from its estimate table.
     if (status) status.textContent = !off ? ''
       : key === 'canadapost' ? 'Not connected: rough estimates only'
-        : 'Not connected yet. Add it in Tax Centre, Integrations.';
+        : 'Not connected yet. Add it in Settings, Shipping.';
     const price = _carrierTilePrices[key];
     const fresh = !!price && price.fingerprint === fingerprint;
     const priceEl = tile.querySelector('.ship-carrier-price');
@@ -9687,7 +9651,7 @@ async function scanAllPostageReceipts() {
     return;
   }
   if (!TAX_CENTER.settings?.geminiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) {
-    showToast('Add your Gemini or OpenRouter key in the Tax Centre config to read receipts', 'warn', 4200);
+    showToast('Add your Gemini or OpenRouter key in Settings › AI and receipts to read receipts', 'warn', 4200);
     return;
   }
 
@@ -12104,7 +12068,6 @@ export {
   toggleShipQueueHidden,
   clearShippoDestSelection,
   getRecentShippingOrders,
-  saveShippoApiKey,
   editShippoApiKey,
   onShippoPreFillDestChange,
   onShippoBookPresetChange,

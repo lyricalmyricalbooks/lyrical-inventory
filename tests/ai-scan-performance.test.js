@@ -556,7 +556,7 @@ describe('Scan errors the shop owner can act on', () => {
 
   it('points a rejected key at the setting that fixes it', () => {
     expect(friendly()(new Error('API key not valid. Please pass a valid API key.')))
-      .toMatch(/key.*config/i);
+      .toMatch(/key.*Settings/i);
   });
 
   it('tells the owner to wait when the reader is over its limit', () => {

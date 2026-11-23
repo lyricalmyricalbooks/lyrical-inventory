@@ -21729,3 +21729,28 @@ a.notif-action:hover { text-decoration: underline; }
   .tc-rule-row-cat{grid-column:1 / -1;grid-row:2;min-height:44px;}
   .tc-rule-row .btn{min-height:44px;}
 }
+
+/* ── Settings › All settings ─────────────────────────────────────────────
+   One list of every part of the set-up, each with where it stands. Riso
+   Press card (ink outline, hard shadow) holding full-width tap rows. */
+.settings-home-intro { margin: 0 0 var(--space-3); font-size: var(--text-sm); line-height: 1.5; color: var(--content-secondary); max-width: 62ch; }
+.settings-home-list { padding: 0; overflow: hidden; }
+.settings-home-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  width: 100%; min-height: 60px; padding: var(--space-3) var(--space-4);
+  background: transparent; border: 0; border-bottom: var(--stroke-hair) solid var(--border-subtle);
+  color: var(--content-primary); font: inherit; text-align: left; cursor: pointer;
+}
+.settings-home-row:last-child { border-bottom: 0; }
+.settings-home-row:hover { background: var(--surface-inset); }
+.settings-home-row:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.settings-home-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settings-home-title { font-size: var(--text-base); font-weight: 700; }
+.settings-home-sub { font-size: var(--text-sm); color: var(--content-muted); line-height: 1.35; }
+.settings-home-row .tc-service-status { flex: none; }
+.settings-home-chev { flex: none; color: var(--content-muted); font-size: var(--text-lg); line-height: 1; }
+.settings-save-row { display: flex; justify-content: flex-end; padding: var(--space-4); border-top: var(--stroke-hair) solid var(--border-subtle); }
+.tc-moved-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); margin: 0 0 var(--space-4); font-size: var(--text-sm); color: var(--content-secondary); }
+@media (max-width: 768px) {
+  .settings-save-row .btn { width: 100%; }
+}

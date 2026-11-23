@@ -482,13 +482,13 @@ export function friendlyOpenRouterError(e) {
   // The model name is typed by hand, so a wrong one is the likeliest mistake
   // here and deserves to be named rather than shown as a bare 404.
   if (NO_PROVIDER.test(raw)) {
-    return 'no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in the Tax Centre config';
+    return 'no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in Settings › AI and receipts';
   }
   if (status === 404 || /no (?:such )?model|model not found|not a valid model/i.test(raw)) {
-    return 'the backup service does not have a model by that name — check the model name in the Tax Centre config';
+    return 'the backup service does not have a model by that name — check the model name in Settings › AI and receipts';
   }
   if (status === 401 || status === 403 || /invalid api key|no auth credentials|unauthor/i.test(raw)) {
-    return 'the backup key was rejected — check it in the Tax Centre config';
+    return 'the backup key was rejected — check it in Settings › AI and receipts';
   }
   if (status === 402 || /credit|insufficient|quota|billing/i.test(raw)) {
     return 'the backup account is out of credit';

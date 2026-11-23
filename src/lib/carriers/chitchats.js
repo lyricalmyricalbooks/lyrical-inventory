@@ -30,7 +30,7 @@ export async function executeChitChatsProxy({ endpoint, method = 'GET', payload 
   if (result.error) throw new Error(String(result.error));
   if (!result.ok) {
     const error = new Error(result.status === 429 ? `Chit Chats is busy. Wait ${result.retryAfter || 'a few'} seconds before checking again.`
-      : [401, 403].includes(result.status) ? 'Chit Chats did not accept this client ID and API token. Check them in Tax Centre → Integrations, and that the staging switch matches the account.'
+      : [401, 403].includes(result.status) ? 'Chit Chats did not accept this client ID and API token. Check them in Settings › Shipping, and that the staging switch matches the account.'
       : `Chit Chats (${result.status || 'proxy unavailable'}): ${chitChatsErrorMessage(result.data, result.text || 'Update your Apps Script deployment and check your account settings.')}`);
     error.status = result.status; throw error;
   }

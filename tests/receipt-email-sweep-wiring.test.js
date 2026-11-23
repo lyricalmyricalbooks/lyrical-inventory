@@ -297,6 +297,6 @@ describe('health, boot, and the Check now button', () => {
   });
 
   it('marks the Tax Centre tab for the receipt scan too', () => {
-    expect(indexContent.match(/data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"/g)).toHaveLength(1);
+    expect(indexContent.match(/data-health-badge="stripe-fees,receipt-scan"/g)).toHaveLength(1);
   });
 });

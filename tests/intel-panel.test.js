@@ -174,8 +174,8 @@ describe('when a question cannot be asked', () => {
     returns: 'intelBlocker',
   })();
 
-  it('points at the Tax Centre when no key is set', () => {
-    expect(blocker({ settings: {} })).toMatch(/Tax Centre/);
+  it('points at Settings when no key is set', () => {
+    expect(blocker({ settings: {} })).toMatch(/Settings/);
   });
 
   it('explains the offline case without losing the thread', () => {

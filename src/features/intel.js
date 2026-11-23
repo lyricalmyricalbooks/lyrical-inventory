@@ -393,7 +393,7 @@ function intelBlocker() {
   // mean a publisher whose Google key has been rotated or restricted cannot use
   // the panel at all, which is the exact situation the backup exists for.
   if (!TAX_CENTER?.settings?.geminiKey && !backupProvider()) {
-    return 'Add your AI key in the Tax Centre settings and this panel can start answering questions.';
+    return 'Add your AI key in Settings and this panel can start answering questions.';
   }
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
     return 'You are offline. Everything already asked is still here, but a new question needs a connection.';
