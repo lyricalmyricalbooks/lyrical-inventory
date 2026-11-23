@@ -448,6 +448,6 @@ describe('The checklist answers the same from either tab', () => {
       'duty'
     ).fix;
     expect(fix).not.toContain('→');
-    expect(fix).toMatch(/Tax Centre’s Zonos section/);
+    expect(fix).toMatch(/Settings › Shipping, in the Zonos part/);
   });
 });

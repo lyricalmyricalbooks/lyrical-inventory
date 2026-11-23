@@ -251,7 +251,7 @@ export function systemicReceiptFailure(errorOrMessage) {
   if (status === 429 && /for today/i.test(message)) return `The AI reader is out of allowance for today (${message}). Scan again once it resets.`;
   if (status === 429) return `Your AI key has hit its usage limit for now (${message}). Wait a few minutes, then scan again.`;
   if ([401, 402, 403].includes(status) || APP_AI_REFUSAL.test(message)) {
-    return `Your AI key was refused (${message}). Check the key in the Tax Centre settings, then scan again.`;
+    return `Your AI key was refused (${message}). Check the key in Settings, then scan again.`;
   }
   return null;
 }

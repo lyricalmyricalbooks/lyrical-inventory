@@ -460,7 +460,7 @@ export async function askGemini(apiKey, { body, read, ladder = null, singleAttem
 function _geminiNoModelError(lastErr) {
   return Object.assign(new Error(
     'Google did not offer any of its reading models to this AI key on its free plan. '
-    + 'Check the key in Google AI Studio, or add an OpenRouter backup key in the Tax Centre config'
+    + 'Check the key in Google AI Studio, or add an OpenRouter backup key in Settings › AI and receipts'
   ), { __alreadyFriendly: true, status: 404, cause: lastErr });
 }
 
@@ -537,11 +537,11 @@ export function _friendlyScanError(e) {
   // one, or it carries website restrictions that do not list this app. Neither
   // is fixed by "check your key", so the message names both.
   if (/UNAUTHENTICATED|invalid authentication credentials|Expected OAuth 2/i.test(raw)) {
-    return 'Google would not accept that key — if you made a new one, paste it into the Tax Centre config; '
+    return 'Google would not accept that key — if you made a new one, paste it into Settings › AI and receipts; '
       + 'if the key has website restrictions, they have to allow this app';
   }
   if (/API key|api_key|PERMISSION_DENIED|unregistered|not valid/i.test(raw)) {
-    return 'your AI key was rejected — check it in the Tax Centre config';
+    return 'your AI key was rejected — check it in Settings › AI and receipts';
   }
   // The key is fine but the API it needs was never switched on for its project.
   // A different fix again, and one nothing else here would hint at.

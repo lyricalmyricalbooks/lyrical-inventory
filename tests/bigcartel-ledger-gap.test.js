@@ -199,14 +199,15 @@ describe('the ledger entry a recovered order becomes', () => {
     expect(buildBigCartelOrderEntry(gap, { qty: 2.7 }).qty).toBe(2);
   });
 
-  // The anti-divergence guard. applyOne() in src/main.js is the path a scanned
-  // order takes; an order added from the review queue must be indistinguishable
-  // from one, or the two identities problem this feature fixes comes straight
-  // back. Read the real source so the test fails if applyOne grows a field.
+  // The anti-divergence guard. applyOne() in src/features/website-orders.js is
+  // the path a scanned order takes; an order added from the review queue must
+  // be indistinguishable from one, or the two identities problem this feature
+  // fixes comes straight back. Read the real source so the test fails if
+  // applyOne grows a field.
   it('writes every field applyOne writes', () => {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/main.js'), 'utf8');
-    const start = mainJs.indexOf('export function applyOne(');
+    const mainJs = fs.readFileSync(path.resolve(__dirname, '../src/features/website-orders.js'), 'utf8');
+    const start = mainJs.indexOf('\nfunction applyOne(');
     expect(start).toBeGreaterThan(-1);
     // applyOne lists the shipping details in `extra` and hands the core
     // fields to the shared sale step (addSaleToState) by name.

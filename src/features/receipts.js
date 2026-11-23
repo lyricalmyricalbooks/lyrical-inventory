@@ -3705,7 +3705,7 @@ function _geminiThinkingPatch(mode, budget) {
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
-  if (!apiKey && !key) throw new Error('Add a Gemini or OpenRouter key in the Tax Centre config');
+  if (!apiKey && !key) throw new Error('Add a Gemini or OpenRouter key in Settings › AI and receipts');
   return askGeminiOrBackup({
     google: apiKey ? () => _callGeminiForReceipts(apiKey, parts, opts) : null,
     backup: key
@@ -4280,7 +4280,7 @@ async function loadReceiptFileForScan(receiptRef) {
  */
 async function readShippingFieldsFromReceipt(receiptRef, { signal } = {}) {
   const apiKey = TAX_CENTER.settings?.geminiKey || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) throw new Error('add your Gemini or OpenRouter key in the Tax Centre config first');
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) throw new Error('add your Gemini or OpenRouter key in Settings › AI and receipts first');
   const file = await loadReceiptFileForScan(receiptRef);
   if (!file) throw new Error('the receipt file could not be opened from your folder');
   const parsed = await _extractReceiptFromFile(apiKey, file, {
@@ -4959,7 +4959,7 @@ function renderBatchExpenseModal() {
   if (scanHint) {
     scanHint.textContent = canScan
       ? 'Reads the vendor, date, total, currency and category off every receipt you added.'
-      : 'Add a Gemini or OpenRouter key in the Tax Centre config to read receipts automatically.';
+      : 'Add a Gemini or OpenRouter key in Settings › AI and receipts to read receipts automatically.';
   }
 
   renderBatchExpenseRows();
@@ -5619,7 +5619,10 @@ async function _postBatchToProjectLedger(rows) {
     let fxNote = '';
     let fxRate = null;
     if (origCurrency !== native) {
-      const rate = _fxRateCache[`${origCurrency}_${native}`];
+      // The rate for the receipt's own date, as the business side of this sheet
+      // and the single-expense form use. Today's rate would value a back-dated
+      // receipt at the wrong amount.
+      const rate = await resolveExpenseRate(origCurrency, row.date || today(), native).catch(() => 0);
       if (rate) { amount = origAmount * rate; fxRate = rate; fxNote = ` (Paid ${origCurrency} ${origAmount.toFixed(2)})`; }
       else { currency = origCurrency; }
     }
@@ -7359,7 +7362,9 @@ async function submitExpense() {
   // amount — the previous currency's rate can still be sitting there while a
   // new lookup is in flight, and the form can open on a remembered foreign
   // currency without ever having fetched one. In that case look it up now.
-  let expenseFxRate = (_expenseFxRateCur === cur) ? _expenseFxRate : null;
+  // The rate fetched while the form was open is today's, so it only stands in
+  // for an expense dated today; a back-dated one is looked up for its own date.
+  let expenseFxRate = (_expenseFxRateCur === cur && date >= today()) ? _expenseFxRate : null;
   if (cur !== native && !expenseFxRate && rawAmount) {
     try { expenseFxRate = (await resolveExpenseRate(cur, date, native)) || null; } catch (_) { expenseFxRate = null; }
   }

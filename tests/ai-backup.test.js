@@ -69,7 +69,7 @@ describe('receipt fallback', () => {
     const h = reader(async () => { throw Object.assign(new Error('Bad key'), { status: 400 }); });
     h.backup.mockRejectedValue(Object.assign(new Error('No endpoints found that can handle this'), { status: 404 }));
     const error = await h.call('g', []).catch(e => e);
-    expect(error.message).toBe('Google: friendly(Bad key). OpenRouter: no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in the Tax Centre config');
+    expect(error.message).toBe('Google: friendly(Bad key). OpenRouter: no OpenRouter provider currently supports everything this request needs — retry, or choose a compatible model in Settings › AI and receipts');
     expect(error.status).toBe(404);
     expect(error.classifyAs).toMatch(/^OpenRouter: /);
     expect(error.classifyAs).not.toMatch(/Google/);

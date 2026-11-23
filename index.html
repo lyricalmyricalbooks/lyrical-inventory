@@ -363,6 +363,7 @@
   <symbol id="ic-analytics" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></symbol>
   <symbol id="ic-sheets" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18"/><path d="M3 9h18M3 15h18M9 3v18"/></symbol>
   <symbol id="ic-bigcartel" viewBox="0 0 24 24"><path d="M5 8h14l-1 13H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+  <symbol id="ic-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></symbol>
   <symbol id="ic-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/></symbol>
 </svg>
 
@@ -440,35 +441,48 @@
     <span class="app-switch-seg is-current" aria-current="page"><span class="app-switch-label">Inventory</span></span>
   </div>
 
-  <nav class="pub-nav" aria-label="Books">
-    <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic" data-ink="▦">▦</span><span class="snav-label">Dashboard</span></button>
-    <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic" data-ink="!">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
-    <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic" data-ink="WO">🛍</span><span class="snav-label">Website orders</span></button>
+  <!-- Every tool, in six groups by the job it does. The phone's "All tools"
+       sheet is copied from these, so the groups read the same on both. -->
+  <div class="o3-grouplabel">Sell</div>
+  <nav class="pub-nav" aria-label="Sell">
+    <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic" data-ink="$">🛒</span><span class="snav-label">Event POS</span></button>
     <button type="button" class="snav" title="Manual entry" onclick="switchTab('manual')"><span class="snav-ic" data-ink="✎">✎</span><span class="snav-label">Manual entry</span></button>
-    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic" data-ink="CS">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
-    <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic" data-ink="HI">🕘</span><span class="snav-label">History</span></button>
-    <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic" data-ink="EX">🧾</span><span class="snav-label">Expenses</span></button>
+    <button type="button" class="snav" title="QR Codes" onclick="switchTab('qrcodes')"><span class="snav-ic" data-ink="QR">📱</span><span class="snav-label">QR Codes</span></button>
   </nav>
 
-  <div class="o3-grouplabel">Tools</div>
-  <nav class="pub-nav" aria-label="Tools">
-    <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic" data-ink="IN">💬</span><span class="snav-label">Intelligence</span></button>
-    <button type="button" class="snav" title="Event POS" onclick="switchTab('pos')"><span class="snav-ic" data-ink="$">🛒</span><span class="snav-label">Event POS</span></button>
-    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic" data-ink="TX">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan" aria-label="A shipping service is not answering" hidden></span></button>
+  <div class="o3-grouplabel">Books</div>
+  <nav class="pub-nav" aria-label="Books">
+    <button type="button" class="snav" title="Dashboard" onclick="switchTab('dashboard')"><span class="snav-ic" data-ink="▦">▦</span><span class="snav-label">Dashboard</span></button>
+    <button type="button" class="snav" title="History" onclick="switchTab('history')"><span class="snav-ic" data-ink="HI">🕘</span><span class="snav-label">History</span></button>
+    <button type="button" class="snav" title="Consignment" onclick="switchTab('consignment')"><span class="snav-ic" data-ink="CS">🏪</span><span class="snav-label">Consignment</span><span class="health-badge" data-health-badge="stripe" aria-label="Stripe is not answering, so invoice payments may be missed" hidden></span></button>
+    <button type="button" class="snav" id="todo-sidebar-btn" title="To-do" onclick="switchTab('todo')"><span class="snav-ic" data-ink="!">✅</span><span class="snav-label">To-do</span><span class="nav-badge todo-nav-badge" aria-label="things needing attention" hidden></span></button>
+  </nav>
 
-    <div class="o3-subgrouplabel">Money</div>
+  <div class="o3-grouplabel">Orders and shipping</div>
+  <nav class="pub-nav" aria-label="Orders and shipping">
+    <button type="button" class="snav" title="Website orders" onclick="switchTab('website')"><span class="snav-ic" data-ink="WO">🛍</span><span class="snav-label">Website orders</span></button>
+    <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic" data-ink="BC">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
+    <button type="button" class="snav" title="Shipping" onclick="switchTab('shipping')"><span class="snav-ic" data-ink="SH">📦</span><span class="snav-label">Shipping</span></button>
+  </nav>
+
+  <div class="o3-grouplabel">Money</div>
+  <nav class="pub-nav" aria-label="Money">
     <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic" data-ink="PY">💳</span><span class="snav-label">Payments</span></button>
-    <button type="button" class="snav" title="QR Codes" onclick="switchTab('qrcodes')"><span class="snav-ic" data-ink="QR">📱</span><span class="snav-label">QR Codes</span></button>
+    <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic" data-ink="EX">🧾</span><span class="snav-label">Expenses</span></button>
+    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic" data-ink="TX">⚖️</span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="stripe-fees,receipt-scan" aria-label="A Tax Centre service is not answering" hidden></span></button>
+  </nav>
 
-    <div class="o3-subgrouplabel">Audience</div>
+  <div class="o3-grouplabel">People</div>
+  <nav class="pub-nav" aria-label="People">
     <button type="button" class="snav" title="Customers" onclick="switchTab('customers')"><span class="snav-ic" data-ink="CU">👥</span><span class="snav-label">Customers</span></button>
     <button type="button" class="snav" title="Open Call" onclick="switchTab('opencall')"><span class="snav-ic" data-ink="OC">📣</span><span class="snav-label">Open Call</span><span class="nav-badge" id="oc-nav-badge" style="display:none;margin-left:8px;">0</span></button>
     <button type="button" class="snav" id="sidebar-webanalytics-btn" title="Web Analytics" onclick="switchTab('webanalytics')"><span class="snav-ic" data-ink="WA">📈</span><span class="snav-label">Web Analytics</span></button>
+    <button type="button" class="snav" title="Intelligence" onclick="switchTab('intel')"><span class="snav-ic" data-ink="IN">💬</span><span class="snav-label">Intelligence</span></button>
+  </nav>
 
-    <div class="o3-subgrouplabel">Data</div>
-    <button type="button" class="snav" title="Shipping" onclick="switchTab('shipping')"><span class="snav-ic" data-ink="SH">📦</span><span class="snav-label">Shipping</span></button>
-    <button type="button" class="snav" title="Sheets" onclick="switchTab('sheets')"><span class="snav-ic" data-ink="GS">⚙️</span><span class="snav-label">Sheets</span></button>
-    <button type="button" class="snav" id="sidebar-bigcartel-btn" title="Big Cartel" onclick="switchTab('bigcartel')"><span class="snav-ic" data-ink="BC">🏪</span><span class="snav-label">Big Cartel</span><span class="bc-gap-badge pill red" aria-label="orders missing from your ledger" hidden></span><span class="health-badge" data-health-badge="bigcartel" aria-label="Big Cartel is not answering" hidden></span></button>
+  <div class="o3-grouplabel">Settings and help</div>
+  <nav class="pub-nav" aria-label="Settings and help">
+    <button type="button" class="snav" id="sidebar-settings-btn" title="Settings" onclick="switchTab('sheets')"><span class="snav-ic" data-ink="⚙">⚙️</span><span class="snav-label">Settings</span><span class="health-badge" data-health-badge="shippo,canadapost,shipping-email" aria-label="A shipping service is not answering" hidden></span></button>
     <button type="button" class="snav" title="Backups" onclick="switchTab('backups')"><span class="snav-ic" data-ink="BK">💾</span><span class="snav-label">Backups</span></button>
     <button type="button" class="snav" title="Help" onclick="switchTab('help')"><span class="snav-ic" data-ink="?">❓</span><span class="snav-label">Help</span></button>
   </nav>
@@ -926,7 +940,7 @@
     <div class="intel-disclosure-ic" aria-hidden="true">🔒</div>
     <div class="intel-disclosure-body">
       <strong>Before you start — where your figures go</strong>
-      <p>To answer a question, this screen sends the rows it needs — your sales, costs and takings — to Google's Gemini service, using the key you saved in the Tax Centre. Nothing goes anywhere until you ask something, and only you can open this screen.</p>
+      <p>To answer a question, this screen sends the rows it needs — your sales, costs and takings — to Google's Gemini service, using the key you saved in Settings. Nothing goes anywhere until you ask something, and only you can open this screen.</p>
       <button type="button" class="btn gold sm sys-target" onclick="acceptIntelDisclosure()">I understand</button>
     </div>
   </div>
@@ -2883,7 +2897,7 @@
     <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')"><span class="lead-emoji" aria-hidden="true">📊 </span>Expenses &amp; Ledger</button>
     <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')"><span class="lead-emoji" aria-hidden="true">🗂️ </span>Receipts Vault</button>
     <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')"><span class="lead-emoji" aria-hidden="true">🔎 </span>Missing Costs</button>
-    <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')"><span class="lead-emoji" aria-hidden="true">🔌 </span>Integrations &amp; APIs</button>
+    <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')"><span class="lead-emoji" aria-hidden="true">💳 </span>Stripe fees</button>
     <button class="settings-sub-tab tc-email-import-tab" id="btn-tctab-email-import" role="tab" aria-selected="false" aria-controls="tc-sec-email-import" tabindex="-1" onclick="switchTaxCenterSubTab('email-import')"><span class="lead-emoji" aria-hidden="true">📧 </span>Email Receipt Import<span id="email-inbox-badge" class="tc-email-import-badge" style="display:none;"></span></button>
   </div>
 
@@ -3422,298 +3436,9 @@
   </div>
 
   <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
-    <!-- INTEGRATIONS & API SERVICES -->
-    <div class="card tc-integrations-card">
-      <div class="tc-integrations-head">
-        <div class="tc-integrations-icon-badge" aria-hidden="true">⚡</div>
-        <div class="tc-integrations-headings">
-          <div class="tc-integrations-title">
-            <span>Integrations &amp; API Services</span>
-          </div>
-          <div class="tc-integrations-sub">
-            Connect external cloud services to automate receipt AI extraction, carrier postage syncing, international duties calculation, and Stripe processing fees.
-          </div>
-        </div>
-        <div class="tc-integrations-summary" id="tc-integrations-summary" aria-live="polite"></div>
-      </div>
-
+    <p class="tc-moved-note">Your shipping and AI keys now live in one place, Settings. <button type="button" class="btn sm" data-action="settings.open" data-part="shipping">Open Settings</button></p>
+    <div class="card tc-integrations-card" id="tc-stripe-card">
       <div class="tc-integrations-list">
-
-        <!-- Gemini API Section -->
-        <div class="tc-integration-section" id="tc-integration-card-gemini">
-          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
-            <div class="tc-service-header-left">
-              <div class="tc-service-badge badge-gemini" aria-hidden="true">♊</div>
-              <div class="tc-service-meta">
-                <strong class="tc-service-title">AI Assistant</strong>
-                <div class="tc-service-desc">Gemini first, with OpenRouter backup for chat, receipts, invoices and email.</div>
-              </div>
-            </div>
-            <div class="tc-service-header-right">
-              <span class="tc-service-status is-idle" id="tc-service-status-gemini">Not connected</span>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini" aria-hidden="true">▾</span>
-            </div>
-          </div>
-          <div class="oc-collapse-body" id="tc-integration-body-gemini">
-            <div class="tc-form-grid">
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-api-key">Gemini API Key</label>
-                <input type="password" id="tc-api-key" class="tc-form-input" placeholder="AI Studio key (AI_KEY)…" autocomplete="off">
-                <div class="tc-form-hint">Paste the key from Google AI Studio. It is stored on your own account, never shared.</div>
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
-                <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
-                <div class="tc-form-hint">Save your OpenRouter key here once. Intelligence chat, receipt and invoice scans, email extraction and postage readers use it automatically when Gemini cannot answer or runs out of quota. The key is saved in your app account settings.</div>
-                <div class="tc-form-actions-row">
-                  <button type="button" id="tc-test-backup-btn" class="btn sm" onclick="testOpenRouterConnectionFromSettings()">Test OpenRouter</button>
-                </div>
-                <div id="tc-backup-test-status" class="tc-form-hint" role="status" aria-live="polite">Tests your key and sends one tiny request through the selected model, or OpenRouter’s free router when the model is blank.</div>
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
-                <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="openrouter/free (automatic default)" autocomplete="off" spellcheck="false">
-                <div class="tc-form-hint">Optional. Leave blank to select an available free model automatically. A custom OpenRouter model uses that model’s pricing and must support tools for chat, and images and structured output for scans. Keep Intelligence on Auto for automatic fallback.</div>
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-base-cur">Base Currency</label>
-                <select id="tc-base-cur" class="tc-form-select" onchange="saveTaxCenterSettings()" disabled>
-                  <option value="CAD">CAD (Default)</option>
-                </select>
-                <div class="tc-form-hint">Every imported receipt is converted into this currency.</div>
-              </div>
-            </div>
-            <div class="tc-form-actions-row">
-              <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Shippo API Section -->
-        <div class="tc-integration-section" id="tc-integration-card-shippo">
-          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
-            <div class="tc-service-header-left">
-              <div class="tc-service-badge badge-shippo" aria-hidden="true">📦</div>
-              <div class="tc-service-meta">
-                <strong class="tc-service-title">Shippo Live Import</strong>
-                <div class="tc-service-desc">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
-              </div>
-            </div>
-            <div class="tc-service-header-right">
-              <span class="tc-service-status is-idle" id="tc-service-status-shippo">Not connected</span>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo" aria-hidden="true">▾</span>
-            </div>
-          </div>
-          <div class="oc-collapse-body" id="tc-integration-body-shippo">
-            <div class="tc-form-grid">
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-shippo-key">Shippo Live API Key</label>
-                <input type="password" id="tc-shippo-key" class="tc-form-input" placeholder="shippo_live_…" autocomplete="off">
-                <div class="tc-form-hint">Found in Shippo under Settings → API. Only live keys import real postage.</div>
-              </div>
-            </div>
-            <div class="tc-form-actions-row">
-              <button class="btn gold outline" id="tc-shippo-btn" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
-            </div>
-            <div id="tc-shippo-status" class="tc-status-msg">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
-
-          </div>
-        </div>
-
-        <!-- Zonos API Section -->
-        <div class="tc-integration-section" id="tc-integration-card-zonos">
-          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-zonos" onclick="toggleIntegrationSection('zonos')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('zonos');}">
-            <div class="tc-service-header-left">
-              <div class="tc-service-badge badge-zonos" aria-hidden="true">🌐</div>
-              <div class="tc-service-meta">
-                <strong class="tc-service-title">Zonos Cross-Border Duties &amp; Taxes</strong>
-                <div class="tc-service-desc">Calculate real-time customs duties, import VAT/GST, carrier clearance fees, and landed costs for international orders.</div>
-              </div>
-            </div>
-            <div class="tc-service-header-right">
-              <span class="tc-service-status is-idle" id="tc-service-status-zonos">Not connected</span>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-zonos" aria-hidden="true">▾</span>
-            </div>
-          </div>
-          <div class="oc-collapse-body" id="tc-integration-body-zonos">
-            <div class="tc-form-grid">
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-zonos-key">Zonos Live API Key <span class="tc-form-label-note">credentialToken</span></label>
-                <input type="password" id="tc-zonos-key" class="tc-form-input" placeholder="credential_live_…" autocomplete="off">
-                <div class="tc-form-hint">Used for every live duty and landed-cost quote.</div>
-              </div>
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="tc-zonos-account-key">Zonos Account Key <span class="tc-form-label-note">automates U.S. duty</span></label>
-                <input type="text" id="tc-zonos-account-key" class="tc-form-input" placeholder="Zonos Dashboard → Settings → Integrations" autocomplete="off" oninput="renderZonosAccountKeyHint()">
-                <div class="tc-form-hint" id="tc-zonos-account-key-hint">Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.</div>
-              </div>
-            </div>
-            <div class="tc-form-actions-row" style="flex-wrap:wrap;gap:12px;align-items:center;">
-              <div style="display:flex;flex-direction:column;gap:6px;">
-                <label class="tc-toggle-wrap">
-                  <input type="checkbox" id="tc-zonos-enabled" checked>
-                  <span>Enable Duties API</span>
-                </label>
-                <label class="tc-toggle-wrap">
-                  <input type="checkbox" id="tc-zonos-strict-prepay" checked>
-                  <span>Require Zonos Declaration ID for all US shipments</span>
-                </label>
-              </div>
-              <div class="tc-form-actions-buttons" style="margin-left:auto;">
-                <button id="tc-zonos-test-btn" class="btn gold outline" onclick="testZonosConnectionHandler()">Test Connection</button>
-                <button id="tc-save-zonos-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
-              </div>
-            </div>
-            <div class="tc-form-hint" style="margin-top:4px;">When checked, US label purchases are strictly blocked if no 13-character Declaration ID or Verified Key is present, preventing accidental unpaid duty (DDU) shipments.</div>
-            <div id="tc-zonos-status" class="tc-status-msg"></div>
-          </div>
-        </div>
-
-        <!-- Canada Post Direct API Section -->
-        <div class="tc-integration-section" id="tc-integration-card-canadapost">
-          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-canadapost" onclick="toggleIntegrationSection('canadapost')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('canadapost');}">
-            <div class="tc-service-header-left">
-              <div class="tc-service-badge badge-canadapost" aria-hidden="true">🇨🇦</div>
-              <div class="tc-service-meta">
-                <strong class="tc-service-title">Canada Post Direct API</strong>
-                <div class="tc-service-desc">Official Canada Post Web Services for direct live rate quotes, Small Business / Contract pricing, and tracking.</div>
-              </div>
-            </div>
-            <div class="tc-service-header-right">
-              <span class="tc-service-status is-idle" id="tc-service-status-canadapost">Not connected</span>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-canadapost" aria-hidden="true">▾</span>
-            </div>
-          </div>
-          <div class="oc-collapse-body" id="tc-integration-body-canadapost">
-            <div id="tc-cp-migration-note" class="tc-cp-migration-note"></div>
-            <p class="tc-cp-sets-intro">
-              Canada Post issues you two separate sets of keys — one for testing and one for real shipping — and both
-              are used at the same web address. Keep both here, and the <strong>Sandbox keys</strong> switch below
-              decides which set every rate and label actually uses.
-            </p>
-            <div class="tc-cp-sets">
-              <section class="tc-cp-set" id="tc-cp-set-live" aria-labelledby="tc-cp-set-live-title">
-                <header class="tc-cp-set-head">
-                  <h4 class="tc-cp-set-title" id="tc-cp-set-live-title">🚀 Live keys</h4>
-                  <span class="tc-cp-set-badge" id="tc-cp-set-live-badge"></span>
-                </header>
-                <p class="tc-cp-set-note">Real labels, charged to your Canada Post account.</p>
-                <div class="tc-form-grid">
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-live-key">Client ID</label>
-                    <input type="text" id="tc-cp-live-key" class="tc-form-input" placeholder="Production Client ID" autocomplete="off" oninput="renderCanadaPostKeySets()">
-                  </div>
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-live-secret">Client Secret</label>
-                    <input type="password" id="tc-cp-live-secret" class="tc-form-input" placeholder="Production Client Secret" autocomplete="off" oninput="renderCanadaPostKeySets()">
-                  </div>
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-live-customer-number">Customer #</label>
-                    <input type="text" id="tc-cp-live-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
-                  </div>
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-live-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
-                    <input type="text" id="tc-cp-live-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
-                  </div>
-                </div>
-              </section>
-              <section class="tc-cp-set" id="tc-cp-set-test" aria-labelledby="tc-cp-set-test-title">
-                <header class="tc-cp-set-head">
-                  <h4 class="tc-cp-set-title" id="tc-cp-set-test-title">🧪 Sandbox keys</h4>
-                  <span class="tc-cp-set-badge" id="tc-cp-set-test-badge"></span>
-                </header>
-                <p class="tc-cp-set-note">Rehearsing only. Nothing is charged and no label can be mailed.</p>
-                <div class="tc-form-grid">
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-test-key">Client ID</label>
-                    <input type="text" id="tc-cp-test-key" class="tc-form-input" placeholder="Development Client ID" autocomplete="off" oninput="renderCanadaPostKeySets()">
-                  </div>
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-test-secret">Client Secret</label>
-                    <input type="password" id="tc-cp-test-secret" class="tc-form-input" placeholder="Development Client Secret" autocomplete="off" oninput="renderCanadaPostKeySets()">
-                  </div>
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-test-customer-number">Customer #</label>
-                    <input type="text" id="tc-cp-test-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
-                  </div>
-                  <div class="tc-form-group">
-                    <label class="tc-form-label" for="tc-cp-test-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
-                    <input type="text" id="tc-cp-test-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
-                  </div>
-                </div>
-              </section>
-            </div>
-            <div class="tc-toggle-row">
-              <label class="tc-toggle-wrap">
-                <input type="checkbox" id="tc-cp-enabled" checked>
-                <span>Enable Direct Canada Post API</span>
-              </label>
-              <label class="tc-toggle-wrap" title="Switches which of the two sets above every rate and label uses. Canada Post serves test and live from the same address, so the key is the only thing that decides.">
-                <input type="checkbox" id="tc-cp-test-mode" onchange="renderCanadaPostKeySets()">
-                <span>Sandbox keys (test account)</span>
-              </label>
-            </div>
-            <div class="tc-form-actions-row">
-              <div class="tc-form-actions-buttons">
-                <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()" title="Test whichever set of keys the Sandbox switch has selected">Test Connection</button>
-                <button id="tc-cp-diagnose-btn" class="btn outline" onclick="diagnoseCanadaPostHandler()" title="Try the selected set of keys against both Canada Post gateways, with and without the customer number, and report which combination works">Diagnose</button>
-                <button id="tc-cp-readiness-btn" class="btn outline" onclick="checkLiveShippingReadinessHandler()" title="Check everything needed to buy a real, mailable label">Check Live Readiness</button>
-                <button id="tc-save-cp-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
-              </div>
-            </div>
-            <div id="cp-live-readiness" class="cp-ready-panel" style="display:none;"></div>
-            <div id="tc-cp-status" class="tc-status-msg"></div>
-          </div>
-        </div>
-
-        
-          <!-- Chit Chats API Section -->
-          <div class="tc-integration-section" id="tc-integration-card-chitchats">
-            <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-chitchats" onclick="toggleIntegrationSection('chitchats')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('chitchats');}">
-              <div class="tc-service-header-left">
-                <div class="tc-service-badge" aria-hidden="true">CC</div>
-                <div class="tc-service-meta">
-                  <strong class="tc-service-title">Chit Chats API</strong>
-                  <div class="tc-service-desc">Buy Chit Chats labels, get tracking, and manage shipments.</div>
-                </div>
-              </div>
-              <div class="tc-service-header-right">
-                <span class="tc-service-status is-idle" id="tc-service-status-chitchats">Not connected</span>
-                <span class="oc-collapse-chevron" id="tc-integration-chevron-chitchats" aria-hidden="true">▾</span>
-              </div>
-            </div>
-            <div class="oc-collapse-body" id="tc-integration-body-chitchats">
-              <div class="tc-form-grid">
-                <div class="tc-form-group">
-                  <label class="tc-form-label" for="tc-cc-client-id">Client ID</label>
-                  <input type="text" id="tc-cc-client-id" class="tc-form-input" placeholder="Your Client ID" autocomplete="off">
-                </div>
-                <div class="tc-form-group">
-                  <label class="tc-form-label" for="tc-cc-token">API Token</label>
-                  <input type="password" id="tc-cc-token" class="tc-form-input" placeholder="Your API Token" autocomplete="off">
-                  <div class="tc-form-hint">Generated in Chit Chats under Settings &gt; Developer &gt; API Access Tokens.</div>
-                </div>
-              </div>
-              <div class="tc-form-actions-row" style="margin-top:12px;">
-                <label class="tc-toggle-wrap">
-                  <input type="checkbox" id="tc-cc-enabled" checked>
-                  <span>Enable Chit Chats</span>
-                </label>
-                <label class="tc-toggle-wrap"><input type="checkbox" id="tc-cc-test-mode"><span>Use staging account — practice labels cannot be mailed</span></label>
-              </div>
-              <div class="tc-form-actions-row">
-                <div class="tc-form-actions-buttons">
-                  <button id="tc-cc-test-btn" class="btn gold outline" onclick="testChitChatsConnectionHandler()">Test Connection</button>
-                  <button id="tc-save-cc-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save Config</button>
-                  <button id="tc-cc-import-btn" class="btn outline" onclick="importChitChatsShippingHandler({ full: true })">Import paid shipments</button>
-                </div>
-              </div>
-              <p class="tc-form-hint">Requires the connected Google Sheet with Apps Script v51 or later. Staging uses a separate Chit Chats account and token. Your live purchases charge your Chit Chats balance.</p>
-              <div id="tc-cc-status" class="tc-status-msg" role="status" aria-live="polite"></div>
-            </div>
-          </div>
-
-          <!-- Stripe API Section -->
         <div class="tc-integration-section" id="tc-integration-card-stripe">
           <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
             <div class="tc-service-header-left">
@@ -3752,7 +3477,6 @@
             </div>
           </div>
         </div>
-
       </div>
     </div>
   </div> <!-- /#tc-sec-integrations -->
@@ -3921,12 +3645,11 @@
         <span style="font-size:var(--text-base); font-weight:600; color:var(--text2);" id="ship-key-status-text">Shippo API Key Required</span>
       </div>
       <div id="ship-key-setup-group" class="ship-key-setup" style="display:flex; gap:8px; align-items:center;">
-        <input type="password" id="ship-api-key-input" placeholder="shippo_live_..." style="padding:6px 12px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r2); background:var(--cream); width:280px; font-family:var(--font-mono); outline:none;">
-        <button class="btn gold sm" onclick="saveShippoApiKey()">Save Key</button>
+        <button type="button" class="btn gold sm" onclick="editShippoApiKey()">Add it in Settings</button>
       </div>
       <div id="ship-key-active-group" style="display:none; gap:8px; align-items:center;">
         <span style="font-size:var(--text-xs); font-family:var(--font-mono); color:var(--text3);" id="ship-key-masked">••••••••••••••••</span>
-        <button class="btn sm" onclick="editShippoApiKey()">Change Key</button>
+        <button type="button" class="btn sm" onclick="editShippoApiKey()">Change in Settings</button>
       </div>
     </div>
   </div>
@@ -4843,11 +4566,306 @@
   </div>
 
   <!-- Settings Page Sub-navigation -->
-  <div class="settings-sub-nav">
-    <button class="settings-sub-tab active" id="btn-subtab-catalog" onclick="switchSettingsSubTab('catalog')"><span class="lead-emoji" aria-hidden="true">📚 </span>Book Catalog</button>
+  <div class="settings-sub-nav" aria-label="Settings section">
+    <button class="settings-sub-tab active" id="btn-subtab-home" onclick="switchSettingsSubTab('home')">All settings</button>
+    <button class="settings-sub-tab" id="btn-subtab-catalog" onclick="switchSettingsSubTab('catalog')"><span class="lead-emoji" aria-hidden="true">📚 </span>Book Catalog</button>
     <button class="settings-sub-tab" id="btn-subtab-profit" onclick="switchSettingsSubTab('profit')"><span class="lead-emoji" aria-hidden="true">⚖️ </span>Profit Tiers</button>
-    <button class="settings-sub-tab" id="btn-subtab-sync" onclick="switchSettingsSubTab('sync')"><span class="lead-emoji" aria-hidden="true">📊 </span>Sheets Connection</button>
+    <button class="settings-sub-tab" id="btn-subtab-shipping" onclick="switchSettingsSubTab('shipping')"><span class="lead-emoji" aria-hidden="true">📦 </span>Shipping</button>
+    <button class="settings-sub-tab" id="btn-subtab-ai" onclick="switchSettingsSubTab('ai')"><span class="lead-emoji" aria-hidden="true">♊ </span>AI and receipts</button>
+    <button class="settings-sub-tab" id="btn-subtab-sync" onclick="switchSettingsSubTab('sync')"><span class="lead-emoji" aria-hidden="true">📊 </span>Google Sheet</button>
     <button class="settings-sub-tab" id="btn-subtab-letterhead" onclick="switchSettingsSubTab('letterhead')"><span class="lead-emoji" aria-hidden="true">✉️ </span>Letterhead</button>
+  </div>
+
+  <!-- All settings: one row per part, each with where it stands. A row opens
+       its part here, or the screen that part still lives on. Filled by
+       renderSettingsHome() in main.js. -->
+  <div id="settings-sec-home" class="settings-section">
+    <p class="settings-home-intro">Everything the app needs set up once, in one place.</p>
+    <div class="card settings-home-list" id="settings-home-list"></div>
+  </div>
+
+  <!-- Shipping keys, typed once. The Shipping screen and the Tax Centre both read them. -->
+  <div id="settings-sec-shipping" class="settings-section" style="display:none;">
+    <p class="settings-home-intro">The shipping keys, entered here once. The Shipping screen and the Tax Centre both use them.</p>
+    <div class="card tc-integrations-card" id="settings-shipping-card">
+      <div class="tc-integrations-list">
+        <div class="tc-integration-section" id="tc-integration-card-shippo">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-shippo" onclick="toggleIntegrationSection('shippo')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('shippo');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-shippo" aria-hidden="true">📦</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Shippo Live Import</strong>
+                <div class="tc-service-desc">Syncs non-refunded transaction rates straight into your Shipping &amp; Postage ledger.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-shippo">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-shippo" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-shippo">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-shippo-key">Shippo Live API Key</label>
+                <input type="password" id="tc-shippo-key" class="tc-form-input" placeholder="shippo_live_…" autocomplete="off">
+                <div class="tc-form-hint">Found in Shippo under Settings → API. Only live keys import real postage.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <button class="btn gold outline" id="tc-shippo-btn" onclick="importShippoShippingFromApi()">Import Shippo Shipping</button>
+            </div>
+            <div id="tc-shippo-status" class="tc-status-msg">Imports non-refunded transaction rates as Shipping &amp; Postage expenses.</div>
+
+          </div>
+        </div>
+
+        <div class="tc-integration-section" id="tc-integration-card-zonos">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-zonos" onclick="toggleIntegrationSection('zonos')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('zonos');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-zonos" aria-hidden="true">🌐</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Zonos Cross-Border Duties &amp; Taxes</strong>
+                <div class="tc-service-desc">Calculate real-time customs duties, import VAT/GST, carrier clearance fees, and landed costs for international orders.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-zonos">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-zonos" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-zonos">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-zonos-key">Zonos Live API Key <span class="tc-form-label-note">credentialToken</span></label>
+                <input type="password" id="tc-zonos-key" class="tc-form-input" placeholder="credential_live_…" autocomplete="off">
+                <div class="tc-form-hint">Used for every live duty and landed-cost quote.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-zonos-account-key">Zonos Account Key <span class="tc-form-label-note">automates U.S. duty</span></label>
+                <input type="text" id="tc-zonos-account-key" class="tc-form-input" placeholder="Zonos Dashboard → Settings → Integrations" autocomplete="off" oninput="renderZonosAccountKeyHint()">
+                <div class="tc-form-hint" id="tc-zonos-account-key-hint">Saving a Verified Account key lets Canada Post add the U.S. Declaration ID to every label automatically and bill the duty to Zonos — no per-parcel prepayment.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row" style="flex-wrap:wrap;gap:12px;align-items:center;">
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <label class="tc-toggle-wrap">
+                  <input type="checkbox" id="tc-zonos-enabled" checked>
+                  <span>Enable Duties API</span>
+                </label>
+                <label class="tc-toggle-wrap">
+                  <input type="checkbox" id="tc-zonos-strict-prepay" checked>
+                  <span>Require Zonos Declaration ID for all US shipments</span>
+                </label>
+              </div>
+              <div class="tc-form-actions-buttons" style="margin-left:auto;">
+                <button id="tc-zonos-test-btn" class="btn gold outline" onclick="testZonosConnectionHandler()">Test Connection</button>
+              </div>
+            </div>
+            <div class="tc-form-hint" style="margin-top:4px;">When checked, US label purchases are strictly blocked if no 13-character Declaration ID or Verified Key is present, preventing accidental unpaid duty (DDU) shipments.</div>
+            <div id="tc-zonos-status" class="tc-status-msg"></div>
+          </div>
+        </div>
+
+        <div class="tc-integration-section" id="tc-integration-card-canadapost">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-canadapost" onclick="toggleIntegrationSection('canadapost')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('canadapost');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-canadapost" aria-hidden="true">🇨🇦</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Canada Post Direct API</strong>
+                <div class="tc-service-desc">Official Canada Post Web Services for direct live rate quotes, Small Business / Contract pricing, and tracking.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-canadapost">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-canadapost" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-canadapost">
+            <div id="tc-cp-migration-note" class="tc-cp-migration-note"></div>
+            <p class="tc-cp-sets-intro">
+              Canada Post issues you two separate sets of keys — one for testing and one for real shipping — and both
+              are used at the same web address. Keep both here, and the <strong>Sandbox keys</strong> switch below
+              decides which set every rate and label actually uses.
+            </p>
+            <div class="tc-cp-sets">
+              <section class="tc-cp-set" id="tc-cp-set-live" aria-labelledby="tc-cp-set-live-title">
+                <header class="tc-cp-set-head">
+                  <h4 class="tc-cp-set-title" id="tc-cp-set-live-title">🚀 Live keys</h4>
+                  <span class="tc-cp-set-badge" id="tc-cp-set-live-badge"></span>
+                </header>
+                <p class="tc-cp-set-note">Real labels, charged to your Canada Post account.</p>
+                <div class="tc-form-grid">
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-key">Client ID</label>
+                    <input type="text" id="tc-cp-live-key" class="tc-form-input" placeholder="Production Client ID" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-secret">Client Secret</label>
+                    <input type="password" id="tc-cp-live-secret" class="tc-form-input" placeholder="Production Client Secret" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-customer-number">Customer #</label>
+                    <input type="text" id="tc-cp-live-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-live-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
+                    <input type="text" id="tc-cp-live-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
+                  </div>
+                </div>
+              </section>
+              <section class="tc-cp-set" id="tc-cp-set-test" aria-labelledby="tc-cp-set-test-title">
+                <header class="tc-cp-set-head">
+                  <h4 class="tc-cp-set-title" id="tc-cp-set-test-title">🧪 Sandbox keys</h4>
+                  <span class="tc-cp-set-badge" id="tc-cp-set-test-badge"></span>
+                </header>
+                <p class="tc-cp-set-note">Rehearsing only. Nothing is charged and no label can be mailed.</p>
+                <div class="tc-form-grid">
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-key">Client ID</label>
+                    <input type="text" id="tc-cp-test-key" class="tc-form-input" placeholder="Development Client ID" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-secret">Client Secret</label>
+                    <input type="password" id="tc-cp-test-secret" class="tc-form-input" placeholder="Development Client Secret" autocomplete="off" oninput="renderCanadaPostKeySets()">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-customer-number">Customer #</label>
+                    <input type="text" id="tc-cp-test-customer-number" class="tc-form-input" placeholder="7–10 digits" autocomplete="off">
+                  </div>
+                  <div class="tc-form-group">
+                    <label class="tc-form-label" for="tc-cp-test-contract-id">Contract ID <span class="tc-form-label-note">optional</span></label>
+                    <input type="text" id="tc-cp-test-contract-id" class="tc-form-input" placeholder="e.g. 4299100" autocomplete="off">
+                  </div>
+                </div>
+              </section>
+            </div>
+            <div class="tc-toggle-row">
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-cp-enabled" checked>
+                <span>Enable Direct Canada Post API</span>
+              </label>
+              <label class="tc-toggle-wrap" title="Switches which of the two sets above every rate and label uses. Canada Post serves test and live from the same address, so the key is the only thing that decides.">
+                <input type="checkbox" id="tc-cp-test-mode" onchange="renderCanadaPostKeySets()">
+                <span>Sandbox keys (test account)</span>
+              </label>
+            </div>
+            <div class="tc-form-actions-row">
+              <div class="tc-form-actions-buttons">
+                <button id="tc-cp-test-btn" class="btn gold outline" onclick="testCanadaPostConnectionHandler()" title="Test whichever set of keys the Sandbox switch has selected">Test Connection</button>
+                <button id="tc-cp-diagnose-btn" class="btn outline" onclick="diagnoseCanadaPostHandler()" title="Try the selected set of keys against both Canada Post gateways, with and without the customer number, and report which combination works">Diagnose</button>
+                <button id="tc-cp-readiness-btn" class="btn outline" onclick="checkLiveShippingReadinessHandler()" title="Check everything needed to buy a real, mailable label">Check Live Readiness</button>
+              </div>
+            </div>
+            <div id="cp-live-readiness" class="cp-ready-panel" style="display:none;"></div>
+            <div id="tc-cp-status" class="tc-status-msg"></div>
+          </div>
+        </div>
+
+        <div class="tc-integration-section" id="tc-integration-card-chitchats">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-chitchats" onclick="toggleIntegrationSection('chitchats')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('chitchats');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge" aria-hidden="true">CC</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Chit Chats API</strong>
+                <div class="tc-service-desc">Buy Chit Chats labels, get tracking, and manage shipments.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-chitchats">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-chitchats" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-chitchats">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cc-client-id">Client ID</label>
+                <input type="text" id="tc-cc-client-id" class="tc-form-input" placeholder="Your Client ID" autocomplete="off">
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-cc-token">API Token</label>
+                <input type="password" id="tc-cc-token" class="tc-form-input" placeholder="Your API Token" autocomplete="off">
+                <div class="tc-form-hint">Generated in Chit Chats under Settings &gt; Developer &gt; API Access Tokens.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row" style="margin-top:12px;">
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="tc-cc-enabled" checked>
+                <span>Enable Chit Chats</span>
+              </label>
+              <label class="tc-toggle-wrap"><input type="checkbox" id="tc-cc-test-mode"><span>Use staging account — practice labels cannot be mailed</span></label>
+            </div>
+            <div class="tc-form-actions-row">
+              <div class="tc-form-actions-buttons">
+                <button id="tc-cc-test-btn" class="btn gold outline" onclick="testChitChatsConnectionHandler()">Test Connection</button>
+                <button id="tc-cc-import-btn" class="btn outline" onclick="importChitChatsShippingHandler({ full: true })">Import paid shipments</button>
+              </div>
+            </div>
+            <p class="tc-form-hint">Requires the connected Google Sheet with Apps Script v51 or later. Staging uses a separate Chit Chats account and token. Your live purchases charge your Chit Chats balance.</p>
+            <div id="tc-cc-status" class="tc-status-msg" role="status" aria-live="polite"></div>
+          </div>
+        </div>
+      </div>
+      <div class="settings-save-row">
+        <button type="button" class="btn gold" id="tc-save-shipping-btn" onclick="saveTaxCenterSettings()">Save shipping settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The AI reader's keys: receipts, invoices, email and the assistant. -->
+  <div id="settings-sec-ai" class="settings-section" style="display:none;">
+    <p class="settings-home-intro">The keys the AI reader uses for receipts, invoices, email and the assistant.</p>
+    <div class="card tc-integrations-card" id="settings-ai-card">
+      <div class="tc-integrations-list">
+        <div class="tc-integration-section" id="tc-integration-card-gemini">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-gemini" onclick="toggleIntegrationSection('gemini')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('gemini');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-gemini" aria-hidden="true">♊</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">AI Assistant</strong>
+                <div class="tc-service-desc">Gemini first, with OpenRouter backup for chat, receipts, invoices and email.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-gemini">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-gemini" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-gemini">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-api-key">Gemini API Key</label>
+                <input type="password" id="tc-api-key" class="tc-form-input" placeholder="AI Studio key (AI_KEY)…" autocomplete="off">
+                <div class="tc-form-hint">Paste the key from Google AI Studio. It is stored on your own account, never shared.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-backup-key">Backup AI Key <span class="tc-form-optional">(optional)</span></label>
+                <input type="password" id="tc-backup-key" class="tc-form-input" placeholder="OpenRouter key (sk-or-v1-…)…" autocomplete="off">
+                <div class="tc-form-hint">Save your OpenRouter key here once. Intelligence chat, receipt and invoice scans, email extraction and postage readers use it automatically when Gemini cannot answer or runs out of quota. The key is saved in your app account settings.</div>
+                <div class="tc-form-actions-row">
+                  <button type="button" id="tc-test-backup-btn" class="btn sm" onclick="testOpenRouterConnectionFromSettings()">Test OpenRouter</button>
+                </div>
+                <div id="tc-backup-test-status" class="tc-form-hint" role="status" aria-live="polite">Tests your key and sends one tiny request through the selected model, or OpenRouter’s free router when the model is blank.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
+                <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="openrouter/free (automatic default)" autocomplete="off" spellcheck="false">
+                <div class="tc-form-hint">Optional. Leave blank to select an available free model automatically. A custom OpenRouter model uses that model’s pricing and must support tools for chat, and images and structured output for scans. Keep Intelligence on Auto for automatic fallback.</div>
+              </div>
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="tc-base-cur">Base Currency</label>
+                <select id="tc-base-cur" class="tc-form-select" onchange="saveTaxCenterSettings()" disabled>
+                  <option value="CAD">CAD (Default)</option>
+                </select>
+                <div class="tc-form-hint">Every imported receipt is converted into this currency.</div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <button id="tc-save-config-btn" class="btn gold" onclick="saveTaxCenterSettings()">Save AI settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="settings-sec-letterhead" class="settings-section" style="display:none;">
@@ -4890,7 +4908,7 @@
   </div>
 
   <!-- 1. BOOK CATALOG SECTION -->
-  <div id="settings-sec-catalog" class="settings-section">
+  <div id="settings-sec-catalog" class="settings-section" style="display:none;">
     <!-- BOOK CATALOG SETTINGS -->
     <div class="card" style="margin-bottom:1.5rem;border-left:var(--stroke) solid var(--gold-line);">
       <div class="sec-head cat-settings-head">

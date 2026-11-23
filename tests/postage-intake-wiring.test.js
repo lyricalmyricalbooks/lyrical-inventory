@@ -272,8 +272,8 @@ describe('the Canada Post sweep only ever reads', () => {
     expect(start).toContain('if (_cpSweepStarted');
   });
 
-  it('marks the Tax Centre tab for either shipping service', () => {
-    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email,stripe-fees,receipt-scan"');
+  it('marks Settings, where the shipping keys live, for either shipping service', () => {
+    expect(indexContent).toContain('data-health-badge="shippo,canadapost,shipping-email"');
   });
 });
 

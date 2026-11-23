@@ -153,14 +153,14 @@ describe('the two ways Google says a key is no good', () => {
     // rotated or restricted.
     const out = _friendlyScanError(new Error(UNAUTHENTICATED));
     expect(out).toMatch(/would not accept that key/i);
-    expect(out).toMatch(/Tax Centre/);
+    expect(out).toMatch(/Settings › AI and receipts/);
     expect(out).toMatch(/restrictions/i);
     expect(out).not.toMatch(/OAuth/);
   });
 
   it('keeps the plainly-wrong-key case separate, because the fix differs', () => {
     expect(_friendlyScanError(new Error('API key not valid. Please pass a valid API key.')))
-      .toMatch(/rejected — check it in the Tax Centre/i);
+      .toMatch(/rejected — check it in Settings/i);
   });
 
   it('names the switched-off-API case, which nothing else would hint at', () => {

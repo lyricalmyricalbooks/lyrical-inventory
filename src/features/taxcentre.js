@@ -2646,13 +2646,16 @@ function refreshIntegrationStatusPills() {
 
 // One delegated listener keeps the pills honest while the owner types.
 let _integrationPillsWired = false;
+// The key cards live in Settings (Shipping, AI) and the Tax Centre (Stripe).
 function wireIntegrationStatusPills() {
   if (_integrationPillsWired) return;
-  const card = document.querySelector('.tc-integrations-card');
-  if (!card) return;
+  const cards = ['settings-shipping-card', 'settings-ai-card', 'tc-stripe-card'].map(id => $(id)).filter(Boolean);
+  if (!cards.length) return;
   _integrationPillsWired = true;
-  card.addEventListener('input', refreshIntegrationStatusPills);
-  card.addEventListener('change', refreshIntegrationStatusPills);
+  cards.forEach(card => {
+    card.addEventListener('input', refreshIntegrationStatusPills);
+    card.addEventListener('change', refreshIntegrationStatusPills);
+  });
 }
 
 function _tcRenderStatusHeaders() {
@@ -2672,7 +2675,7 @@ function _tcRenderStatusHeaders() {
   // The saved report, so the section opens on the last figures (and their
   // ledger status against the ledger just loaded) without a fetch.
   renderStripeFeesReport();
-  if ($('tc-shippo-key') && TAX_CENTER.settings?.shippoKey) $('tc-shippo-key').value = TAX_CENTER.settings.shippoKey;
+  hydrateCredentialField('tc-shippo-key', TAX_CENTER.settings?.shippoKey);
   const _shippoStatusEl = $('tc-shippo-status');
   if (_shippoStatusEl && TAX_CENTER.settings?.shippoLastImportAt) {
     const last = new Date(TAX_CENTER.settings.shippoLastImportAt);
@@ -4211,8 +4214,10 @@ async function testOpenRouterConnectionFromSettings() {
 
 async function saveTaxCenterSettings() {
   if (isAuthor()) return;
-  const btn = $('tc-save-config-btn') || $('tc-save-zonos-btn') || $('tc-save-cp-btn');
-  const oldText = btn ? btn.textContent : 'Save Config';
+  // Shipping and AI each have their own Save; show progress on the one pressed.
+  const pressed = document.activeElement;
+  const btn = (pressed?.matches?.('#tc-save-shipping-btn, #tc-save-config-btn') && pressed) || $('tc-save-config-btn');
+  const oldText = btn ? btn.textContent : 'Save';
   if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
 
   const geminiKey = $('tc-api-key')?.value.trim() || '';
@@ -4249,6 +4254,7 @@ async function saveTaxCenterSettings() {
     // undefined means the box was never populated from settings, so the stored
     // value stands; '' means it was deliberately emptied and must be cleared.
     const put = (key, value) => { if (value !== undefined) TAX_CENTER.settings[key] = value; };
+    put('shippoKey', readCredentialField('tc-shippo-key'));
     put('openRouterKey', openRouterKey);
     put('openRouterModel', openRouterModel);
     put('zonosApiKey', zonosApiKey);
