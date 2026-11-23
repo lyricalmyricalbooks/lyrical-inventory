@@ -12,12 +12,16 @@
  */
 
 /**
- * Only a model with a free allowance may ever be called.
+ * Only a model that can have a free allowance may ever be called.
  *
- * Flash and Flash-Lite have one. Pro and Ultra do not, and a single call to
- * either is billed to whatever card is on the Google account — so the shape of
- * the name is the gate, and it is applied at the point of use rather than
- * trusted from a hand-edited list.
+ * Pro, Ultra and the named flagship models (Gemini 4 Argon) have none, and a
+ * single call to one is billed to whatever card is on the Google account — so
+ * the shape of the name is the gate, applied at the point of use rather than
+ * trusted from a hand-edited list. Being a Flash model is necessary but no
+ * longer enough: Google does not give every Flash a free allowance on every
+ * key. A key with no allowance for one is told "limit: 0", and
+ * geminiModelRefused() below lets the scan move on to the next model instead
+ * of stopping there.
  */
 export const GEMINI_FREE_TIER_MODEL = /-flash(-lite)?$/;
 
@@ -70,6 +74,7 @@ export function rankFreeGeminiModels(entries) {
 
     const parsed = parseGeminiModel(entry);
     if (!parsed || !GEMINI_FREE_TIER_MODEL.test(parsed.id)) continue;
+    if (GEMINI_ROUTED_MODELS.has(parsed.id)) continue;
     if (seen.has(parsed.id)) continue;
     seen.add(parsed.id);
     usable.push(parsed);
@@ -86,4 +91,70 @@ export function rankFreeGeminiModels(entries) {
   ));
 
   return usable.map(m => m.id);
+}
+
+/**
+ * Model names Google still answers to but no longer runs as themselves.
+ *
+ * Since 2026-10-08 a request to either of these is quietly served by a newer
+ * model (3.7 Flash by 3.8 Flash, 3.5 Flash by 3.6 Flash). Keeping them in the
+ * chain only spends a rung — and on a bad receipt, a whole extra upload — on a
+ * model that is already in the chain under its real name.
+ */
+export const GEMINI_ROUTED_MODELS = new Set(['gemini-3.7-flash', 'gemini-3.5-flash']);
+
+/**
+ * True when this model wants the named thinking control (`thinkingLevel`)
+ * rather than the old numeric budget.
+ *
+ * Gemini 3 and later take `thinkingLevel`; Google's guide for them says to
+ * replace `thinkingBudget`. Only the 2.x family still reads the number. Asking
+ * the right way first saves a refused request on every scan of a session.
+ */
+export function geminiUsesThinkingLevel(model) {
+  const m = /^gemini-(\d+)/.exec(String(model || ''));
+  return !m || Number(m[1]) >= 3;
+}
+
+/**
+ * True when Google refused THIS model for this key, rather than the key or the
+ * request being the problem — so the next model in the chain is worth asking.
+ *
+ * The case that matters most: a model with no free allowance on a key without
+ * billing answers 429 with "limit: 0". Read as an ordinary quota error, that
+ * stopped the whole scan on the newest model before an older, free one was
+ * ever tried, and every scan failed the same way.
+ *
+ * @param {number} status HTTP status.
+ * @param {string} message Google's error message.
+ */
+export function geminiModelRefused(status, message) {
+  const text = String(message || '');
+  if (status === 404) return true;
+  // A key that is wrong, or a project Google has shut out, fails the same way
+  // on every model; walking the chain would only repeat the upload.
+  if (/API key|api_key|UNAUTHENTICATED|denied access|billing account|prepayment/i.test(text)) return false;
+  if (status === 429 && /\blimit:\s*0\b/i.test(text)) return true;
+  if ((status === 400 || status === 403)
+    && /\bmodel\b/i.test(text)
+    && /(?:not|no longer) (?:available|supported|found|offered)|does not have access|not have access/i.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * A failed response's JSON body, read once and kept on the response.
+ *
+ * Both the retry decision and the error report need it, and a fetch body can
+ * only be read once.
+ */
+export async function geminiErrorBody(res) {
+  if (!res || typeof res !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(res, '__geminiBody')) {
+    let body = null;
+    try { body = await res.json(); } catch (_) { body = null; }
+    try { Object.defineProperty(res, '__geminiBody', { value: body }); } catch (_) { return body; }
+  }
+  return res.__geminiBody;
 }

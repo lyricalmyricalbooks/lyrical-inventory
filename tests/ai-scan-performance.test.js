@@ -13,7 +13,7 @@ const TRANSPORT_NAMES = [
   '_callGeminiForReceipts', 'GEMINI_RECEIPT_MODELS', 'GEMINI_SINGLE_ATTEMPT_BYTES',
   'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode',
   '_geminiThinkingPatch', '_geminiCooldownUntil', 'GEMINI_FREE_TIER_MODEL',
-  '_geminiUnavailable', '_geminiModelChain',
+  '_geminiUnavailable', '_geminiModelChain', 'GEMINI_ROUTED_MODELS', 'geminiModelRefused', 'geminiUsesThinkingLevel', 'geminiErrorBody', '_geminiNoModelError',
   '_readGeminiModelCache', 'GEMINI_MODEL_CACHE_KEY', 'GEMINI_CHAIN_MAX',
   '_geminiCooldownWait', '_geminiNoteThrottle', '_geminiAwaitCooldown'
 ];
@@ -49,19 +49,57 @@ describe('Gemini transport — thinking budget', () => {
     // One receipt against a fixed schema is a reading job, not a reasoning
     // job. The deliberation the model does by default is pure wait time for
     // whoever is standing at the till with the phone in their hand.
+    // Gemini 3 and later take the named level, so they are asked at 'low'
+    // straight away, with no temperature (Google says drop it on Gemini 3+).
     let sent = null;
     const call = transport(async (_url, init) => { sent = bodyOf(init); return good; });
 
     await call('k', [{ text: 'x' }]);
-    expect(sent.generationConfig.thinking_config.thinking_budget).toBe(0);
+    expect(sent.generationConfig.thinking_config).toEqual({ thinking_level: 'low' });
+    expect(sent.generationConfig.temperature).toBeUndefined();
+  });
+
+  it('asks a Gemini 2.x model with the number it understands', async () => {
+    // 2.5 Flash is the last rung. It only reads the numeric budget, so the
+    // read is still told not to think, and keeps its low temperature.
+    const sent = [];
+    const call = transport(async (url, init) => {
+      const model = String(url).match(/models\/([^:]+):/)[1];
+      sent.push({ model, cfg: bodyOf(init).generationConfig });
+      return model.startsWith('gemini-2.')
+        ? good
+        : res(404, { error: { message: `models/${model} is not found` } });
+    });
+
+    await call('k', [{ text: 'x' }]);
+    const last = sent[sent.length - 1];
+    expect(last.model).toBe('gemini-2.5-flash');
+    expect(last.cfg.thinking_config).toEqual({ thinking_budget: 0 });
+    expect(last.cfg.temperature).toBe(0.1);
   });
 
   it('lets a caller buy thinking back for the harder multi-receipt job', async () => {
-    let sent = null;
-    const call = transport(async (_url, init) => { sent = bodyOf(init); return good; });
+    const sent = [];
+    const call = transport(async (url, init) => {
+      const model = String(url).match(/models\/([^:]+):/)[1];
+      sent.push(bodyOf(init).generationConfig.thinking_config);
+      return model.startsWith('gemini-2.') ? good : res(404, { error: { message: 'not found' } });
+    });
 
     await call('k', [{ text: 'x' }], { thinkingBudget: 512 });
-    expect(sent.generationConfig.thinking_config.thinking_budget).toBe(512);
+    expect(sent[sent.length - 1]).toEqual({ thinking_budget: 512 });
+  });
+
+  it('sends the key in the header, never in the address', async () => {
+    // Google's current guides only show the x-goog-api-key header, and an
+    // address with a key in it ends up in logs and browser history.
+    let seen = null;
+    const call = transport(async (url, init) => { seen = { url: String(url), headers: init.headers }; return good; });
+
+    await call('secret-key', [{ text: 'x' }]);
+    expect(seen.url).not.toContain('secret-key');
+    expect(seen.url).not.toContain('key=');
+    expect(seen.headers['x-goog-api-key']).toBe('secret-key');
   });
 
   it('recovers from the bare rejection that broke the scanner in production', async () => {
@@ -74,7 +112,7 @@ describe('Gemini transport — thinking budget', () => {
     const call = transport(async (url, init) => {
       const body = bodyOf(init);
       seen.push({ model: String(url).match(/models\/([^:]+):/)[1], cfg: body.generationConfig.thinking_config });
-      return body.generationConfig.thinking_config?.thinking_budget !== undefined
+      return body.generationConfig.thinking_config
         ? res(400, { error: { message: 'Request contains an invalid argument.' } })
         : good;
     });
@@ -83,8 +121,8 @@ describe('Gemini transport — thinking budget', () => {
     expect(out.text).toBe('{"ok":1}');
     // Same model throughout — the image is never re-uploaded to the others.
     expect(new Set(seen.map(s => s.model)).size).toBe(1);
-    expect(seen[0].cfg).toEqual({ thinking_budget: 0 });
-    expect(seen[1].cfg).toEqual({ thinking_level: 'low' });
+    expect(seen[0].cfg).toEqual({ thinking_level: 'low' });
+    expect(seen[1].cfg).toBeUndefined();
   });
 
   it('falls all the way back to no thinking control at all', async () => {
@@ -97,8 +135,8 @@ describe('Gemini transport — thinking budget', () => {
 
     const out = await call('k', [{ text: 'x' }]);
     expect(out.text).toBe('{"ok":1}');
-    expect(seen).toHaveLength(3);
-    expect(seen[2]).toBeUndefined(); // the shape that predates the speed-up
+    expect(seen).toHaveLength(2); // level, then off, on a Gemini 3 model
+    expect(seen[1]).toBeUndefined(); // the shape that predates the speed-up
   });
 
   it('remembers what worked so the next scan goes straight there', async () => {
@@ -106,7 +144,7 @@ describe('Gemini transport — thinking budget', () => {
     const call = transport(async (_url, init) => {
       const cfg = bodyOf(init).generationConfig.thinking_config;
       seen.push(cfg);
-      return cfg?.thinking_budget !== undefined
+      return cfg
         ? res(400, { error: { message: 'Request contains an invalid argument.' } })
         : good;
     });
@@ -114,8 +152,8 @@ describe('Gemini transport — thinking budget', () => {
     await call('k', [{ text: 'x' }]);
     await call('k', [{ text: 'y' }]);
     expect(seen).toHaveLength(3);
-    // Second scan is one call, and it opens at the level that worked.
-    expect(seen[2]).toEqual({ thinking_level: 'low' });
+    // Second scan is one call, and it opens at the shape that worked.
+    expect(seen[2]).toBeUndefined();
   });
 
   it('reports the real failure once the control is off and it still fails', async () => {
@@ -141,7 +179,7 @@ describe('Gemini transport — thinking budget', () => {
 
     await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/Invalid image/i);
     expect(new Set(models).size).toBe(1);
-    expect(models).toHaveLength(3); // budget, level, off — then it stops
+    expect(models).toHaveLength(2); // level, off — then it stops
   });
 
   it('does not record a mode when the request failed for its own reason', async () => {
@@ -162,7 +200,7 @@ describe('Gemini transport — thinking budget', () => {
     bad = false;
 
     await call('k', [{ text: 'a good one' }]);
-    expect(seen[0]).toEqual({ thinking_budget: 0 }); // still opens at the fastest
+    expect(seen[0]).toEqual({ thinking_level: 'low' }); // still opens at the fastest
   });
 });
 
@@ -560,10 +598,53 @@ describe('Reader chain — newest first, and never one that bills', () => {
   it('asks the newest reader first and steps down from there', () => {
     const list = appSource.match(/const GEMINI_RECEIPT_MODELS = \[[^\]]+\];/)[0];
     expect(list).toContain("'gemini-3.8-flash'");
-    expect(list).toContain("'gemini-3.7-flash'");
     expect(list).toContain("'gemini-3.6-flash'");
-    expect(list.indexOf('3.8')).toBeLessThan(list.indexOf('3.7'));
-    expect(list.indexOf('3.7')).toBeLessThan(list.indexOf('3.6'));
+    expect(list.indexOf('3.8')).toBeLessThan(list.indexOf('3.6'));
+    // 3.7 Flash now just routes to 3.8 Flash, so it would only spend a rung.
+    expect(list).not.toContain("'gemini-3.7-flash'");
+    // The rung Google still lists as free closes the list, so a key with no
+    // billing always has something left to read with.
+    expect(list).toMatch(/'gemini-2\.5-flash'\];$/);
+  });
+
+  it('steps past a newer reader that has no free allowance on this key', async () => {
+    // The production failure: a key without billing asks 3.8 Flash, Google
+    // answers 429 "limit: 0", and the old code read that as "out of quota"
+    // and stopped the scan before any free model was tried.
+    const models = [];
+    const call = transport(async (url) => {
+      const m = String(url).match(/models\/([^:]+):/)[1];
+      models.push(m);
+      return m === 'gemini-2.5-flash'
+        ? good
+        : res(429, { error: { message: `Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: ${m}` } });
+    });
+
+    const out = await call('k', [{ text: 'x' }]);
+    expect(out.text).toBe('{"ok":1}');
+    expect(models).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']);
+
+    models.length = 0;
+    await call('k', [{ text: 'y' }]);
+    expect(models).toEqual(['gemini-2.5-flash']); // remembered for the session
+  });
+
+  it('says plainly when no reader at all is offered to the key', async () => {
+    const call = transport(async () => res(429, { error: { message: 'Quota exceeded, limit: 0' } }));
+    const err = await call('k', [{ text: 'x' }]).catch(e => e);
+    expect(err.message).toMatch(/did not offer any of its reading models/);
+    expect(err.message).not.toMatch(/quota/i);
+    expect(err.__alreadyFriendly).toBe(true);
+  });
+
+  it('still stops at once on a real daily limit', async () => {
+    const models = [];
+    const call = transport(async (url) => {
+      models.push(String(url).match(/models\/([^:]+):/)[1]);
+      return res(429, { error: { message: 'You exceeded your current quota, limit: 20 per day' } });
+    });
+    await expect(call('k', [{ text: 'x' }])).rejects.toThrow(/quota/);
+    expect(new Set(models).size).toBe(1);
   });
 
   it('has nothing in the chain that would be billed', () => {
@@ -618,11 +699,11 @@ describe('Reader chain — newest first, and never one that bills', () => {
     });
 
     await call('k', [{ text: 'x' }]);
-    expect(models).toEqual(['gemini-3.8-flash', 'gemini-3.7-flash']);
+    expect(models).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash']);
 
     models.length = 0;
     await call('k', [{ text: 'y' }]);
-    expect(models).toEqual(['gemini-3.7-flash']); // straight to the one that works
+    expect(models).toEqual(['gemini-3.6-flash']); // straight to the one that works
   });
 
   it('tries everything again rather than bricking when all were refused', async () => {

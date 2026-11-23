@@ -45,6 +45,16 @@ describe('the request that goes on the wire', () => {
     expect(body.generationConfig.maxOutputTokens).toBe(1200);
   });
 
+  it('shapes the thinking control for the model it is sent to', () => {
+    // Gemini 3+ takes the named level and ignores temperature; 2.x refuses the
+    // named level with a 400, so the last-resort 2.5 rung gets the number.
+    const newer = buildChatRequest({ contents: [], tools: TOOLS, model: 'gemini-3.8-flash' });
+    expect(newer.generationConfig.thinkingConfig).toEqual({ thinkingLevel: 'low' });
+    expect(newer.generationConfig.temperature).toBeUndefined();
+    const older = buildChatRequest({ contents: [], tools: TOOLS, model: 'gemini-2.5-flash' });
+    expect(older.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 512 });
+  });
+
   it('sends a tool result back as a role Gemini accepts', () => {
     // Content.role takes exactly "user" or "model". Several client libraries
     // spell this "function" in their own types and map it before the wire,
@@ -152,5 +162,22 @@ describe('when it goes wrong', () => {
     ac.abort();
     await expect(runIntelTurn({ apiKey: 'k', userText: 'x', tools: TOOLS, ctx: CTX, fetchImpl: vi.fn(), signal: ac.signal }))
       .rejects.toThrow(/Abort/i);
+  });
+});
+
+describe('models Google will not offer this key', () => {
+  it('asks the next model instead of ending on "limit: 0", with the key in a header', async () => {
+    const seen = [];
+    const fetchImpl = vi.fn(async (url, init) => {
+      const model = String(url).match(/models\/([^:]+):/)[1];
+      seen.push({ model, url: String(url), key: init.headers['x-goog-api-key'] });
+      return model === 'gemini-2.5-flash'
+        ? reply([{ text: 'Fine.' }])
+        : fail(429, `Quota exceeded for metric: generate_content_free_tier_requests, limit: 0, model: ${model}`);
+    });
+    const out = await runIntelTurn({ apiKey: 'chat-key', userText: 'hi', tools: TOOLS, ctx: CTX, fetchImpl });
+    expect(out.text).toBe('Fine.');
+    expect(seen[seen.length - 1].model).toBe('gemini-2.5-flash');
+    expect(seen.every(s => s.key === 'chat-key' && !s.url.includes('chat-key'))).toBe(true);
   });
 });

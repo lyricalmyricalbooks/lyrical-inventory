@@ -168,7 +168,7 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
 }
 
 export const FINDER_ENDPOINT_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
-export const EXPECTED_FINDER_VERSION = 'v2';
+export const EXPECTED_FINDER_VERSION = 'v3';
 export const EXPECTED_SHEETS_VERSION = 'v46';
 const MAX_AI_FILES = 20;
 const MAX_AI_PAYLOAD = 18 * 1024 * 1024;
@@ -393,7 +393,7 @@ const SETUP_STEPS = {
   firebaseWebApiKey: 'Add FIREBASE_WEB_API_KEY — this project’s Firebase web API key — in the script’s Script Properties.',
   publisherUid: 'Add PUBLISHER_UID — the publisher’s Firebase sign-in ID — in the script’s Script Properties.',
   geminiApiKey: 'Add GEMINI_API_KEY — a Gemini key restricted to the Generative Language API — in the script’s Script Properties. It never goes into this app.',
-  model: 'Fix GEMINI_MODEL: it must be a plain model name such as gemini-2.5-flash, or removed to use the default.',
+  model: 'Fix GEMINI_MODEL: it must be a plain model name such as gemini-3.8-flash, or removed to use the default.',
 };
 const REDEPLOY_STEP = 'Open the “Connect your Google Sheet” tab, copy the script shown there into your Apps Script project, then Deploy → Manage deployments → Edit → New version.';
 

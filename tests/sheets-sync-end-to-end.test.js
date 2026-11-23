@@ -19,7 +19,7 @@ const app = vi.hoisted(() => ({ BOOKS: {}, states: {}, unsent: new Set() }));
 vi.mock('../src/main.js', () => ({
   $: () => null,
   BOOKS: app.BOOKS,
-  EXPECTED_SCRIPT_VERSION: 'v58',
+  EXPECTED_SCRIPT_VERSION: 'v59',
   activeBook: 'zine',
   bookInSyncWithCloud: (id) => !app.unsent.has(id),
   checkSheetsVersion: () => {},
@@ -290,9 +290,9 @@ describe('expenses and artist payments reach the sheet on their own', () => {
 });
 
 describe('the sheet itself', () => {
-  it('advertises v58 and the sync abilities', () => {
+  it('advertises v59 and the sync abilities', () => {
     const caps = gs.get({});
-    expect(caps.scriptVersion).toBe('v58');
+    expect(caps.scriptVersion).toBe('v59');
     expect(caps.capabilities.pruneOrphans).toBe(true);
     expect(caps.capabilities.expenseRows).toBe(true);
   });

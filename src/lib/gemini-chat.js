@@ -31,6 +31,7 @@ import {
   _geminiNoteThrottle,
   _geminiUnavailable,
 } from './gemini-quota.js';
+import { geminiErrorBody, geminiModelRefused, geminiUsesThinkingLevel } from './gemini-models.js';
 import { runIntelTool } from './publisher-intel-tools.js';
 
 export const GEMINI_API_ROOT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -76,18 +77,19 @@ const callsOf = (parts) => (parts || [])
  * Exported so a test can assert what actually goes on the wire — in particular
  * that response_mime_type is absent whenever tools are declared.
  */
-export function buildChatRequest({ contents, tools, systemInstruction }) {
-  const body = {
-    contents,
-    generationConfig: {
-      // Keep bookkeeping questions quick and economical. The model still has
-      // to obtain every figure through a tool; low thinking is enough to pick
-      // that tool without paying the default latency for a deep reasoning run.
-      temperature: 0.2,
-      maxOutputTokens: 1200,
-      thinkingConfig: { thinkingLevel: 'low' },
-    },
-  };
+export function buildChatRequest({ contents, tools, systemInstruction, model }) {
+  // Keep bookkeeping questions quick and economical. The model still has to
+  // obtain every figure through a tool; low thinking is enough to pick that
+  // tool without paying the default latency for a deep reasoning run.
+  //
+  // Gemini 3 and later take the named level and ignore temperature (Google
+  // says a future release will refuse it). Gemini 2.x only reads the numeric
+  // budget, and refuses the named level with a 400 — so the request is shaped
+  // for the model it is going to.
+  const generationConfig = model && !geminiUsesThinkingLevel(model)
+    ? { temperature: 0.2, maxOutputTokens: 1200, thinkingConfig: { thinkingBudget: 512 } }
+    : { maxOutputTokens: 1200, thinkingConfig: { thinkingLevel: 'low' } };
+  const body = { contents, generationConfig };
   if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
   if (tools && tools.length) {
     body.tools = [{ functionDeclarations: tools }];
@@ -106,14 +108,19 @@ async function callModel(model, apiKey, body, { fetchImpl, signal }) {
   const send = async () => {
     await _geminiAwaitCooldown();
     if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    // The key travels in the x-goog-api-key header, the only way Google's
+    // current guides send it, rather than in the address.
     return fetchImpl(
-      `${GEMINI_API_ROOT}/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal }
+      `${GEMINI_API_ROOT}/${model}:generateContent`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: JSON.stringify(body), signal }
     );
   };
 
   let res = await send();
   for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
+    // A "limit: 0" refusal is about the model, not the moment: waiting and
+    // asking again gets the same answer, so go straight to the next model.
+    if (res.status === 429 && geminiModelRefused(429, (await geminiErrorBody(res))?.error?.message)) break;
     const retryAfter = Number(res.headers?.get?.('retry-after'));
     const wait = Number.isFinite(retryAfter) && retryAfter > 0
       ? Math.min(retryAfter * 1000, 8000)
@@ -134,7 +141,7 @@ async function callModel(model, apiKey, body, { fetchImpl, signal }) {
  * identically everywhere, so those stop the walk immediately rather than
  * spending two more metered requests to be told the same thing twice.
  */
-async function askChain(apiKey, body, opts) {
+async function askChain(apiKey, bodyFor, opts) {
   const free = _geminiModelChain(apiKey);
   if (!free.length) throw new Error('No free-tier model is available for this key');
   const reachable = free.filter(m => !_geminiUnavailable.has(m));
@@ -143,14 +150,14 @@ async function askChain(apiKey, body, opts) {
   let lastErr;
   for (const model of chain) {
     try {
-      const res = await callModel(model, apiKey, body, opts);
+      const res = await callModel(model, apiKey, bodyFor(model), opts);
       if (!res.ok) {
         let detail = `HTTP ${res.status} from ${model}`;
         let fatal = res.status === 400 || res.status === 401 || res.status === 403;
         if (res.status === 404) _geminiUnavailable.add(model);
         let details;
         try {
-          const err = await res.json();
+          const err = await geminiErrorBody(res);
           details = err?.error?.details;
           if (err?.error?.message) {
             detail = err.error.message;
@@ -164,6 +171,13 @@ async function askChain(apiKey, body, opts) {
         lastErr.status = res.status;
         // Tells a spent day's allowance from a one-minute limit (gemini-quota.js).
         if (Array.isArray(details)) lastErr.details = details;
+        // This one model was turned down for this key (a newer Flash with no
+        // free allowance answers "limit: 0"): ask the next one rather than
+        // ending the question on a quota message.
+        if (geminiModelRefused(res.status, detail)) {
+          _geminiUnavailable.add(model);
+          continue;
+        }
         if (fatal) throw lastErr;
         continue;
       }
@@ -221,7 +235,7 @@ export async function runIntelTurn({
   let truncated = false;
 
   for (let round = 0; round < maxRounds; round++) {
-    const answer = await askChain(apiKey, buildChatRequest({ contents, tools, systemInstruction }), { fetchImpl, signal });
+    const answer = await askChain(apiKey, model => buildChatRequest({ contents, tools, systemInstruction, model }), { fetchImpl, signal });
     model = answer.model;
     truncated = answer.truncated;
 

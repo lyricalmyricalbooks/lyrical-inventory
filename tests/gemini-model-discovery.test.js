@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildHarness, appSource } from './helpers/extract-decl.js';
-import { parseGeminiModel, rankFreeGeminiModels, GEMINI_FREE_TIER_MODEL } from '../src/lib/gemini-models.js';
+import { parseGeminiModel, rankFreeGeminiModels, GEMINI_FREE_TIER_MODEL, geminiModelRefused, geminiUsesThinkingLevel } from '../src/lib/gemini-models.js';
 
 // Covers picking up a newly released Flash reader on its own, instead of
 // leaving a faster one unused until somebody edits a constant and ships.
@@ -94,7 +94,7 @@ describe('Remembering what Google offers', () => {
     };
     const h = buildHarness({
       names: [
-        '_warmGeminiModelCache', '_readGeminiModelCache', '_geminiModelChain',
+        '_warmGeminiModelCache', '_readGeminiModelCache', '_geminiModelChain', 'GEMINI_ROUTED_MODELS',
         // The cache is scoped to the key that discovered it, so the fingerprint
         // helper has to come across with the functions that use it.
         '_geminiKeyId',
@@ -115,7 +115,7 @@ describe('Remembering what Google offers', () => {
 
   it('falls back to the built-in readers before it has ever asked', () => {
     const h = cacheHarness();
-    expect(h.chain()).toEqual(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']);
+    expect(h.chain()).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']);
   });
 
   it('picks up a newly released reader without anyone editing the code', async () => {
@@ -167,7 +167,7 @@ describe('Remembering what Google offers', () => {
   it('keeps working when the lookup fails', async () => {
     const h = cacheHarness({ fetchImpl: async () => { throw new Error('network down'); } });
     await h.warm('key');
-    expect(h.chain()).toEqual(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash']);
+    expect(h.chain()).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash']);
   });
 
   it('keeps yesterday\'s list rather than replacing it with nothing', async () => {
@@ -202,6 +202,10 @@ describe('Remembering what Google offers', () => {
     const h = cacheHarness({ fetchImpl: async () => ({ ok: true, json: async () => ({ models: many }) }) });
     await h.warm('key');
     expect(h.chain()).toHaveLength(4);
+    // The last seat stays with the model Google still lists as free, so a key
+    // without billing is never left with only newer models that refuse it.
+    expect(h.chain()[3]).toBe('gemini-2.5-flash');
+    expect(h.chain()[0]).toBe('gemini-20.0-flash');
   });
 
   it('still refuses a billed model even if one reaches the cache', () => {
@@ -228,5 +232,31 @@ describe('Where the lookup is triggered', () => {
 
     expect(appSource).toMatch(/function renderExpenses\(\)[\s\S]{0,400}_warmGeminiModelCache/);
     expect(appSource).toMatch(/function renderTaxCenter\(\)[\s\S]{0,400}_warmGeminiModelCache/);
+  });
+});
+
+describe('Models that only route to another', () => {
+  it('leaves out names Google now answers with a newer model', () => {
+    const out = rankFreeGeminiModels([entry('gemini-3.8-flash'), entry('gemini-3.7-flash'), entry('gemini-3.6-flash'), entry('gemini-3.5-flash')]);
+    expect(out).toEqual(['gemini-3.8-flash', 'gemini-3.6-flash']);
+  });
+});
+
+describe('Telling a refused model from a refused key', () => {
+  it('treats "limit: 0" and a missing model as this model only', () => {
+    expect(geminiModelRefused(429, 'Quota exceeded for metric: x, limit: 0, model: gemini-3.8-flash')).toBe(true);
+    expect(geminiModelRefused(404, 'models/gemini-9-flash is not found')).toBe(true);
+    expect(geminiModelRefused(403, 'This model is no longer available to new users')).toBe(true);
+  });
+  it('keeps real limits, bad keys and shut-out projects fatal', () => {
+    expect(geminiModelRefused(429, 'You exceeded your current quota, limit: 20')).toBe(false);
+    expect(geminiModelRefused(400, 'API key not valid. Please pass a valid API key.')).toBe(false);
+    expect(geminiModelRefused(403, 'Your project has been denied access')).toBe(false);
+    expect(geminiModelRefused(400, 'Request contains an invalid argument.')).toBe(false);
+  });
+  it('knows which models take the named thinking level', () => {
+    expect(geminiUsesThinkingLevel('gemini-3.8-flash')).toBe(true);
+    expect(geminiUsesThinkingLevel('gemini-4-argon')).toBe(true);
+    expect(geminiUsesThinkingLevel('gemini-2.5-flash')).toBe(false);
   });
 });
