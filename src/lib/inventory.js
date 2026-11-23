@@ -297,7 +297,10 @@ export function recalculateBookStatsFromHistory(s) {
   (s.hist || []).forEach(h => {
     if (h.voided) return;
     
-    const chan = h.chan || 'Manual';
+    // A free copy is counted as a gift wherever it was handed over: a comp
+    // given at a fair table must not show up as a Book Fair sale in the
+    // channel figures (it carries chan 'Book Fair' and gratuity: true).
+    const chan = h.gratuity ? 'Gratuity' : (h.chan || 'Manual');
     const cs = channelStats(s, chan);
     cs.txns++;
     cs.units += num(h.qty);

@@ -29,8 +29,9 @@ const st = () => app.main.states.harbour;
 const row = (num) => st().hist.find(h => h.num === num);
 
 // What every sale row carries, whichever way it came in.
-function expectSaleRow(h, { num, chan, qty, price, date }) {
-  expect(h).toMatchObject({ num, chan, qty, price, date, payment: null, enteredBy: 'Publisher', cur: 'CAD' });
+// A shop order that arrived on its own is entered by 'Website'.
+function expectSaleRow(h, { num, chan, qty, price, date, enteredBy = 'Publisher' }) {
+  expect(h).toMatchObject({ num, chan, qty, price, date, payment: null, enteredBy, cur: 'CAD' });
   expect(typeof h.sheetsId).toBe('string');
   expect(h.sheetsId.length).toBeGreaterThan(0);
   // Back-filled sales keep their own date in the activity feed.
@@ -48,12 +49,29 @@ describe('a website order found by the scan', () => {
 
     expect(st()).toMatchObject({ stock: 88, sold: 12, revenue: 470 });
     expect(st().chStats.Website).toEqual({ txns: 1, units: 2, revenue: 70 });
-    expectSaleRow(row('#WEB-1'), { num: '#WEB-1', chan: 'Website', qty: 2, price: 35, date: '2026-10-01' });
+    expectSaleRow(row('#WEB-1'), { num: '#WEB-1', chan: 'Website', qty: 2, price: 35, date: '2026-10-01', enteredBy: 'Website' });
     expect(row('#WEB-1')).toMatchObject({ sheetsId: 'bc-WEB-1', notes: 'Big Cartel', shipName: 'Rae', shipEmail: 'rae@example.com' });
     // Dated before the fair sale: 98 left after it, 88 after the fair.
     expect(row('#WEB-1').after).toBe(98);
     expect(row('M-1').after).toBe(88);
     expect(app.main.getAllAppliedIds().has('bc-1')).toBe(true);
+  });
+
+  it('puts every later Stock After back when it is reverted to New', () => {
+    app.main.orders.length = 0;
+    app.main.orders.push({
+      id: 'bc-2', orderNum: '#WEB-2', bookId: 'harbour', hasBook: true, qty: 2, price: 35,
+      date: '2026-10-01', customer: 'Rae', email: 'rae@example.com', shippingPaid: 0,
+    });
+    app.window.applyOne('bc-2');
+    expect(row('M-1').after).toBe(88);
+    app.window.unapplyOne('bc-2');
+
+    expect(row('#WEB-2')).toBeUndefined();
+    expect(st()).toMatchObject({ stock: 90, sold: 10, revenue: 400 });
+    expect(st().chStats.Website).toBeUndefined();
+    // The fair sale after it is back to its own count.
+    expect(row('M-1').after).toBe(90);
   });
 });
 
@@ -65,7 +83,7 @@ describe('a website order recovered from a postage label', () => {
     expect(entry).toBe(row('#GPW-7'));
     expect(st()).toMatchObject({ stock: 89, sold: 11, revenue: 440 });
     expect(st().chStats.Website).toEqual({ txns: 1, units: 1, revenue: 40 });
-    expectSaleRow(entry, { num: '#GPW-7', chan: 'Website', qty: 1, price: 40, date: '2026-10-03' });
+    expectSaleRow(entry, { num: '#GPW-7', chan: 'Website', qty: 1, price: 40, date: '2026-10-03', enteredBy: 'Website' });
     expect(entry).toMatchObject({ sheetsId: 'bc-GPW-7', recoveredFromPostage: true, shippingPaid: 12, shipName: 'Sam' });
     expect(entry.after).toBe(99);
     expect(row('M-1').after).toBe(89);
