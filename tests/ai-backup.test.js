@@ -134,7 +134,7 @@ describe('provider boundary integration', () => {
         : good();
     };
     const read = buildHarness({
-      names: ['_callAiForReceipts', '_callGeminiForReceipts', 'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode', '_geminiThinkingPatch', 'GEMINI_SINGLE_ATTEMPT_BYTES'],
+      names: ['_callAiForReceipts', '_callGeminiForReceipts', 'geminiModelRefused', 'geminiUsesThinkingLevel', 'geminiErrorBody', '_geminiNoModelError', 'GEMINI_THINKING_READ', 'GEMINI_THINKING_MODES', '_geminiThinkingMode', '_geminiThinkingPatch', 'GEMINI_SINGLE_ATTEMPT_BYTES'],
       deps: { TAX_CENTER: { settings: { openRouterKey: 'backup-test-key' } },
         fetch: fetchImpl, DOMException, _geminiModelChain: () => ['gemini-test'],
         _geminiUnavailable: new Set(), _geminiAwaitCooldown: async () => {}, _geminiNoteThrottle: () => {},

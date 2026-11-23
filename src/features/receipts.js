@@ -53,6 +53,7 @@ import {
   _geminiUnavailable,
   _warmGeminiModelCache,
 } from '../lib/gemini-quota.js';
+import { geminiErrorBody, geminiModelRefused, geminiUsesThinkingLevel } from '../lib/gemini-models.js';
 import { followableUrl } from '../lib/receipt-links.js';
 import { MAX_RECEIPT_PICKS, mergeReceiptPicks, receiptLinkLabel, removeReceiptPick } from '../lib/receipt-picks.js';
 import { isReceiptAddition, receiptAdditionPayload, receiptLooksLikeImage, receiptRefName, removeExpenseReceipt } from '../lib/expense-receipts.js';
@@ -3683,8 +3684,13 @@ const GEMINI_THINKING_MODES = ['budget', 'level', 'off'];
 const _geminiThinkingMode = new Map();
 
 // The fragment of generationConfig that carries the control, or null for 'off'.
+//
+// The number-shaped request also keeps its temperature. Only Gemini 2.x reads
+// either: Google's guide for Gemini 3 and later says to drop both, the API
+// ignores temperature on those models today, and it has said a future release
+// will refuse it outright.
 function _geminiThinkingPatch(mode, budget) {
-  if (mode === 'budget') return { thinking_config: { thinking_budget: budget } };
+  if (mode === 'budget') return { temperature: 0.1, thinking_config: { thinking_budget: budget } };
   // 'low' rather than a budget-derived guess: it is the one named level every
   // family that uses names accepts, and it is still far below the default.
   if (mode === 'level') return { thinking_config: { thinking_level: 'low' } };
@@ -3747,18 +3753,13 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
   // model and each retry re-stringified and re-uploaded the entire body.
   const generationConfig = {
     response_mime_type: 'application/json',
-    temperature: 0.1,
     maxOutputTokens
   };
   if (schema) generationConfig.response_schema = schema;
-  const body = JSON.stringify({
-    contents: [{ parts }],
-    generationConfig: { ...generationConfig, ..._geminiThinkingPatch('budget', thinkingBudget) }
-  });
-  // The other spellings are stringified only if a model actually rejects the
-  // first one — otherwise this would re-serialize the same multi-megabyte
-  // payload two more times on every single scan.
-  const bodyCache = new Map([['budget', body]]);
+  // Each spelling is stringified only when a model actually needs it —
+  // otherwise this would re-serialize the same multi-megabyte payload two more
+  // times on every single scan.
+  const bodyCache = new Map();
   const bodyFor = (mode) => {
     if (!bodyCache.has(mode)) {
       const patch = _geminiThinkingPatch(mode, thinkingBudget);
@@ -3780,22 +3781,32 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
   // leave the scanner permanently unable to try.
   const reachable = free.filter(m => !_geminiUnavailable.has(m));
   const chain = reachable.length ? reachable : free;
-  const models = body.length > GEMINI_SINGLE_ATTEMPT_BYTES
-    ? chain.slice(0, 1)
-    : chain;
+  // Which spelling a model is asked in first: what it accepted before, else
+  // the named level for Gemini 3 and later, else the number.
+  const firstMode = (model) => _geminiThinkingMode.get(model)
+    ?? (geminiUsesThinkingLevel(model) ? GEMINI_THINKING_MODES.indexOf('level') : 0);
+  // A big upload gets one real attempt. A model that Google refuses outright
+  // (see geminiModelRefused) does not use it up: that answer comes back before
+  // any reading happens, and is remembered for the rest of the session.
+  const singleAttempt = bodyFor(GEMINI_THINKING_MODES[firstMode(chain[0])]).length > GEMINI_SINGLE_ATTEMPT_BYTES;
+  let attempted = false;
+  let refusedCount = 0;
 
   let lastErr;
-  for (const model of models) {
-    let modeIdx = _geminiThinkingMode.get(model) || 0;
+  for (const model of chain) {
+    if (singleAttempt && attempted) break;
+    let modeIdx = firstMode(model);
     let sendBody = bodyFor(GEMINI_THINKING_MODES[modeIdx]);
     try {
       const send = async () => {
         // Nothing goes out while the pool is serving a rate-limit pause.
         await _geminiAwaitCooldown();
         if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+        // The key travels in the x-goog-api-key header, the only way Google's
+        // current guides send it, rather than in the address.
         return fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
-          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: sendBody, signal }
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body: sendBody, signal }
         );
       };
       let res = await send();
@@ -3804,6 +3815,9 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
       // congestion window that caused the 429, so the attempt was mostly
       // wasted; jitter stops parallel email extractions from resonating.
       for (let attempt = 0; attempt < 2 && !res.ok && (res.status === 429 || res.status >= 500); attempt++) {
+        // A "limit: 0" refusal is about the model, not the moment: waiting and
+        // asking again gets the same answer, so go straight to the next model.
+        if (res.status === 429 && geminiModelRefused(429, (await geminiErrorBody(res))?.error?.message)) break;
         const retryAfter = Number(res.headers?.get?.('retry-after'));
         const wait = Number.isFinite(retryAfter) && retryAfter > 0
           ? Math.min(retryAfter * 1000, 8000)
@@ -3848,7 +3862,7 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         if (res.status === 404) _geminiUnavailable.add(model);
         let details;
         try {
-          const err = await res.json();
+          const err = await geminiErrorBody(res);
           // Kept for _geminiSpentFor(): the quota id is what tells a spent
           // day's allowance apart from a one-minute rate limit.
           details = err?.error?.details;
@@ -3866,6 +3880,17 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         lastErr = new Error(detail);
         lastErr.status = res.status;
         if (Array.isArray(details)) lastErr.details = details;
+        // Google turned down this one model for this key — typically a newer
+        // Flash with no free allowance ("limit: 0"). That says nothing about
+        // the key or the receipt, so the next model is asked instead of the
+        // scan stopping on a billing-sounding message it was never going to
+        // get past.
+        if (geminiModelRefused(res.status, detail)) {
+          _geminiUnavailable.add(model);
+          refusedCount++;
+          continue;
+        }
+        attempted = true;
         // `throw` here lands in this iteration's own catch below, which used to
         // record it as just another failed model and move on — so the
         // stop-on-billing/quota check never actually stopped anything and a
@@ -3874,6 +3899,7 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
         if (shouldStop) { lastErr.__fatal = true; throw lastErr; }
         continue;
       }
+      attempted = true;
       const data = await res.json();
       const cand = data.candidates?.[0];
       // Newer flash models emit a thought part first. Reading only parts[0].text
@@ -3896,10 +3922,23 @@ async function _callGeminiForReceipts(apiKey, parts, opts = {}) {
       if (e && e.name === 'AbortError') throw e;
       // Nor an error every model in the chain would give identically.
       if (e && e.__fatal) throw e;
+      attempted = true;
       lastErr = e;
     }
   }
+  if (refusedCount && refusedCount === chain.length) throw _geminiNoModelError(lastErr);
   throw lastErr || new Error('All Gemini models failed');
+}
+
+// Every model in the chain was turned down for this key. Said in words the
+// publisher can act on, and deliberately not phrased as a quota or billing
+// problem: nothing was used up, so the app must not rest the key until
+// midnight or tell them their allowance is spent.
+function _geminiNoModelError(lastErr) {
+  return Object.assign(new Error(
+    'Google did not offer any of its reading models to this AI key on its free plan. '
+    + 'Check the key in Google AI Studio, or add an OpenRouter backup key in the Tax Centre config'
+  ), { __alreadyFriendly: true, status: 404, cause: lastErr });
 }
 
 // Structured output beats prompt rules: `enum` stops a near-miss category like

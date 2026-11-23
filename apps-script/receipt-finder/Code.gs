@@ -1,12 +1,16 @@
-var RECEIPT_SCRIPT_VERSION = 'v2';
+var RECEIPT_SCRIPT_VERSION = 'v3';
 
 /* Standalone Receipt Finder service. Deploy in its OWN Apps Script project.
  * Script Properties: FIREBASE_WEB_API_KEY, PUBLISHER_UID, GEMINI_API_KEY,
- * GEMINI_MODEL (optional primary model; defaults to gemini-2.5-flash and
+ * GEMINI_MODEL (optional primary model; defaults to gemini-3.8-flash and
  * falls back across supported Flash models when that primary is unavailable).
  * No Gmail scope, refresh token, or mailbox access is held by this service.
  *
  * Version history
+ * v3 - Follows Google's current models: default gemini-3.8-flash, fallbacks
+ *      3.8 Flash, 3.6 Flash, 3.5 Flash-Lite, 2.5 Flash. A model Google refuses
+ *      for this key (404, or 429 "limit: 0") is stepped past. The deprecated
+ *      temperature setting is no longer sent.
  * v2 - doGet returns a setup report (service name, version, which Script
  *      Properties are present) so the app can verify a deployment before a
  *      scan spends Gmail and AI calls. Values are never echoed back.
@@ -15,7 +19,7 @@ var RECEIPT_SCRIPT_VERSION = 'v2';
  */
 function doGet() {
   var props = PropertiesService.getScriptProperties();
-  var model = props.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
+  var model = props.getProperty('GEMINI_MODEL') || 'gemini-3.8-flash';
   var validModel = /^[a-zA-Z0-9.-]+$/.test(model);
   // This endpoint is reachable without sign-in, so it reports only whether each
   // setting exists. Never return a key, a UID, or any part of their values.
@@ -92,7 +96,7 @@ function doPost(e) {
     var aiPayload = JSON.stringify({ systemInstruction: { parts: [{ text: prompt }] },
       contents: [{ role: 'user', parts: [{ text: JSON.stringify({ subject: String(email.subject || '').slice(0, 1000),
         from: String(email.from || '').slice(0, 1000), date: String(email.date || '').slice(0, 200), body: email.body }) }].concat(files) }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 } });
+      generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 8192 } });
     var response = receiptAiResponse_(receiptModelChain_(props.getProperty('GEMINI_MODEL')), aiKey, aiPayload);
     var result = JSON.parse(response.getContentText());
     var candidate = (result.candidates || [])[0];
@@ -113,10 +117,16 @@ function receiptJson_(value) {
   return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON);
 }
 
+// Newest first, checked against Google's model pages on 2026-11-23. 3.7 and
+// 3.5 Flash are left out: Google now answers them with 3.8 and 3.6. 2.5 Flash
+// is last because it is the one Google's pricing page still lists as free,
+// so a key without billing can still read when the newer ones say no.
+var RECEIPT_MODEL_FALLBACKS_ = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
+
 function receiptModelChain_(configuredModel) {
-  var primary = configuredModel || 'gemini-2.5-flash';
+  var primary = configuredModel || 'gemini-3.8-flash';
   if (!/^[a-zA-Z0-9.-]+$/.test(primary)) throw new Error('Invalid receipt model setting');
-  var candidates = [primary, 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
+  var candidates = [primary].concat(RECEIPT_MODEL_FALLBACKS_);
   var models = [];
   candidates.forEach(function (model) {
     if (models.indexOf(model) === -1) models.push(model);
@@ -133,12 +143,27 @@ function receiptAiResponse_(models, aiKey, payload) {
     var status = response.getResponseCode();
     if (status === 200) return response;
     lastStatus = status;
-    if (i === models.length - 1 || !receiptCanFallback_(status)) break;
+    if (i === models.length - 1) break;
+    // A model Google refused for this key costs nothing to step past.
+    if (receiptModelRefused_(status, response.getContentText())) continue;
+    if (!receiptCanFallback_(status)) break;
     // A 429 or service error may be account-wide. One alternate model is a
     // useful escape hatch; probing the entire chain would make a quota pause worse.
     if (status !== 404 && i >= 1) break;
   }
   throw new Error('Receipt AI is unavailable (' + lastStatus + '). Retry later.');
+}
+
+// Google turned down this one model for this key rather than the key or the
+// request — most often a newer Flash with no free allowance, which answers 429
+// with "limit: 0". The next model is worth asking; the body is only inspected
+// here, never echoed.
+function receiptModelRefused_(status, text) {
+  if (status === 404) return true;
+  if (/API key|api_key|UNAUTHENTICATED|denied access|billing account|prepayment/i.test(text)) return false;
+  if (status === 429 && /\blimit:\s*0\b/i.test(text)) return true;
+  return (status === 400 || status === 403) && /\bmodel\b/i.test(text)
+    && /(?:not|no longer) (?:available|supported|found|offered)|not have access/i.test(text);
 }
 
 function receiptCanFallback_(status) {

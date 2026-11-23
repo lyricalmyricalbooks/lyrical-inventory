@@ -230,10 +230,14 @@ describe('Receipt import performance & correctness fixes', () => {
       // The body must be built before the `for (const model of models)` loop,
       // not inside the `send` closure — otherwise every model + retry
       // re-uploads the full multi-megabyte payload.
-      const forLoopIdx = fnSrc.indexOf('for (const model of models)');
-      const bodyIdx = fnSrc.indexOf('const body = JSON.stringify');
-      expect(bodyIdx).toBeGreaterThanOrEqual(0);
-      expect(bodyIdx).toBeLessThan(forLoopIdx);
+      // Bodies are memoised per thinking spelling in a cache that lives
+      // outside the loop, so a model or retry reuses the same string.
+      const forLoopIdx = fnSrc.indexOf('for (const model of chain)');
+      const cacheIdx = fnSrc.indexOf('const bodyCache = new Map(');
+      expect(forLoopIdx).toBeGreaterThanOrEqual(0);
+      expect(cacheIdx).toBeGreaterThanOrEqual(0);
+      expect(cacheIdx).toBeLessThan(forLoopIdx);
+      expect(fnSrc.slice(forLoopIdx)).not.toContain('JSON.stringify');
     });
 
     it('reads all non-thought text parts, not just parts[0]', () => {

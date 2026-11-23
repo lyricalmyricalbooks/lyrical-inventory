@@ -23,7 +23,7 @@
 // only the scanner. Renaming it would buy nothing and would break the suites
 // that pin the free-tier floor by matching this source.
 
-import { GEMINI_FREE_TIER_MODEL, rankFreeGeminiModels } from './gemini-models.js';
+import { GEMINI_FREE_TIER_MODEL, GEMINI_ROUTED_MODELS, rankFreeGeminiModels } from './gemini-models.js';
 
 // Gemini 2.0 Flash and 2.0 Flash-Lite were retired on 2026-06-01 — keeping them
 // in the fallback chain meant every escalation re-uploaded the whole payload to
@@ -33,7 +33,14 @@ import { GEMINI_FREE_TIER_MODEL, rankFreeGeminiModels } from './gemini-models.js
 // run, a machine that is offline, a key too new to list anything. Discovery
 // below replaces this the moment it succeeds, so this list is a starting point
 // rather than the definition of what the scanner can use.
-const GEMINI_RECEIPT_MODELS = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
+//
+// Checked against Google's model and deprecation pages on 2026-11-23: 3.8 Flash
+// is the newest Flash, 3.6 Flash the one before it (3.7 and 3.5 now just route
+// to those two), 3.5 Flash-Lite the newest Lite. 2.5 Flash closes the list on
+// purpose: it is the one Google's pricing page still lists with a free
+// allowance, so a key with no billing has something left to read with when the
+// newer models answer "limit: 0".
+const GEMINI_RECEIPT_MODELS = ['gemini-3.8-flash', 'gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-2.5-flash'];
 
 // Models this key cannot use, learned as we go. Without this the scan pays a
 // full upload and a round-trip to be told so on EVERY scan rather than once a
@@ -103,12 +110,19 @@ function _readGeminiModelCache(apiKey) {
 // to try. Capped, and re-filtered for the free tier on the way out — a name
 // that arrived from the network is not trusted any further than one typed by
 // hand.
+//
+// The built-in list's last model always keeps the last seat. Discovery can
+// return four newer Flash models that this key has no free allowance for, and
+// a chain made only of those fails every scan on a key without billing.
 export function _geminiModelChain(apiKey) {
   const discovered = _readGeminiModelCache(apiKey)?.models || [];
-  return discovered
+  const lastResort = GEMINI_RECEIPT_MODELS[GEMINI_RECEIPT_MODELS.length - 1];
+  const usable = discovered
     .concat(GEMINI_RECEIPT_MODELS.filter(m => !discovered.includes(m)))
-    .filter(m => GEMINI_FREE_TIER_MODEL.test(m))
-    .slice(0, GEMINI_CHAIN_MAX);
+    .filter(m => GEMINI_FREE_TIER_MODEL.test(m) && !GEMINI_ROUTED_MODELS.has(m));
+  if (usable.length <= GEMINI_CHAIN_MAX) return usable;
+  const head = usable.filter(m => m !== lastResort).slice(0, GEMINI_CHAIN_MAX - 1);
+  return usable.includes(lastResort) ? head.concat(lastResort) : usable.slice(0, GEMINI_CHAIN_MAX);
 }
 
 // In-flight discovery, so a pile of receipts scanning at once asks once.
@@ -130,9 +144,11 @@ export function _warmGeminiModelCache(apiKey) {
 
   _geminiDiscovery = (async () => {
     try {
+      // The key goes in the x-goog-api-key header, the only way Google's
+      // current guides send it, rather than in the address.
       const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models'
-        + `?key=${encodeURIComponent(apiKey)}&pageSize=200`
+        'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200',
+        { headers: { 'x-goog-api-key': apiKey } }
       );
       if (!res.ok) return;
       const data = await res.json();
