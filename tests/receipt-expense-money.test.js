@@ -181,13 +181,10 @@ describe('a pile of receipts logged to a book', () => {
     expect(app.cloud.lastSave(BOOK).state.expenses[0]).toMatchObject({ amount: 300, baseAmount: 300 });
   });
 
-  // BUG: the book side of the batch converts a foreign receipt at TODAY's rate
-  // (whatever `USD_CAD` is cached, e.g. from the register's rate refresh),
-  // never the rate for the receipt's own date. The business side of the same
-  // sheet and the Tax Centre form use the receipt's date (resolveExpenseRate).
-  // src/features/receipts.js, _postBatchToProjectLedger:
-  // `const rate = _fxRateCache[`${origCurrency}_${native}`]`.
-  it.fails('converts a back-dated foreign receipt at the rate for its own date, as the business side does', async () => {
+  // The book side of the batch used to convert at TODAY's cached rate (e.g.
+  // from the register's rate refresh) instead of the receipt's own date, unlike
+  // the business side of the same sheet and the Tax Centre form.
+  it('converts a back-dated foreign receipt at the rate for its own date, as the business side does', async () => {
     fakeServices({
       readings: { 'us-printer': { vendor: 'IngramSpark', description: 'Setup fee', date: '2025-03-10', amount: 100, currency: 'USD', category: 'Printing & Production', confidence: 0.95 } },
       byDate: { 'USD@2025-03-10': 1.43 },

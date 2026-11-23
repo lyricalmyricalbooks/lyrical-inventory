@@ -5619,7 +5619,10 @@ async function _postBatchToProjectLedger(rows) {
     let fxNote = '';
     let fxRate = null;
     if (origCurrency !== native) {
-      const rate = _fxRateCache[`${origCurrency}_${native}`];
+      // The rate for the receipt's own date, as the business side of this sheet
+      // and the single-expense form use. Today's rate would value a back-dated
+      // receipt at the wrong amount.
+      const rate = await resolveExpenseRate(origCurrency, row.date || today(), native).catch(() => 0);
       if (rate) { amount = origAmount * rate; fxRate = rate; fxNote = ` (Paid ${origCurrency} ${origAmount.toFixed(2)})`; }
       else { currency = origCurrency; }
     }
@@ -7359,7 +7362,9 @@ async function submitExpense() {
   // amount — the previous currency's rate can still be sitting there while a
   // new lookup is in flight, and the form can open on a remembered foreign
   // currency without ever having fetched one. In that case look it up now.
-  let expenseFxRate = (_expenseFxRateCur === cur) ? _expenseFxRate : null;
+  // The rate fetched while the form was open is today's, so it only stands in
+  // for an expense dated today; a back-dated one is looked up for its own date.
+  let expenseFxRate = (_expenseFxRateCur === cur && date >= today()) ? _expenseFxRate : null;
   if (cur !== native && !expenseFxRate && rawAmount) {
     try { expenseFxRate = (await resolveExpenseRate(cur, date, native)) || null; } catch (_) { expenseFxRate = null; }
   }

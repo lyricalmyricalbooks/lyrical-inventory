@@ -243,7 +243,7 @@ describe('the expense form never converts with another currency\'s rate', () => 
   });
 
   it('submit uses only a rate belonging to the selected currency, and never books a foreign amount 1:1', () => {
-    expect(receiptsSrc).toContain('let expenseFxRate = (_expenseFxRateCur === cur) ? _expenseFxRate : null;');
+    expect(receiptsSrc).toContain('let expenseFxRate = (_expenseFxRateCur === cur && date >= today()) ? _expenseFxRate : null;');
     expect(receiptsSrc).toContain('const baseAmount = cadRate ? roundCents(amount * cadRate) : null;');
   });
 });
