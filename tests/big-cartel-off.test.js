@@ -11,18 +11,19 @@ beforeAll(async () => {
 }, 30000);
 
 describe('switching Big Cartel off', () => {
-  it('hides it when no store is saved', async () => {
+  it('keeps it out of the menus, since the shop no longer sells there', async () => {
     await bc.refreshBigCartelVisibility();
     expect(document.body.classList.contains('bc-off')).toBe(true);
   });
 
-  it('shows it again once a store is saved', async () => {
+  it('stays hidden even when an old store is saved again', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}), text: async () => '' })));
     document.getElementById('bc-subdomain').value = 'my-shop';
     document.getElementById('bc-username').value = 'me';
     document.getElementById('bc-password').value = 'token';
     await bc.saveBigCartelSettings();
-    expect(document.body.classList.contains('bc-off')).toBe(false);
+    await bc.refreshBigCartelVisibility();
+    expect(document.body.classList.contains('bc-off')).toBe(true);
     expect((await app.window._fbLoadSettings('bigCartelConfig')).subdomain).toBe('my-shop');
   });
 
