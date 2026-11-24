@@ -1663,10 +1663,10 @@ function _tcRenderPendingPanel() {
   }
 
   if (!rows.length) {
-    list.innerHTML = `<div class="tc-pending-empty">
-      <div class="tc-pending-empty-icon">🕑</div>
-      <div class="tc-pending-empty-title">Nothing pending</div>
-      <div class="tc-pending-empty-sub">Waiting on an invoice, or spent something you can't total yet? Note it here so it doesn't get lost before tax time.</div>
+    list.innerHTML = `<div class="empty-state sys-empty tc-pending-empty">
+      <div class="e-icon" aria-hidden="true">🕑</div>
+      <strong>Nothing pending</strong>
+      <span>Waiting on an invoice, or spent something you can't total yet? Note it here so it doesn't get lost before tax time.</span>
     </div>`;
     return;
   }

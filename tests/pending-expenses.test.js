@@ -26,7 +26,8 @@ describe('Pending / to-confirm expenses — wiring', () => {
     expect(css).toContain('.tc-pending-row');
     expect(css).toContain('.tc-due-badge');
     expect(css).toContain('.tc-due-overdue');
-    expect(css).toContain('.tc-pending-empty');
+    // The empty list uses the shared empty-state look (styles/system.css).
+    expect(fs.readFileSync(path.join(process.cwd(), 'src/features/taxcentre.js'), 'utf8')).toContain('empty-state sys-empty tc-pending-empty');
   });
 
   it('declares the full pending lifecycle', () => {

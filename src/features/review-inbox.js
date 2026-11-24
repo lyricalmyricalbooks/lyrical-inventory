@@ -339,8 +339,8 @@ function detailHtml(item) {
 
 function emptyDetailHtml(summary) {
   const clear = !summary.total;
-  return `<div class="ri-empty">
-      <div class="ri-empty-mark" aria-hidden="true">${clear ? '✓' : '←'}</div>
+  return `<div class="empty-state sys-empty ri-empty">
+      <div class="e-icon" aria-hidden="true">${clear ? '✓' : '←'}</div>
       <strong>${clear ? 'All caught up' : 'Pick one from the list'}</strong>
       <span>${clear
     ? 'Nothing is waiting for review. New receipts and shipping labels the app finds will show up here.'

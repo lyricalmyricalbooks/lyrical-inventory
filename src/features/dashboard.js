@@ -1058,8 +1058,8 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
   }
 
   if (!payouts.length) {
-    return `<div class="ps-payout-empty">
-      <span class="ps-payout-empty-icon" aria-hidden="true">💸</span>
+    return `<div class="empty-state sys-empty ps-payout-empty">
+      <div class="e-icon" aria-hidden="true">💸</div>
       <strong>No payouts recorded yet</strong>
       <span>${isAuthor() ? 'Every payment your publisher sends you lands here' : 'Every payment you send the artist belongs here'} — it is what the balance above is measured against.</span>
     </div>${undone}`;

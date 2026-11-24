@@ -580,10 +580,10 @@ export function renderConflictItemHtml(entry) {
 export function renderConflictListHtml(entries) {
   const list = Array.isArray(entries) ? entries : [];
   if (!list.length) {
-    return '<div class="empty-state sc-empty">'
+    return '<div class="empty-state sys-empty sc-empty">'
       + '<div class="e-icon" aria-hidden="true">✓</div>'
-      + '<strong class="sc-empty-title">Nothing to review</strong>'
-      + '<p class="sc-empty-sub">Every record your devices changed at the same time has been sorted out. If it happens again, the version that was set aside will wait here for you.</p>'
+      + '<strong>Nothing to review</strong>'
+      + '<span>Every record your devices changed at the same time has been sorted out. If it happens again, the version that was set aside will wait here for you.</span>'
       + '</div>';
   }
   return `<div class="sc-list">${list.map(renderConflictItemHtml).join('')}</div>`;
