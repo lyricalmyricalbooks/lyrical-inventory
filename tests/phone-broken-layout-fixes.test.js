@@ -75,7 +75,7 @@ test('the import confirm button starts disabled, with the hint shown, until a fi
   expect(html).toMatch(/<button class="btn gold" id="import-confirm-btn" onclick="confirmImport\(\)" disabled>/);
   expect(html).toMatch(/<p id="import-empty-hint" class="import-empty-hint">Choose a file to see its orders here<\/p>/);
   expect(main).toMatch(/function setImportReady\(ready\) \{/);
-  expect(main).toMatch(/setImportReady\(_importRows\.length > 0\);/);
+  expect(main).toMatch(/setImportReady\(kinds\.fresh > 0\);/);
   expect(main).toMatch(/_importRows = \[\];\s*setImportReady\(false\);/);
   // The Sheets restore path reuses the same pop-up and must stay enabled.
   expect(main).toMatch(/Restore database \(\$\{recordRows\.length\} rows\)`;\s*\}\s*setImportReady\(true\);/);

@@ -80,7 +80,7 @@ import {
 import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { deductibleAmount, deductibleRate } from '../lib/deductibility.js';
-import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels } from '../lib/receipt-storage.js';
+import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels, settlementRepaidLookup } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
 import { _geminiClearRest } from '../lib/gemini-quota.js';
@@ -4976,7 +4976,10 @@ function downloadTaxLedgerCSV() {
 
   if (!data.length) { showToast('Nothing to export for this filter'); return; }
 
-  const rows = [['Date', 'Type', 'Description', 'Category', 'Receipt/Ref', 'Orig Currency', 'Amount (Orig)', `Amount (${baseCurrency})`]];
+  // An expense an author settlement already paid back is still a real cost,
+  // but the accountant needs to see it was repaid, not count it twice.
+  const repaidOn = settlementRepaidLookup(states);
+  const rows = [['Date', 'Type', 'Description', 'Category', 'Receipt/Ref', 'Orig Currency', 'Amount (Orig)', `Amount (${baseCurrency})`, 'Paid back in author settlement']];
   for (const r of data) {
     // Sign the base-currency column so totals sum correctly in a spreadsheet.
     const signedBase = (r.isIncome ? 1 : -1) * Number(r.baseAmount || 0);
@@ -4989,6 +4992,7 @@ function downloadTaxLedgerCSV() {
       r.origCurrency || '',
       Number(r.origAmount || 0).toFixed(2),
       signedBase.toFixed(2),
+      repaidOn(r),
     ]);
   }
 

@@ -2565,6 +2565,14 @@ tr.hist-row:hover {
 .hist-import-notice{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;margin-bottom:var(--space-3);}
 .hist-import-notice > span{flex:1;min-width:0;}
 .hist-import-notice .card-x{margin-left:auto;}
+/* Past spreadsheet imports, folded, each with its own Undo. */
+.hist-past-imports{margin-bottom:var(--space-3);font-size:var(--text-sm);color:var(--text2);}
+.hist-past-imports > summary{cursor:pointer;min-height:44px;display:flex;align-items:center;font-weight:600;}
+.hist-past-imports ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--space-2);}
+.hist-past-imports li{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;}
+.hist-past-imports li > span{flex:1;min-width:0;}
+/* Preview rows the import will leave out (already in the book, or repeated). */
+.import-row-skip td{color:var(--text3);}
 /* Import preview: dates that needed a guess (renderImportPreview). */
 .import-date-notes{margin-top:var(--space-2);}
 .import-date-notes p{margin:0;}
@@ -14647,7 +14655,44 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .pos-search-wrapper {
   position: relative;
   width: 100%;
+  display: flex;
+  gap: var(--space-2);
 }
+/* Camera barcode scan, beside the search (shown only where the phone can read barcodes). */
+.pos-search-wrapper .pos-scan-btn {
+  flex: none;
+  min-width: 48px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+}
+.pos-search-wrapper .pos-scan-btn[hidden] { display: none; }
+/* The camera view while scanning a barcode. */
+.scan-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(14, 12, 10, 0.72);
+}
+.scan-box {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: 2px solid var(--text);
+  box-shadow: var(--elev-2);
+}
+.scan-title { margin: 0; font-weight: 700; font-size: var(--text-base); color: var(--text); }
+.scan-video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--text); }
+.scan-hint { margin: 0; font-size: var(--text-sm); color: var(--text2); }
 
 .pos-search-wrapper input {
   width: 100%;

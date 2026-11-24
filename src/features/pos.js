@@ -49,6 +49,9 @@ import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } 
 import { posOversellSummary, posStockView } from '../lib/pos-stock.js';
 import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, appendRegisterLog, compExpense, registerLogAsHist, removeRegisterSale, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
 import { storageSet, storageRead } from '../lib/safe-storage.js';
+import { bareIsbn } from '../lib/app-search.js';
+import { bookForCode, cameraScanSupported, openCameraScanner } from '../lib/barcode-scan.js';
+import { registerActions } from '../lib/actions.js';
 
 // ── EVENT POS ──
 let posCart = {};
@@ -205,6 +208,44 @@ function posSearchFilter(val) {
   posSearchQuery = (val || '').toLowerCase().trim();
   renderPOS();
 }
+
+// A scanned or typed barcode: the book whose ISBN it is goes into the sale
+// (one copy), and the search clears for the next scan. Returns the book, or
+// null when no single book has that ISBN.
+function posAddByCode(code) {
+  const book = bookForCode(code, posBooksMap());
+  const searchEl = $('pos-search-input');
+  if (!book) {
+    if (searchEl) searchEl.value = String(code || '');
+    posSearchFilter(code);
+    showToast(`No book has the ISBN ${bareIsbn(code)}. Add it to the book's details to scan it next time.`, 'warn', 6000);
+    return null;
+  }
+  if (searchEl) searchEl.value = '';
+  posSearchQuery = '';
+  posUpdateQty(book.id, 1);
+  showToast(`Added ${book.title || 'the book'} (${posCart[book.id]} in this sale)`, 'ok', 2500);
+  return book;
+}
+
+// A barcode scanner plugged into the device types the code and presses
+// Enter in the search box.
+function _posSearchEnter(e) {
+  if (e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.target?.id !== 'pos-search-input') return;
+  const code = bareIsbn(e.target.value);
+  if (code.length < 8 || !bookForCode(code, posBooksMap())) return;
+  e.preventDefault();
+  posAddByCode(code);
+}
+
+function posScanBarcode() {
+  openCameraScanner({
+    title: 'Scan a book into the sale',
+    onCode: posAddByCode,
+    onError: msg => showToast(msg, 'warn', 6000),
+  });
+}
+
 
 // ── #2: POS keyboard shortcuts ─────────────────────────────────────────
 // /         → focus POS search input
@@ -438,7 +479,8 @@ function renderPOS() {
   const booksArr = Object.values(booksToRender).filter(b =>
     !posSearchQuery ||
     (b.title || '').toLowerCase().includes(posSearchQuery) ||
-    (b.author || '').toLowerCase().includes(posSearchQuery)
+    (b.author || '').toLowerCase().includes(posSearchQuery) ||
+    (bareIsbn(posSearchQuery).length >= 4 && bareIsbn(b.isbn).includes(bareIsbn(posSearchQuery)))
   );
   if (!booksArr.length && posSearchQuery) {
     grid.innerHTML = `<div class="pos-search-empty">No books match <strong>&ldquo;${escapeHtml(posSearchQuery)}&rdquo;</strong>.<span class="pos-search-empty-hint">Clear the search to see every book.</span></div>`;
@@ -1490,6 +1532,15 @@ function initPos() {
   posExchangeRates = loadPosExchangeRates();
   document.addEventListener('keydown', _posKeyboardShortcuts);
   document.addEventListener('keydown', _posPriceModalKeys);
+  document.addEventListener('keydown', _posSearchEnter);
+  registerActions({ 'pos.scan': () => posScanBarcode() });
+  // The camera button shows only where the phone can read barcodes itself.
+  const scanBtn = $('pos-scan-btn');
+  const canScan = cameraScanSupported(window);
+  if (scanBtn) scanBtn.hidden = !canScan;
+  // On a phone the search row is folded away for a short list of books; keep
+  // it when the camera can scan, so the scan button is there.
+  document.querySelector('#pos-subpanel-register .pos-layout')?.classList.toggle('fm-scannable', canScan);
 }
 
 export {
@@ -1516,6 +1567,7 @@ export {
   savePosExchangeRates,
   initPos,
   posSearchFilter,
+  posAddByCode,
   fairOpenCharge,
   fairShowQR,
   fairOpenToday,

@@ -185,7 +185,7 @@
   #tab-pos #pos-subpanel-register > .row-between > div:first-child > div:last-child { display: none; }
   #tab-pos .pos-mobile-steps:has(+ .pos-layout[data-mobile-view="books"]) { display: none; }
   #tab-pos .pos-layout[data-mobile-view="books"] :is(#pos-grid, .pos-review-bar) { display: none !important; }
-  #tab-pos .pos-layout[data-mobile-view="books"]:not(.fm-searchable) .pos-search-wrapper { display: none; }
+  #tab-pos .pos-layout[data-mobile-view="books"]:not(.fm-searchable):not(.fm-scannable) .pos-search-wrapper { display: none; }
   #tab-pos .pos-layout[data-mobile-view="books"] #pos-mobile-books { padding-bottom: calc(var(--mnav-h) + 22px + env(safe-area-inset-bottom)); }
 
   #tab-pos .pos-layout[data-mobile-view="books"] .fm-tiles {
