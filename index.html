@@ -4106,6 +4106,9 @@
         <div class="pos-search-wrapper">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gold-text)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           <input type="search" id="pos-search-input" placeholder="Search books…" title="Shortcut: press / to search, Esc to clear" aria-label="Search books" oninput="posSearchFilter(this.value)">
+          <button type="button" class="btn pos-scan-btn" id="pos-scan-btn" data-action="pos.scan" hidden aria-label="Scan a book's barcode with the camera" title="Scan a barcode">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 7V4h3M21 7V4h-3M3 17v3h3M21 17v3h-3"/><line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/><line x1="13" y1="8" x2="13" y2="16"/><line x1="17" y1="8" x2="17" y2="16"/></svg>
+          </button>
         </div>
         <!-- Phone only: is everything uploaded, and how today is going. -->
         <div class="fm-top">
