@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { jsArg } from '../src/lib/html.js';
 import { buildHarness } from './helpers/extract-decl.js';
 import { findExpenseRule } from '../src/lib/expense-rules.js';
 import { PICKER_CURRENCIES, roundCents, setSelectCurrency } from '../src/lib/money.js';
@@ -78,6 +79,8 @@ function harness({
       updateDash: () => {},
       escapeHtml: (s) => String(s ?? ''),
       localStorage: { getItem: () => null, setItem: () => {} },
+      storageRead: () => null, storageSet: () => true,
+      jsArg,
       document: { querySelector: () => null },
 
       // ── app state
@@ -644,6 +647,8 @@ function domHarness() {
       escapeHtml: (s) => String(s ?? '').replace(/[&<>"']/g,
         (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
       localStorage: { getItem: () => null, setItem: () => {} },
+      storageRead: () => null, storageSet: () => true,
+      jsArg,
       TAX_CENTER: {
         businessExpenses: [{ trip: 'Toronto Fair', date: '2026-01-01', amount: 1, currency: 'CAD' }],
         settings: { baseCurrency: 'CAD', geminiKey: 'k-test' }

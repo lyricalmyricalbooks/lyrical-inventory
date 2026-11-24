@@ -342,8 +342,8 @@ describe('review screen markup', () => {
     expect(item.querySelectorAll('tr.is-same').length).toBeGreaterThan(0);
     const buttons = [...item.querySelectorAll('.sc-actions button')];
     expect(buttons.map(b => b.textContent)).toEqual(["Keep this device's version", "Use the other device's version"]);
-    expect(buttons[0].getAttribute('onclick')).toBe("keepSyncConflict('abc-1')");
-    expect(buttons[1].getAttribute('onclick')).toBe("restoreSyncConflict('abc-1')");
+    expect(buttons[0].getAttribute('onclick')).toBe('keepSyncConflict("abc-1")');
+    expect(buttons[1].getAttribute('onclick')).toBe('restoreSyncConflict("abc-1")');
     expect(item.textContent).toContain('1 detail differs');
     expect(item.textContent).not.toMatch(/undefined|\[object Object\]/);
   });

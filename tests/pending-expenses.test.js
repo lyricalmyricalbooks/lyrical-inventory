@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { jsArg } from '../src/lib/html.js';
 import fs from 'fs';
 import path from 'path';
 import { appSource, extractDecl } from './helpers/extract-decl.js';
@@ -77,13 +78,11 @@ describe('Pending / to-confirm expenses — wiring', () => {
     // backslash consumes the following escaped quote and breaks out of the
     // single-quoted JS string — exactly what CodeQL flagged here.
     const fn = extractDecl('_tcRenderPendingPanel');
-    const line = fn.match(/const safeId = [^\n]+;/)?.[0];
-    expect(line).toBeTruthy();
-    const buildSafeId = new Function('item', `${line}\nreturn safeId;`);
-
-    const malicious = "1\\";
-    const safe = buildSafeId({ id: malicious });
-    const attrValue = `confirmPendingExpense('${safe}')`;
+    expect(fn).toContain('confirmPendingExpense(${jsArg(item.id)})');
+    const malicious = "1\\';alert(1)//\"";
+    // What the browser hands the handler once it has read the attribute.
+    const attrValue = `confirmPendingExpense(${jsArg(malicious)})`
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
     let capturedArg;
     const confirmPendingExpense = (arg) => { capturedArg = arg; };

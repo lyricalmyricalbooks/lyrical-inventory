@@ -16,7 +16,7 @@
 
 import { stableStringify, keyRows, DERIVED_METADATA_KEYS, COUNTER_METADATA_KEYS } from './merge-state.js';
 import { fmt, fmtD } from './money.js';
-import { escapeHtml } from './html.js';
+import { escapeHtml, jsArg } from './html.js';
 
 export const SYNC_CONFLICTS_KEY = 'lyrical_sync_conflicts_v1';
 
@@ -570,8 +570,8 @@ export function renderConflictItemHtml(entry) {
     + `This device's version is the one in your records now${nDiff ? ` — ${plural(nDiff, 'detail differs', 'details differ')}` : ''}.</p>`
     + renderCompareTableHtml(entry)
     + '<div class="sc-actions">'
-    + `<button type="button" class="btn sm sys-target" onclick="keepSyncConflict('${id}')">Keep this device's version</button>`
-    + `<button type="button" class="btn sm ink sys-target" onclick="restoreSyncConflict('${id}')">Use the other device's version</button>`
+    + `<button type="button" class="btn sm sys-target" onclick="keepSyncConflict(${jsArg(entry.id)})">Keep this device's version</button>`
+    + `<button type="button" class="btn sm ink sys-target" onclick="restoreSyncConflict(${jsArg(entry.id)})">Use the other device's version</button>`
     + '</div>'
     + '</article>';
 }

@@ -14,7 +14,7 @@
 // Lives beside modal.js rather than in a feature, because two features need it
 // and neither should have to import the other to say something.
 
-import { escapeHtml } from './html.js';
+import { escapeHtml, jsArg } from './html.js';
 import { logNotification, markNotificationKindRead, notificationSource } from './notification-log.js';
 
 const STACK_ID = 'app-alert-stack';
@@ -40,7 +40,7 @@ export function clearAppAlerts() {
  */
 function entryHtml(entry) {
   const action = entry.actionLabel && entry.action
-    ? `<button type="button" class="btn gold sm" onclick="markAppAlertReviewed('${escapeHtml(entry.id)}');${escapeHtml(entry.action)}">${escapeHtml(entry.actionLabel)}</button>`
+    ? `<button type="button" class="btn gold sm" onclick="markAppAlertReviewed(${jsArg(entry.id)});${escapeHtml(entry.action)}">${escapeHtml(entry.actionLabel)}</button>`
     : '';
   // Tone is opt-in and defaults to nothing, so every entry written before this
   // existed keeps the positive styling it was designed with. A fault needs to
@@ -56,7 +56,7 @@ function entryHtml(entry) {
         ${action ? `<div class="app-alert-actions">${action}</div>` : ''}
       </div>
       <button type="button" class="app-alert-close"
-              onclick="dismissAppAlert('${escapeHtml(entry.id)}')"
+              onclick="dismissAppAlert(${jsArg(entry.id)})"
               aria-label="Dismiss: ${escapeHtml(entry.title || 'notification')}">✕</button>
     </div>`;
 }

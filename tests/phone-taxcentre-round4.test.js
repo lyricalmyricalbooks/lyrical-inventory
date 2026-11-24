@@ -76,8 +76,8 @@ describe('Income vs Expenses chart (round 4)', () => {
   });
 
   it('keeps the bar click and keyboard handlers on each bar', () => {
-    expect(taxJs).toContain("onclick=\"tcSelectCashFlowBucket('${key}')\"");
-    expect(taxJs).toContain("onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${key}')}\"");
+    expect(taxJs).toContain('onclick="tcSelectCashFlowBucket(${jsArg(b.key)})"');
+    expect(taxJs).toContain("onkeydown=\"if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket(${jsArg(b.key)})}\"");
   });
 
   it('prints the figures only on a phone, and lays bars out left to right there', () => {

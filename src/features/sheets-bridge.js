@@ -1157,11 +1157,12 @@ async function verifyUrl() {
   const btn = $('verify-url-btn');
   if (btn) { btn.textContent = 'Verifying...'; btn.disabled = true; }
 
+  // A read-only check: it asks the script who it is and never writes a row.
+  // "Test connection" is the button that sends a (labelled) test row.
   try {
-    // Try a GET request first to see if the endpoint is alive
     const res = await fetch(sheetsUrl);
     if (res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (data && typeof data.service === 'string' && data.service.indexOf('lyrical-sheets-webhook') === 0) {
         showToast(`✓ Connection verified: ${data.sheetName || 'Active'}`);
         addSheetsLog('System', 'Verify', 'Handshake successful', 'ok');
@@ -1179,20 +1180,17 @@ async function verifyUrl() {
           }
         }
       } else {
-        showToast('⚠ Unexpected response from URL', 'warn');
+        showToast('⚠ That link answered, but not as your sheet script. Check you copied the web app link.', 'warn', 7000);
+        addSheetsLog('System', 'Verify', 'Link answered, but not as the sheet script', 'err');
       }
     } else {
-      // If GET fails but URL looks right, it might be a POST-only deployment or CORS
-      showToast('Queuing test row (GET unverified)', 'warn');
+      showToast('⚠ Your sheet script didn\'t answer. Use "Test connection" to try sending a row.', 'warn', 7000);
+      addSheetsLog('System', 'Verify', `No answer (status ${res.status})`, 'err');
     }
   } catch (e) {
-    showToast('Queuing test row (Network check failed)', 'warn');
+    showToast('⚠ Couldn\'t reach your sheet script. Use "Test connection" to try sending a row.', 'warn', 7000);
+    addSheetsLog('System', 'Verify', 'Network check failed', 'err');
   }
-
-  syncToSheets({
-    type: 'order', book: 'Test', date: today(), num: 'VERIFY-' + Date.now().toString().slice(-4),
-    chan: 'Verify URL', qty: 0, price: 0, total: 0, stockAfter: 0, notes: 'Verify URL button test'
-  });
 
   setTimeout(() => { if (btn) { btn.textContent = '↗ Verify URL'; btn.disabled = false; } }, 1000);
 }

@@ -41,3 +41,33 @@ export function storageSet(key, value) {
     return false;
   }
 }
+
+/**
+ * Same answer as `localStorage.getItem`: the stored string, or null when there
+ * is none — and null, not a throw, when storage is blocked.
+ * @param {string} key
+ * @returns {string|null}
+ */
+export function storageRead(key) {
+  try {
+    const s = getLocalStorage();
+    return s ? s.getItem(key) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * @param {string} key
+ * @returns {boolean} whether the key is gone
+ */
+export function storageRemove(key) {
+  try {
+    const s = getLocalStorage();
+    if (!s) return false;
+    s.removeItem(key);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}

@@ -55,7 +55,7 @@ import {
   sumNonCashCredit,
   unpaidSalesSummary,
 } from '../lib/earnings.js';
-import { escapeHtml, safeHttpUrl } from '../lib/html.js';
+import { escapeHtml, safeHttpUrl, jsArg } from '../lib/html.js';
 import { deriveStockBreakdown, inventoryBreakdown } from '../lib/inventory.js';
 import { rowsByKey } from '../lib/merge-state.js';
 import { confirmDialog } from '../lib/modal.js';
@@ -1017,7 +1017,7 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
           <div style="font-weight:600; color:var(--text2); font-size:var(--text-base);">The artist requested a payout of ${fmt(pending.amount, cur)}</div>
           <div style="font-size:var(--text-xs); color:var(--text3); margin-top:2px;">Requested ${escapeHtml(pending.requestedAt ? localDay(pending.requestedAt) : '—')} · ${fmt(owed, cur)} currently owed</div>
         </div>
-        <button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">Record payout</button>
+        <button class="btn gold" onclick="toggleArtistPayoutForm(${jsArg(bookId)})">Record payout</button>
       </div>`;
   }
 
@@ -1036,7 +1036,7 @@ function getPayoutRequestHtml(bookId, stats, cur, owed) {
           <div style="font-size:var(--text-xs); color:var(--text3); margin-top:2px;">your share of profit, not yet paid out</div>
         </div>
         <button class="btn gold" id="request-payout-btn-${bookId}" style="padding:10px 18px; font-size:var(--text-sm);"
-          onclick="requestArtistPayout('${bookId}')">${pending ? 'Send reminder' : 'Request payout'}</button>
+          onclick="requestArtistPayout(${jsArg(bookId)})">${pending ? 'Send reminder' : 'Request payout'}</button>
       </div>
       ${pendingHtml}
     </div>`;
@@ -1084,8 +1084,8 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
         </div>
         <p class="ps-payout-preview">${escapeHtml(summary.detail)} ${p.notes ? escapeHtml(p.notes) : ''}</p>
         <div class="ps-payout-actions">
-          <button class="btn sys-target" onclick="copyArtistSettlement('${bookId}', '${pid}')">Copy explanation</button>
-          ${!isAuthor() ? `<button class="btn tx sys-target" onclick="undoRecordedArtistSettlement('${bookId}', '${pid}')">Undo settlement</button>` : ''}
+          <button class="btn sys-target" onclick="copyArtistSettlement(${jsArg(bookId)}, ${jsArg(p.id)})">Copy explanation</button>
+          ${!isAuthor() ? `<button class="btn tx sys-target" onclick="undoRecordedArtistSettlement(${jsArg(bookId)}, ${jsArg(p.id)})">Undo settlement</button>` : ''}
         </div>
         <details><summary>View settlement explanation</summary>
           <label for="artist-settlement-receipt-${bookId}-${pid}">Recorded explanation for the author</label>
@@ -1110,7 +1110,6 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
       netted > 0.005 ? `netted ${fmt(netted, cur)} owed to you` : '',
       p.editedAt ? 'edited' : '',
     ].filter(Boolean).join(' · ');
-    const pid = escapeHtml(String(p.id));
     return `
         <div class="ps-payout-row">
           <span class="ps-payout-row-main">
@@ -1119,9 +1118,9 @@ function getPayoutHistoryHtml(stats, bookId, cur) {
           </span>
           <span class="ps-payout-row-actions">
             <button class="btn tx sm sys-target ps-payout-edit"
-              onclick="editArtistPayout('${bookId}', '${pid}')" title="Edit this payout" aria-label="Edit payout">✎</button>
+              onclick="editArtistPayout(${jsArg(bookId)}, ${jsArg(p.id)})" title="Edit this payout" aria-label="Edit payout">✎</button>
             <button class="btn tx sm sys-target ps-payout-del"
-              onclick="deleteArtistPayout('${bookId}', '${pid}')" title="Delete this payout" aria-label="Delete payout">✕</button>
+              onclick="deleteArtistPayout(${jsArg(bookId)}, ${jsArg(p.id)})" title="Delete this payout" aria-label="Delete payout">✕</button>
           </span>
         </div>`;
   }).join('');
@@ -1175,7 +1174,7 @@ function renderProfitSharingBreakdown(bookId) {
     <div class="ps-payout-section">
       <div class="ps-payout-head">
         ${head ? `<span class="sect sect-inline">${hasSettlements ? 'Payments & settlements' : 'Artist Payouts'}</span>` : ''}
-        ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm('${bookId}')">+ Record payout</button>` : ''}
+        ${payoutFormHtml ? `<button class="btn gold" onclick="toggleArtistPayoutForm(${jsArg(bookId)})">+ Record payout</button>` : ''}
       </div>
       ${payoutFormHtml}
       <div class="ps-payout-list sys-container">
@@ -1253,7 +1252,7 @@ function getPayoutFormHtml(bookId, cur, owed) {
   const plan = planNetPayout(owed, st && st.artistReceivables, st && st.artistPayouts);
   const netHtml = plan.offset > 0.005 ? `
         <label class="ps-payout-net" for="ap-net-${bookId}">
-          <input type="checkbox" id="ap-net-${bookId}" checked onchange="onArtistPayoutNetChange('${bookId}')">
+          <input type="checkbox" id="ap-net-${bookId}" checked onchange="onArtistPayoutNetChange(${jsArg(bookId)})">
           <span>Net against what the artist owes you — clears ${fmt(plan.offset, cur)}, so you send ${fmt(plan.cashToPay, cur)}</span>
         </label>` : '';
 
@@ -1263,11 +1262,11 @@ function getPayoutFormHtml(bookId, cur, owed) {
           <div class="form-group">
             <label for="ap-amount-${bookId}">Amount</label>
             <input type="number" id="ap-amount-${bookId}" class="ps-payout-num" step="0.01" min="0" inputmode="decimal"
-              placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" oninput="previewArtistPayout('${bookId}')">
+              placeholder="${owed > 0.01 ? owed.toFixed(2) : '0.00'}" oninput="previewArtistPayout(${jsArg(bookId)})">
           </div>
           <div class="form-group">
             <label for="ap-cur-${bookId}">Currency</label>
-            <select id="ap-cur-${bookId}" class="ps-payout-num" onchange="onArtistPayoutCurrencyChange('${bookId}')">${curOptions}</select>
+            <select id="ap-cur-${bookId}" class="ps-payout-num" onchange="onArtistPayoutCurrencyChange(${jsArg(bookId)})">${curOptions}</select>
           </div>
           <div class="form-group">
             <label for="ap-date-${bookId}">Date</label>
@@ -1288,7 +1287,7 @@ function getPayoutFormHtml(bookId, cur, owed) {
         <div class="ps-payout-fx" id="ap-fx-row-${bookId}" hidden>
           <label for="ap-rate-${bookId}">Rate to ${escapeHtml(nativeCode)}</label>
           <input type="number" id="ap-rate-${bookId}" class="ps-payout-num" step="0.0001" min="0" inputmode="decimal"
-            oninput="previewArtistPayout('${bookId}')">
+            oninput="previewArtistPayout(${jsArg(bookId)})">
           <span class="ps-payout-fx-note" id="ap-fx-note-${bookId}"></span>
         </div>
         ${netHtml}
@@ -1296,9 +1295,9 @@ function getPayoutFormHtml(bookId, cur, owed) {
              politely so a screen reader hears the overpayment warning too. -->
         <div class="ps-payout-preview" id="ap-preview-${bookId}" role="status" aria-live="polite"></div>
         <div class="ps-payout-actions">
-          <button class="btn gold" id="ap-save-${bookId}" onclick="saveArtistPayout('${bookId}')">Save payout</button>
-          ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull('${bookId}')">Pay full balance (${fmt(plan.offset > 0.005 ? plan.cashToPay : owed, cur)})</button>` : ''}
-          <button class="btn tx" onclick="toggleArtistPayoutForm('${bookId}')">Cancel</button>
+          <button class="btn gold" id="ap-save-${bookId}" onclick="saveArtistPayout(${jsArg(bookId)})">Save payout</button>
+          ${owed > 0.01 ? `<button class="btn" onclick="fillArtistPayoutFull(${jsArg(bookId)})">Pay full balance (${fmt(plan.offset > 0.005 ? plan.cashToPay : owed, cur)})</button>` : ''}
+          <button class="btn tx" onclick="toggleArtistPayoutForm(${jsArg(bookId)})">Cancel</button>
         </div>
       </div>`;
 }

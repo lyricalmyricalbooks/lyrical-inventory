@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
-import { escapeHtml } from '../src/lib/html.js';
+import { escapeHtml, jsArg } from '../src/lib/html.js';
 
 // The checkout column is the screen under the most time pressure in the app —
 // a customer is standing at the fair table while it is read and tapped. A
@@ -15,6 +15,7 @@ function makeHarness({ isPublisher = true } = {}) {
     names: ['posCartRowHtml', 'posCartEmptyHtml', 'posSyncCheckoutAvailability'],
     deps: {
       escapeHtml,
+      jsArg,
       // Deliberately simple: the formatter is covered by money.test.js, and a
       // real one here would hide which text came from which field.
       posFormat: (amount, code) => `${code} ${Number(amount ?? 0).toFixed(2)}`,
@@ -109,9 +110,9 @@ describe('posCartRowHtml', () => {
     const el = mount(h.posCartRowHtml(row({ book: { id: 'bk-42', title: 'Salt' } }), 'EUR'));
     const onclicks = [...el.querySelectorAll('.pos-line-btn')].map(b => b.getAttribute('onclick'));
 
-    expect(onclicks[0]).toBe("openPosPriceModal('bk-42')");
-    expect(onclicks[1]).toBe("posGenerateLineQR('bk-42')");
-    expect(onclicks[2]).toBe("posRemoveItem('bk-42')");
+    expect(onclicks[0]).toBe('openPosPriceModal("bk-42")');
+    expect(onclicks[1]).toBe('posGenerateLineQR("bk-42")');
+    expect(onclicks[2]).toBe('posRemoveItem("bk-42")');
   });
 
   it('escapes a book title instead of injecting markup', () => {

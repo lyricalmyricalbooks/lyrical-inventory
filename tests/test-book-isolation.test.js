@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { jsArg } from '../src/lib/html.js';
 import { appSource, extractDecl } from './helpers/extract-decl.js';
 import fs from 'fs';
 import path from 'path';
@@ -91,8 +92,8 @@ describe('Test Book Sandbox Isolation & Google Sheets Protection', () => {
       { id: 'test', title: 'TEST PAGE', currency: '€', listPrice: 17 },
       { id: 'greatest', title: 'Greatest Hits', currency: 'CA$', listPrice: 20 },
     ];
-    const render = new Function('$', 'BOOK_LIST', 'escapeHtml', `${extractDecl('isTestBook')}\n${extractDecl('catalogCardHtml')}\n${extractDecl('renderCatalogList')}\nreturn renderCatalogList;`)(
-      id => containers[id], books, text => String(text),
+    const render = new Function('$', 'BOOK_LIST', 'escapeHtml', 'jsArg', `${extractDecl('isTestBook')}\n${extractDecl('catalogCardHtml')}\n${extractDecl('renderCatalogList')}\nreturn renderCatalogList;`)(
+      id => containers[id], books, text => String(text), jsArg,
     );
     render();
     const live = containers['catalog-list'].innerHTML;

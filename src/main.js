@@ -31,7 +31,7 @@ import { restoreRecords } from './lib/storage-mode.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
 import { createStripeRateResolver, stripeOrderNumber } from './lib/stripe-sale-defaults.js';
 import { calculateBreakEven, breakEvenTierMove, applyBreakEvenTierMove, readProductionCostInput } from './lib/breakeven.js';
-import { escapeHtml, safeHttpUrl } from './lib/html.js';
+import { escapeHtml, safeHttpUrl, jsArg } from './lib/html.js';
 import { planSheetsConnectionSync } from './lib/sheets-url.js';
 import { legacyCopy } from './lib/clipboard.js';
 import { needsSettleUp, settleByHandMenu } from './lib/settle-up-view.js';
@@ -686,7 +686,7 @@ import { OPEN_CALL_EXPORTS } from './lib/opencall-handlers.js';
 import { parseMarkdownToHtml } from './lib/markdown.js';
 import { readableSubmissions } from './lib/submissions.js';
 import { makeScreenGuard, SCREEN_FAILED_MSG } from './lib/screen-guard.js';
-import { storageGet, storageSet } from './lib/safe-storage.js';
+import { storageGet, storageSet, storageRead, storageRemove } from './lib/safe-storage.js';
 
 // Open Call is a publisher-only screen and a sixth of the app's code, so it is
 // its own file, fetched after the first paint rather than inside the first
@@ -2100,8 +2100,8 @@ function renderProdCostCalcList() {
       : '';
 
     return `
-      <div class="tcc-expense-row ${isSelected ? 'selected' : ''}" onclick="toggleProdCostCalcExpense('${escapeHtml(exp.id)}')">
-        <input type="checkbox" class="tcc-row-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleProdCostCalcExpense('${escapeHtml(exp.id)}')" aria-label="Select ${escapeHtml(exp.desc)}">
+      <div class="tcc-expense-row ${isSelected ? 'selected' : ''}" onclick="toggleProdCostCalcExpense(${jsArg(exp.id)})">
+        <input type="checkbox" class="tcc-row-checkbox" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleProdCostCalcExpense(${jsArg(exp.id)})" aria-label="Select ${escapeHtml(exp.desc)}">
         <div class="tcc-row-meta">
           <div class="tcc-row-badges">
             <span class="tcc-badge-cat">${escapeHtml(exp.category || 'General')}</span>
@@ -2711,8 +2711,8 @@ function catalogCardHtml(b) {
            </div>
          </div>
          <div class="catalog-actions">
-           <button class="btn sm" onclick="openEditBookModal('${escapeHtml(b.id)}')">Edit</button>
-           <button class="btn sm danger-btn" onclick="deleteBook('${escapeHtml(b.id)}')">Remove</button>
+           <button class="btn sm" onclick="openEditBookModal(${jsArg(b.id)})">Edit</button>
+           <button class="btn sm danger-btn" onclick="deleteBook(${jsArg(b.id)})">Remove</button>
          </div>
       </div>`;
 }
@@ -3277,7 +3277,7 @@ export let _syncRetrying = false;
  *  offline still knows how stale the cloud copy is. */
 let _lastCloudSyncAt = (() => {
   try {
-    const raw = Number(localStorage.getItem(LAST_CLOUD_SYNC_KEY));
+    const raw = Number(storageRead(LAST_CLOUD_SYNC_KEY));
     return Number.isFinite(raw) && raw > 0 ? raw : null;
   } catch (_) { return null; }   // private mode / blocked storage
 })();
@@ -5258,7 +5258,7 @@ function syncRoleUI() {
   // Update badge visibility when changing views (publisher view vs author preview)
   const badge = $('pub-update-badge');
   if (badge) {
-    const lastSeen = localStorage.getItem('lm-last-seen-version');
+    const lastSeen = storageRead('lm-last-seen-version');
     const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
     const hasUnseenUpdate = lastSeen && lastSeen !== currentVersion;
     const showBadge = hasUnseenUpdate && !authorNow && isPublisherSession();
@@ -5267,7 +5267,7 @@ function syncRoleUI() {
   }
   const stamp = $('pub-updated');
   if (stamp) {
-    const lastSeen = localStorage.getItem('lm-last-seen-version');
+    const lastSeen = storageRead('lm-last-seen-version');
     const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
     stamp.classList.toggle('has-unseen-update', Boolean(lastSeen && lastSeen !== currentVersion && !authorNow && isPublisherSession()));
   }
@@ -6524,7 +6524,6 @@ function renderAllBooksStrips(allBooksVisible) {
     // parseInt/parseFloat upstream and cannot carry markup, but escaping them
     // costs nothing and stops this template needing a per-field audit again.
     const accent = escapeHtml(book.accent);
-    const idAttr = escapeHtml(book.id);
     const promised = promisedPreorders(s.hist);
     const accentPair = getAccentFillPair(book.accent);
     return `<div class="book-strip" style="--accent-color: ${accent}; --accent-color-bg: ${escapeHtml(book.accentBg)}; --accent-color-light: ${escapeHtml(lightenColor(book.accent, 0.25))}; --accent-text: ${escapeHtml(getPaperSafeText(book.accent))}; --accent-fill: ${escapeHtml(accentPair.fill)}; --accent-contrast: ${escapeHtml(accentPair.label)};">
@@ -6579,7 +6578,7 @@ function renderAllBooksStrips(allBooksVisible) {
         </div>
       </div>
       <div class="book-strip-actions">
-        <button class="btn sm gold manage-btn" onclick="switchBook('${idAttr}')">
+        <button class="btn sm gold manage-btn" onclick="switchBook(${jsArg(book.id)})">
           <span>Manage</span>
           <svg class="manage-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
         </button>
@@ -6665,7 +6664,7 @@ function renderCombinedConsignmentSummary(allBooksVisible) {
   });
   window._allConBooks = Array.from(conBookMap.values());
   if (window._allConGrouped === undefined) {
-    try { window._allConGrouped = localStorage.getItem('allConGrouped') === '1'; } catch (_) { window._allConGrouped = false; }
+    try { window._allConGrouped = storageRead('allConGrouped') === '1'; } catch (_) { window._allConGrouped = false; }
   }
   const sellThrough = conTotals.sent ? Math.round((conTotals.sold / conTotals.sent) * 100) : 0;
   const statsHost = $('all-con-stats');
@@ -6898,13 +6897,13 @@ function renderConsignmentTable() {
       ? `<span class="con-outstanding-badge tnum">${b.totals.outstanding}</span>`
       : `<span class="con-zero-muted tnum">0</span>`;
 
-    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup('${b.id}')" role="button" tabindex="0" aria-expanded="${!isCollapsed}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleConGroup('${b.id}');}">`
+    const headerRow = `<tr class="con-group-row ${b.totals.active ? 'is-active' : 'is-settled'}" onclick="toggleConGroup(${jsArg(b.id)})" role="button" tabindex="0" aria-expanded="${!isCollapsed}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleConGroup(${jsArg(b.id)});}">`
       + `<td colspan="2" class="con-group-lead-cell">`
       + `<div class="con-group-lead-wrap">`
       + `<span class="con-group-chevron${isCollapsed ? '' : ' open'}" aria-hidden="true">▸</span>`
       + `<span class="con-group-dot" style="background:${b.accent};" aria-hidden="true"></span>`
       + `<strong class="con-group-title">${escapeHtml(b.title)}</strong>`
-      + `<button type="button" class="con-group-jump-btn" title="Open ${escapeHtml(b.title)} consignment ledger" onclick="event.stopPropagation();switchBook('${b.id}');setTimeout(()=>switchTab('consignment'),50);" aria-label="Open ${escapeHtml(b.title)} consignment">Manage →</button>`
+      + `<button type="button" class="con-group-jump-btn" title="Open ${escapeHtml(b.title)} consignment ledger" onclick="event.stopPropagation();switchBook(${jsArg(b.id)});setTimeout(()=>switchTab('consignment'),50);" aria-label="Open ${escapeHtml(b.title)} consignment">Manage →</button>`
       + `</div>`
       + `</td>`
       + `<td class="r col-sent tnum">${b.totals.sent}</td>`
@@ -7359,12 +7358,12 @@ function toggleSidebarAlerts() {
   showToast(wasHidden ? 'Navigation alerts are visible again' : 'Navigation alerts hidden', 'ok', 2600);
 }
 
-try { _sidebarAlertsHidden = localStorage.getItem(SIDEBAR_ALERTS_HIDDEN_KEY) === 'true'; } catch (_) { /* storage may be blocked */ }
+try { _sidebarAlertsHidden = storageRead(SIDEBAR_ALERTS_HIDDEN_KEY) === 'true'; } catch (_) { /* storage may be blocked */ }
 renderSidebarAlertPreference();
 
 function getDismissedTodoSignals() {
   try {
-    return JSON.parse(localStorage.getItem(TODO_DISMISSED_KEY) || '{}');
+    return JSON.parse(storageRead(TODO_DISMISSED_KEY) || '{}');
   } catch (_) {
     return {};
   }
@@ -7771,7 +7770,7 @@ function updateTodoBadge(result) {
 // Which slice of "What's been happening" the rail shows: everything, or only
 // what the app did on its own this week. Remembered on this device.
 const ACTIVITY_FILTER_KEY = 'lm-activity-filter';
-let _activityFilter = (() => { try { return localStorage.getItem(ACTIVITY_FILTER_KEY) === 'auto' ? 'auto' : 'all'; } catch (_) { return 'all'; } })();
+let _activityFilter = (() => { try { return storageRead(ACTIVITY_FILTER_KEY) === 'auto' ? 'auto' : 'all'; } catch (_) { return 'all'; } })();
 
 function setActivityFilter(value) {
   _activityFilter = value === 'auto' ? 'auto' : 'all';
@@ -8824,7 +8823,7 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, posta
   const h = row.h, i = row.i;
   if (h.pendingAuth) {
     const actionCell = window.IS_PUBLISHER
-      ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', '${h._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', '${h._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
+      ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('sales', ${jsArg(h._subKey)})" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('sales', ${jsArg(h._subKey)})" title="Reject submission" aria-label="Reject submission">✕</button></div>`
       : `<span class="chip-status amber">Awaiting Publisher</span>`;
     return `<tr class="hist-row is-awaiting"><td class="mono mono-num">${escapeHtml(h.num)}</td><td>${formatChannelBadge(h.chan)} <span class="chip-status amber">Submitted</span></td><td class="r mono-num" data-phone-qty="${escapeHtml(copiesLabel(h.qty))}">-${h.qty}</td><td class="r mono-num">${fmt(h.price, cur)}</td><td class="r mono-num money-cell">${fmt(h.qty * h.price, cur)}</td><td class="r mono-num">?</td><td style="font-size:var(--text-sm);color:var(--text3);">${escapeHtml(h.notes) || '—'}</td><td style="font-size:var(--text-sm);color:var(--text3);"><span class="chip-status gray">Artist</span></td><td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(h.date)}</td><td>${actionCell}</td></tr>`;
   }
@@ -10401,7 +10400,7 @@ const PAID_TAP_KEY = 'lm-author-paid-v2';
 try { localStorage.removeItem('lm-author-paid-taps'); } catch (_) { /* private mode */ }
 const PAID_TAP_TTL = 3 * 86400000;
 function readPaidTaps() {
-  try { return JSON.parse(localStorage.getItem(PAID_TAP_KEY) || '{}') || {}; } catch (_) { return {}; }
+  try { return JSON.parse(storageRead(PAID_TAP_KEY) || '{}') || {}; } catch (_) { return {}; }
 }
 function recentlyPaidTransfer(id) {
   const at = readPaidTaps()[String(id)];
@@ -10490,7 +10489,7 @@ function latestTransferReceipt(s) {
 const RECEIPT_SEEN_KEY = 'lm-author-receipts-seen';
 function announceTransferReceipt(r, cur) {
   let seen = [];
-  try { seen = JSON.parse(localStorage.getItem(RECEIPT_SEEN_KEY) || '[]'); } catch (_) { seen = []; }
+  try { seen = JSON.parse(storageRead(RECEIPT_SEEN_KEY) || '[]'); } catch (_) { seen = []; }
   if (!Array.isArray(seen) || seen.includes(r.chargeId)) return;
   seen = [r.chargeId, ...seen].slice(0, 30);
   try { localStorage.setItem(RECEIPT_SEEN_KEY, JSON.stringify(seen)); } catch (_) { /* private mode */ }
@@ -11457,9 +11456,9 @@ function openBulkSend() {
   const s = getState();
   if (!s.stores.length) { showToast('Add a store first', 'warn'); return; }
   $('bulk-send-list').innerHTML = s.stores.map(st => `<label class="bulk-send-row">
-    <input type="checkbox" class="bulk-send-check" data-sid="${st.id}" onchange="bulkCheckChanged('${st.id}')">
+    <input type="checkbox" class="bulk-send-check" data-sid="${st.id}" onchange="bulkCheckChanged(${jsArg(st.id)})">
     <span class="bulk-send-info"><span class="bulk-send-name">${escapeHtml(st.name)}</span>${st.city ? `<span class="bulk-send-city"> · ${escapeHtml(st.city)}</span>` : ''}<br><span class="bulk-send-meta">${st.rate}% commission · <span class="mono-num">${st.outstanding}</span> outstanding</span></span>
-    <input type="number" class="bulk-send-qty" data-sid="${st.id}" min="0" value="0" inputmode="numeric" oninput="bulkQtyChanged('${st.id}')">
+    <input type="number" class="bulk-send-qty" data-sid="${st.id}" min="0" value="0" inputmode="numeric" oninput="bulkQtyChanged(${jsArg(st.id)})">
   </label>`).join('');
   $('bulk-qty').value = '10';
   $('bulk-date').value = today();
@@ -11788,7 +11787,7 @@ function maybeAutoPayInvoiceForLedger(s, e) {
 // unlinked. Reused by the ledger and history renderers. viewInvoice is global.
 function invoiceBadgeHTML(invoiceId, invoiceNum) {
   if (!invoiceId || !invoiceNum) return '';
-  return `<button class="pill gray" style="font-size:var(--text-2xs);cursor:pointer;margin-left:6px;" onclick="viewInvoice('${invoiceId}')">🧾 ${escapeHtml(invoiceNum)}</button>`;
+  return `<button class="pill gray" style="font-size:var(--text-2xs);cursor:pointer;margin-left:6px;" onclick="viewInvoice(${jsArg(invoiceId)})">🧾 ${escapeHtml(invoiceNum)}</button>`;
 }
 
 // "Mark paid" asks what actually arrived: a shop abroad may pay in its own
@@ -13608,22 +13607,24 @@ async function connectSheets() {
     }
   }
   sheetsUrl = normalizedUrl;
-  localStorage.setItem('lm-sheets-url', normalizedUrl);
-  localStorage.setItem('lm-last-sheets-url', normalizedUrl);
+  // A device that can't keep these (private browsing, full storage) still
+  // connects: the cloud copy below brings the link back on the next start.
+  storageSet('lm-sheets-url', normalizedUrl);
+  storageSet('lm-last-sheets-url', normalizedUrl);
   // Share the endpoint so artist sessions on other devices can send the
   // approval-needed email when they submit a payment/expense.
-  notifyUrl = normalizedUrl; localStorage.setItem('lm-notify-url', normalizedUrl);
+  notifyUrl = normalizedUrl; storageSet('lm-notify-url', normalizedUrl);
   await window._fbSaveSettings('notifyEndpoint', { url: normalizedUrl });
   // Publisher-only copy of the whole connection, so the publisher's other
   // devices (a phone) pick it up at sign-in instead of re-pasting both links.
   await window._fbSaveSettings('sheetsConnection', { url: normalizedUrl, spreadsheetUrl: spreadUrl || '' });
   if (spreadUrl) {
     sheetsSpreadsheetUrl = spreadUrl;
-    localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
-    localStorage.setItem('lm-last-spreadsheet-url', spreadUrl);
+    storageSet('lm-sheets-spreadsheet-url', spreadUrl);
+    storageSet('lm-last-spreadsheet-url', spreadUrl);
   } else {
     sheetsSpreadsheetUrl = '';
-    localStorage.removeItem('lm-sheets-spreadsheet-url');
+    storageRemove('lm-sheets-spreadsheet-url');
   }
   showSheetsConnected();
   showToast('✓ Google Sheets connected and verified!');
@@ -13638,10 +13639,10 @@ async function disconnectSheets() {
   if (setupSpreadsheetInput) setupSpreadsheetInput.value = sheetsSpreadsheetUrl;
 
   sheetsUrl = ''; sheetsSpreadsheetUrl = ''; notifyUrl = '';
-  localStorage.removeItem('lm-sheets-url');
-  localStorage.removeItem('lm-sheets-spreadsheet-url');
-  localStorage.removeItem('lm-sheets-secret');
-  localStorage.removeItem('lm-notify-url');
+  storageRemove('lm-sheets-url');
+  storageRemove('lm-sheets-spreadsheet-url');
+  storageRemove('lm-sheets-secret');
+  storageRemove('lm-notify-url');
   await window._fbSaveSettings('notifyEndpoint', { url: '' });
   await window._fbSaveSettings('sheetsConnection', { url: '', spreadsheetUrl: '' });
   $('sheets-setup-card').style.display = '';
@@ -13657,8 +13658,8 @@ async function disconnectSheets() {
 async function syncSheetsConnectionWithCloud() {
   try {
     const plan = planSheetsConnectionSync({
-      localUrl: localStorage.getItem('lm-sheets-url') || '',
-      localSpreadsheetUrl: localStorage.getItem('lm-sheets-spreadsheet-url') || '',
+      localUrl: storageRead('lm-sheets-url') || '',
+      localSpreadsheetUrl: storageRead('lm-sheets-spreadsheet-url') || '',
       conn: await window._fbLoadSettings('sheetsConnection'),
       notifyUrl,
       normalize: normalizeAppsScriptUrl,
@@ -13670,11 +13671,11 @@ async function syncSheetsConnectionWithCloud() {
     if (plan.action !== 'adopt') return;
     const cloudUrl = plan.url;
     const spreadUrl = safeHttpUrl(plan.spreadsheetUrl);
-    localStorage.setItem('lm-sheets-url', cloudUrl);
-    localStorage.setItem('lm-last-sheets-url', cloudUrl);
+    storageSet('lm-sheets-url', cloudUrl);
+    storageSet('lm-last-sheets-url', cloudUrl);
     if (spreadUrl) {
-      localStorage.setItem('lm-sheets-spreadsheet-url', spreadUrl);
-      localStorage.setItem('lm-last-spreadsheet-url', spreadUrl);
+      storageSet('lm-sheets-spreadsheet-url', spreadUrl);
+      storageSet('lm-last-spreadsheet-url', spreadUrl);
     }
     if (window._realSheetsUrlSaved) {
       // The test book is open and holds the mock link; switching back restores these.
@@ -13908,7 +13909,7 @@ function maybeAutoDownloadDailyBackup() {
 }
 
 function updateLastBackupDisplay() {
-  const ts = localStorage.getItem('lm-last-backup-ts');
+  const ts = storageRead('lm-last-backup-ts');
   const el = $('last-backup-display');
   if (!el) return;
   if (!ts) { el.textContent = 'Last backup: Never'; return; }
@@ -13917,7 +13918,7 @@ function updateLastBackupDisplay() {
 }
 
 function checkDailyBackup() {
-  const ts = localStorage.getItem('lm-last-backup-ts');
+  const ts = storageRead('lm-last-backup-ts');
   const now = Date.now();
   const ONE_DAY = 24 * 60 * 60 * 1000;
 
@@ -13942,16 +13943,16 @@ function buildBackupPayload() {
     posExtra: posExtraBooks,                          // POS-only books + their sold/revenue tally (not in BOOKS)
     states: states,
     TAX_CENTER: TAX_CENTER,
-    productionCosts: JSON.parse(localStorage.getItem('lm-production-costs') || '{}'),
-    paymentLinks: JSON.parse(localStorage.getItem('lm-payment-links') || '{}'),
+    productionCosts: JSON.parse(storageRead('lm-production-costs') || '{}'),
+    paymentLinks: JSON.parse(storageRead('lm-payment-links') || '{}'),
     mailingList: MAILING_LIST,                         // curated subscriber list
     customerSuppress: Array.from(_customerSuppress),   // unsubscribe / opt-out emails (compliance)
     invoiceSettings: getInvoiceSettings(),             // invoice template, bank details, Stripe key
     integrations: {                                    // Sheets / notify endpoint (localStorage-only config)
-      notifyUrl: localStorage.getItem('lm-notify-url') || '',
-      sheetsUrl: localStorage.getItem('lm-sheets-url') || '',
-      sheetsSpreadsheetUrl: localStorage.getItem('lm-sheets-spreadsheet-url') || '',
-      sheetsSecret: localStorage.getItem('lm-sheets-secret') || ''
+      notifyUrl: storageRead('lm-notify-url') || '',
+      sheetsUrl: storageRead('lm-sheets-url') || '',
+      sheetsSpreadsheetUrl: storageRead('lm-sheets-spreadsheet-url') || '',
+      sheetsSecret: storageRead('lm-sheets-secret') || ''
     }
   };
 }
@@ -14041,8 +14042,8 @@ function renderSystemBackups() {
       <td><span class="pill ${b.type === 'manual' ? 'gold' : 'gray'}">${b.type === 'manual' ? 'Manual' : 'Auto daily'}</span></td>
       <td class="r tnum" style="font-family:var(--font-mono);font-weight:600;">${b.bookCount ?? Object.keys(b.snapshot?.BOOKS || {}).length}</td>
       <td class="r" style="white-space:nowrap;">
-        <button class="btn sm outline" onclick="restoreBookFromBackup('${b.id}')" style="min-height:var(--target-min);margin-right:4px;" title="Restore just one book from this snapshot — leaves your other books untouched">Restore 1 book</button>
-        <button class="btn sm danger-btn" onclick="restoreSystemBackup('${b.id}')" style="min-height:var(--target-min);" title="Restore the ENTIRE database from this snapshot — overwrites everything">Restore all</button>
+        <button class="btn sm outline" onclick="restoreBookFromBackup(${jsArg(b.id)})" style="min-height:var(--target-min);margin-right:4px;" title="Restore just one book from this snapshot — leaves your other books untouched">Restore 1 book</button>
+        <button class="btn sm danger-btn" onclick="restoreSystemBackup(${jsArg(b.id)})" style="min-height:var(--target-min);" title="Restore the ENTIRE database from this snapshot — overwrites everything">Restore all</button>
       </td>
     </tr>
   `).join('');
@@ -14212,13 +14213,13 @@ async function applyBackupData(data) {
   }
   if (data.integrations && typeof data.integrations === 'object') {
     const ig = data.integrations;
-    const setOrClear = (key, val) => { if (val) localStorage.setItem(key, val); else localStorage.removeItem(key); };
+    const setOrClear = (key, val) => { if (val) storageSet(key, val); else storageRemove(key); };
     setOrClear('lm-notify-url', ig.notifyUrl);
     setOrClear('lm-sheets-url', ig.sheetsUrl);
     setOrClear('lm-sheets-spreadsheet-url', ig.sheetsSpreadsheetUrl);
     setOrClear('lm-sheets-secret', ig.sheetsSecret);
-    if (ig.sheetsSpreadsheetUrl) localStorage.setItem('lm-last-spreadsheet-url', ig.sheetsSpreadsheetUrl);
-    if (ig.sheetsUrl) localStorage.setItem('lm-last-sheets-url', ig.sheetsUrl);
+    if (ig.sheetsSpreadsheetUrl) storageSet('lm-last-spreadsheet-url', ig.sheetsSpreadsheetUrl);
+    if (ig.sheetsUrl) storageSet('lm-last-sheets-url', ig.sheetsUrl);
     await window._fbSaveSettings('notifyEndpoint', { url: ig.notifyUrl || '' });
   }
 }
@@ -14333,7 +14334,7 @@ function renderBookRestorePicker() {
           <div style="font-size:var(--text-sm);margin-top:2px;">${stat}</div>
           <div style="font-size:var(--text-xs);color:var(--text3);margin-top:3px;">${escapeHtml(book.author || '—')} · ${badge}</div>
         </div>
-        <button class="btn gold sm" onclick="applyBookRestore('${bid}')">Restore</button>
+        <button class="btn gold sm" onclick="applyBookRestore(${jsArg(bid)})">Restore</button>
       </div>`;
   }).join('');
 }
@@ -14385,13 +14386,13 @@ async function applyBookRestore(bid) {
     // 3. This book's entries in the global per-book settings maps, so its
     //    production cost / payment link come back too — other books untouched.
     if (snapshot.productionCosts && bid in snapshot.productionCosts) {
-      const pc = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
+      const pc = JSON.parse(storageRead('lm-production-costs') || '{}');
       pc[bid] = snapshot.productionCosts[bid];
       storageSet('lm-production-costs', JSON.stringify(pc));
       await window._fbSaveSettings('productionCosts', pc);
     }
     if (snapshot.paymentLinks && bid in snapshot.paymentLinks) {
-      const pl = JSON.parse(localStorage.getItem('lm-payment-links') || '{}');
+      const pl = JSON.parse(storageRead('lm-payment-links') || '{}');
       pl[bid] = snapshot.paymentLinks[bid];
       storageSet('lm-payment-links', JSON.stringify(pl));
       await window._fbSaveSettings('paymentLinks', pl);
@@ -14680,7 +14681,7 @@ async function loadProductionCosts() {
   } catch (_) { }
   // Fallback to localStorage
   try {
-    const stored = JSON.parse(localStorage.getItem('lm-production-costs') || '{}');
+    const stored = JSON.parse(storageRead('lm-production-costs') || '{}');
     BOOK_LIST.forEach(b => { if (stored[b.id] != null) b.productionCost = stored[b.id]; });
   } catch (_) { }
 }
@@ -14914,7 +14915,7 @@ let letterheadLogo = '';
 let letterheadLoaded = false;
 
 function readLetterhead() {
-  try { return normalizeLetterhead(JSON.parse(localStorage.getItem(LETTERHEAD_KEY) || '{}'), getInvoiceSettings()); }
+  try { return normalizeLetterhead(JSON.parse(storageRead(LETTERHEAD_KEY) || '{}'), getInvoiceSettings()); }
   catch (e) { return normalizeLetterhead({}, getInvoiceSettings()); }
 }
 
@@ -15797,7 +15798,7 @@ async function boot(forcedBook) {
 
   const setupSpreadsheetInput = $('sheets-spreadsheet-input');
   if (setupSpreadsheetInput) {
-    setupSpreadsheetInput.value = sheetsSpreadsheetUrl || localStorage.getItem('lm-last-spreadsheet-url') || '';
+    setupSpreadsheetInput.value = sheetsSpreadsheetUrl || storageRead('lm-last-spreadsheet-url') || '';
   }
 
   if (sheetsUrl) showSheetsConnected();
@@ -15941,7 +15942,7 @@ function applyIntegrationSectionState(key, collapsed) {
 }
 
 function toggleIntegrationSection(key) {
-  const collapsed = localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1';
+  const collapsed = storageRead(`lm-integrations-collapsed-${key}`) === '1';
   const next = !collapsed;
   storageSet(`lm-integrations-collapsed-${key}`, next ? '1' : '0');
   applyIntegrationSectionState(key, next);
@@ -15951,7 +15952,7 @@ document.addEventListener('DOMContentLoaded', () => {
   INTEGRATION_SECTION_KEYS.forEach((key) => {
     const body = document.getElementById(`tc-integration-body-${key}`);
     if (!body) return;
-    applyIntegrationSectionState(key, localStorage.getItem(`lm-integrations-collapsed-${key}`) === '1');
+    applyIntegrationSectionState(key, storageRead(`lm-integrations-collapsed-${key}`) === '1');
   });
 });
 
@@ -16117,7 +16118,7 @@ function _sharedStripeDismissals() {
 
 export function getReconMemory() {
   let m;
-  try { m = JSON.parse(localStorage.getItem(RECON_MEMORY_KEY) || '{}') || {}; } catch (_) { m = {}; }
+  try { m = JSON.parse(storageRead(RECON_MEMORY_KEY) || '{}') || {}; } catch (_) { m = {}; }
   m.recorded = m.recorded || {};   // chargeId -> { bookId, num, at }
   // chargeId -> true: its sale was undone from the Payments list, so it is
   // back in the list to record against the right book.
@@ -16231,7 +16232,7 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
   // Remember which PaymentIntent each charge belongs to, so a sale recorded
   // from Stripe can be recognised later as a website order (website-link.js).
   try {
-    const known = JSON.parse(localStorage.getItem(STRIPE_CHARGE_PI_KEY) || '{}');
+    const known = JSON.parse(storageRead(STRIPE_CHARGE_PI_KEY) || '{}');
     localStorage.setItem(STRIPE_CHARGE_PI_KEY, JSON.stringify(rememberChargeIntents(known, out)));
   } catch (_) { /* storage full or blocked: only the link's matching is less sure */ }
   return out;
@@ -16463,7 +16464,7 @@ export let _reconSession = { logged: 0, dismissed: 0 };
 const resolveStripeRate = createStripeRateResolver({
   fetchRate: fetchHistoricalRate,
   storage: {
-    getItem: key => localStorage.getItem(key),
+    getItem: key => storageRead(key),
     setItem: (key, value) => localStorage.setItem(key, value),
   },
 });
@@ -17098,7 +17099,7 @@ function notifyDeviceInvoicePayment(said, firstInvoiceId) {
 }
 
 function readStripeInvoiceStamp() {
-  try { return Number(localStorage.getItem(STRIPE_INVOICE_LAST_KEY)) || 0; } catch (_) { return 0; }
+  try { return Number(storageRead(STRIPE_INVOICE_LAST_KEY)) || 0; } catch (_) { return 0; }
 }
 
 function writeStripeInvoiceStamp(at) {
@@ -17427,7 +17428,7 @@ const STRIPE_SALE_AUTO_SINCE_KEY = 'lm-stripe-sale-auto-since';
 const STRIPE_SALE_RAISED_KEY = 'lm-stripe-sale-raised';
 
 function stripeSaleAutoEnabled() {
-  try { return localStorage.getItem(STRIPE_SALE_AUTO_KEY) !== '0'; } catch (_) { return true; }
+  try { return storageRead(STRIPE_SALE_AUTO_KEY) !== '0'; } catch (_) { return true; }
 }
 
 /**
@@ -17437,7 +17438,7 @@ function stripeSaleAutoEnabled() {
  */
 function stripeSaleAutoSince() {
   try {
-    const stored = Number(localStorage.getItem(STRIPE_SALE_AUTO_SINCE_KEY));
+    const stored = Number(storageRead(STRIPE_SALE_AUTO_SINCE_KEY));
     if (stored > 0) return stored;
     const now = Date.now();
     localStorage.setItem(STRIPE_SALE_AUTO_SINCE_KEY, String(now));
@@ -17454,7 +17455,7 @@ const STRIPE_SALE_RULES_SINCE_KEY = 'lm-stripe-sale-rules-v2-since';
 
 function stripeSaleRulesSince() {
   try {
-    const stored = Number(localStorage.getItem(STRIPE_SALE_RULES_SINCE_KEY));
+    const stored = Number(storageRead(STRIPE_SALE_RULES_SINCE_KEY));
     if (stored > 0) return stored;
     const now = Date.now();
     localStorage.setItem(STRIPE_SALE_RULES_SINCE_KEY, String(now));
@@ -17861,7 +17862,7 @@ function showMarketDaySummaryIfDue() {
   const rows = [];
   Object.entries(states).forEach(([bookId, st]) => (st?.hist || []).forEach(entry => rows.push({ bookId, entry })));
   let shownFor = '';
-  try { shownFor = localStorage.getItem(MARKET_DAY_SHOWN_KEY) || ''; } catch (_) { /* storage blocked */ }
+  try { shownFor = storageRead(MARKET_DAY_SHOWN_KEY) || ''; } catch (_) { /* storage blocked */ }
   const day = latestMarketDay(rows, { today: today(), shownFor });
   if (!day) return;
   // Scanning every book's history for recorded charges is the costly part, so
@@ -17952,7 +17953,7 @@ const READER_DAY_KEY = 'lm-reader-payments-by-day';
 
 function readReaderPaymentsByDay() {
   try {
-    const raw = JSON.parse(localStorage.getItem(READER_DAY_KEY) || '{}');
+    const raw = JSON.parse(storageRead(READER_DAY_KEY) || '{}');
     return raw && typeof raw === 'object' ? raw : {};
   } catch (_) { return {}; }
 }
@@ -17975,7 +17976,7 @@ const READER_UNMATCHED_KEY = 'lm-reader-unmatched';
 
 function readUnmatchedReaderPayments() {
   try {
-    const raw = JSON.parse(localStorage.getItem(READER_UNMATCHED_KEY) || '{}');
+    const raw = JSON.parse(storageRead(READER_UNMATCHED_KEY) || '{}');
     return raw && typeof raw === 'object' ? raw : {};
   } catch (_) { return {}; }
 }
@@ -18072,7 +18073,7 @@ let _reminderSweeping = false;
 /** How many were sent today, from this browser. Resets when the date changes. */
 function reminderDayCount() {
   try {
-    const raw = JSON.parse(localStorage.getItem(REMINDER_DAY_KEY) || '{}');
+    const raw = JSON.parse(storageRead(REMINDER_DAY_KEY) || '{}');
     return raw && raw.day === today() ? (Number(raw.count) || 0) : 0;
   } catch (_) { return 0; }
 }
@@ -18246,7 +18247,7 @@ const REMINDER_NOTICE_KEY = 'lm-invoice-reminder-notice';
 
 /** Has the heads-up already been given today, from this browser? */
 function reminderNoticeShownToday() {
-  try { return localStorage.getItem(REMINDER_NOTICE_KEY) === today(); }
+  try { return storageRead(REMINDER_NOTICE_KEY) === today(); }
   catch (_) { return false; }
 }
 
@@ -18340,8 +18341,8 @@ function renderReminderReview() {
         <td class="r mono-num" style="font-weight:600;">${escapeHtml(invoiceAmountLabel(inv))}</td>
         <td class="r"><span class="pill amber">● ${late || 0}d</span></td>
         <td style="white-space:nowrap;text-align:right;">
-          <button class="btn sm gold" onclick="reminderReviewMarkPaid('${escapeHtml(inv.id)}')" title="They already paid — settle it and send nothing">✓ Paid</button>
-          <button class="btn sm" style="margin-left:4px;" onclick="reminderReviewHoldOff('${escapeHtml(inv.id)}')" title="They told you when they'll pay — hold off until then">📅 Hold off</button>
+          <button class="btn sm gold" onclick="reminderReviewMarkPaid(${jsArg(inv.id)})" title="They already paid — settle it and send nothing">✓ Paid</button>
+          <button class="btn sm" style="margin-left:4px;" onclick="reminderReviewHoldOff(${jsArg(inv.id)})" title="They told you when they'll pay — hold off until then">📅 Hold off</button>
         </td>
       </tr>`;
   }).join('')}</tbody>
@@ -18935,12 +18936,12 @@ Object.assign(window, {
 function checkAppUpdate() {
   if (!window.IS_PUBLISHER || isAuthor()) return;
 
-  const lastSeen = localStorage.getItem('lm-last-seen-version');
+  const lastSeen = storageRead('lm-last-seen-version');
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
 
   if (!lastSeen) {
     // First load: initialize version, don't show updated indicators
-    localStorage.setItem('lm-last-seen-version', currentVersion);
+    storageSet('lm-last-seen-version', currentVersion);
     return;
   }
 
@@ -18960,7 +18961,7 @@ function checkAppUpdate() {
 function dismissAppUpdate(event) {
   if (event) event.stopPropagation();
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
-  localStorage.setItem('lm-last-seen-version', currentVersion);
+  storageSet('lm-last-seen-version', currentVersion);
 
   const badge = $('pub-update-badge');
   if (badge) {
@@ -19011,7 +19012,7 @@ async function showWhatsNew(event) {
 
   // Update last seen version when they click/view the updates
   const currentVersion = typeof __GIT_COMMIT_DATE__ !== 'undefined' ? __GIT_COMMIT_DATE__ : 'Unknown';
-  localStorage.setItem('lm-last-seen-version', currentVersion);
+  storageSet('lm-last-seen-version', currentVersion);
 
   const badge = $('pub-update-badge');
   if (badge) {
@@ -19231,7 +19232,7 @@ async function showStartupPreview(user, publisherAccount) {
   }
   const ids = publisherAccount ? allIds : [authorBookId];
   let flagged = false;
-  try { flagged = ids.every(id => localStorage.getItem('fs_mode_' + id) === 'true'); } catch (_) { }
+  try { flagged = ids.every(id => storageRead('fs_mode_' + id) === 'true'); } catch (_) { }
   if (!ids.length || !flagged) return false;
   const [copies, taxCenter] = await Promise.all([
     Promise.all(ids.map(id => window._fbPeekCachedBook(id))),
@@ -19285,7 +19286,7 @@ async function showStartupPreview(user, publisherAccount) {
 // them and startup has no guess to make.
 function startupCachedGlobalMode() {
   try {
-    const v = localStorage.getItem('fs_mode_global');
+    const v = storageRead('fs_mode_global');
     return v === 'true' ? true : v === 'false' ? false : null;
   } catch (_) { return null; }
 }
@@ -19473,12 +19474,12 @@ async function renderUmamiStats(shareUrl) {
 }
 
 window.refreshUmamiStats = function () {
-  const url = localStorage.getItem('lm-analytics-url') || '';
+  const url = storageRead('lm-analytics-url') || '';
   if (url) renderUmamiStats(url);
 };
 
 function renderWebAnalytics() {
-  const url = localStorage.getItem('lm-analytics-url') || '';
+  const url = storageRead('lm-analytics-url') || '';
   const statusBadge = $('webanalytics-status-badge');
   const connectedView = $('webanalytics-connected-view');
   const setupView = $('webanalytics-setup-view');

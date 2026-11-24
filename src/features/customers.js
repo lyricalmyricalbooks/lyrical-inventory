@@ -33,13 +33,14 @@ import { getAllAppliedIds, orders } from './website-orders.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { withCampaignFooter, campaignFooterHtml } from '../lib/campaign-footer.js';
 import { confirmDialog } from '../lib/modal.js';
-import { escapeHtml, hasHtmlTag } from '../lib/html.js';
+import { escapeHtml, hasHtmlTag, jsArg } from '../lib/html.js';
 import { foldText } from '../lib/app-search.js';
 import { legacyCopy } from '../lib/clipboard.js';
 import { toCsv } from '../lib/csv.js';
 import { downloadCsv } from '../lib/download.js';
 import { fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { describeCustomerFilters, joinFilterLabels } from '../lib/customer-segment.js';
+import { storageRead } from '../lib/safe-storage.js';
 
 // ── CUSTOMERS / MAILING LIST ────────────────────────────────────────────────
 // Aggregates every buyer we can identify into one de-duplicated contact list
@@ -281,7 +282,7 @@ function renderMailingList() {
           <td>${emailCell}</td>
           <td class="date-cell">${s.added ? fmtD(s.added) : '—'}</td>
           <td><span class="pill gray" style="font-size:var(--text-2xs);">${escapeHtml(s.source || 'Manual')}</span></td>
-          <td><button class="btn sm cust-action-btn" onclick="removeFromMailingList('${encodeURIComponent(s.email)}')" title="Remove from mailing list">Remove</button></td>
+          <td><button class="btn sm cust-action-btn" onclick="removeFromMailingList(${jsArg(encodeURIComponent(s.email))})" title="Remove from mailing list">Remove</button></td>
         </tr>`;
     }).join('')
     : `<tr class="sys-empty-row"><td colspan="5">
@@ -630,7 +631,7 @@ function _renderCustFilterBar(shown, total, activeFilters) {
     const safe = escapeHtml(f.label);
     return `<span class="pile-chip is-filter">${safe}<button type="button" class="pile-chip-x" `
       + `aria-label="Remove filter ${safe}" title="Remove this filter" `
-      + `onclick="clearCustomerFilter('${escapeHtml(f.id)}')">✕</button></span>`;
+      + `onclick="clearCustomerFilter(${jsArg(f.id)})">✕</button></span>`;
   }).join('');
   const n = Number(shown) || 0;
   const all = Number(total) || 0;
@@ -810,8 +811,8 @@ function renderCustomersAudience() {
         ? ''
         : (onList
           ? `<button class="btn sm cust-action-btn" disabled title="Already on your mailing list" style="opacity:.55;">✓ On list</button>`
-          : `<button class="btn sm gold cust-action-btn" onclick="addBuyerToMailingList('${encodeURIComponent(r.email)}')" title="Add to your mailing list">＋ List</button>`);
-      const supBtn = `<button class="btn sm cust-action-btn" onclick="toggleCustomerSuppress('${encodeURIComponent(r.email)}')" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
+          : `<button class="btn sm gold cust-action-btn" onclick="addBuyerToMailingList(${jsArg(encodeURIComponent(r.email))})" title="Add to your mailing list">＋ List</button>`);
+      const supBtn = `<button class="btn sm cust-action-btn" onclick="toggleCustomerSuppress(${jsArg(encodeURIComponent(r.email))})" title="${sup ? 'Allow emailing this buyer again' : 'Exclude from Copy emails & CSV export'}">${sup ? 'Re-subscribe' : 'Unsubscribe'}</button>`;
       return `<tr${sup ? ' style="opacity:.55;"' : ''}>
         <td class="lead-cell">${escapeHtml(r.name) || '<span style="color:var(--text4);/* faint-ok: em-dash placeholder */">—</span>'}</td>
         <td>${emailCell}</td>
@@ -1100,15 +1101,15 @@ async function deleteCampaign(id) {
 }
 
 async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = null, threadId = null, captureThread = false, attachments = null) {
-  const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
-  const resendKey = localStorage.getItem('lm-resend-api-key') || '';
-  const resendFrom = localStorage.getItem('lm-resend-from') || '';
+  const useResend = storageRead('lm-oc-use-resend') === 'true';
+  const resendKey = storageRead('lm-resend-api-key') || '';
+  const resendFrom = storageRead('lm-resend-from') || '';
 
   // Configured "send as" identity (a verified Gmail alias + display name) for
   // valid SPF/DKIM on a custom domain. Applied server-side only when the alias
   // is actually verified, so an empty/stale value is harmless.
-  const fromAlias = localStorage.getItem('lm-oc-fromalias') || '';
-  const fromName = localStorage.getItem('lm-oc-fromname') || '';
+  const fromAlias = storageRead('lm-oc-fromalias') || '';
+  const fromName = storageRead('lm-oc-fromname') || '';
 
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   // Replying into — or capturing — a Gmail thread only works through the Apps
@@ -1143,7 +1144,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || ''),
+        'Authorization': 'Bearer ' + (storageRead('lm-auth-token') || ''),
         'X-Resend-Api-Key': resendKey,
         'X-Resend-From': resendFrom
       },
@@ -1169,7 +1170,7 @@ async function sendSingleEmailViaBackend(to, subject, body, replyTo, htmlBody = 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (localStorage.getItem('lm-auth-token') || '')
+        'Authorization': 'Bearer ' + (storageRead('lm-auth-token') || '')
       },
       body: JSON.stringify({ to, subject, body: finalPlainBody, htmlBody: finalHtmlBody, replyTo, simulated: true, threadId, captureThread })
     });
@@ -1451,8 +1452,8 @@ async function renderCampaigns() {
           <div class="campaign-meta-info">Created: ${escapeHtml(fmtD(c.createdAt))} · Target: ${escapeHtml(c.segment)}</div>
         </div>
         <div style="display:flex;gap:6px;">
-          <button class="btn sm cust-action-btn" onclick="editCampaignDraft('${escapeHtml(c.id)}')">Edit</button>
-          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${escapeHtml(c.id)}')">Delete</button>
+          <button class="btn sm cust-action-btn" onclick="editCampaignDraft(${jsArg(c.id)})">Edit</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign(${jsArg(c.id)})">Delete</button>
         </div>
       </div>
     `).join('')
@@ -1485,7 +1486,7 @@ async function renderCampaigns() {
             <span style="color:var(--status-critical, var(--red));">Failed</span>
             <strong style="color:var(--status-critical, var(--red));">${Number(c.stats.failed) || 0}</strong>
           </div>` : ''}
-          <button class="btn sm cust-action-btn" onclick="deleteCampaign('${escapeHtml(c.id)}')" title="Delete from history" aria-label="Delete campaign ${escapeHtml(c.subject || '')} from history" style="margin-left:8px;">✕</button>
+          <button class="btn sm cust-action-btn" onclick="deleteCampaign(${jsArg(c.id)})" title="Delete from history" aria-label="Delete campaign ${escapeHtml(c.subject || '')} from history" style="margin-left:8px;">✕</button>
         </div>
       </div>
     `).join('')

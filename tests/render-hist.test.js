@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
 
-import { escapeHtml } from '../src/lib/html.js';
+import { escapeHtml, jsArg } from '../src/lib/html.js';
 import { fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary } from '../src/lib/money.js';
 import { bookCurrencyCode, detectCurrencyMismatch } from '../src/lib/currency-migration.js';
 import { buildOrderTimeline, inventoryBreakdown, isVoidStale } from '../src/lib/inventory.js';
@@ -58,7 +58,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {},
       window: { authorSubmissions: submissions, IS_PUBLISHER: isPublisher },
       TAX_CENTER: taxCenter,
       // The real implementations — this is the logic worth exercising.
-      escapeHtml, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary, plural,
+      escapeHtml, jsArg, fmt, fmtD, getSym, normalizeCurrencyCode, paymentSummary, plural,
       bookCurrencyCode, detectCurrencyMismatch,
       buildOrderTimeline, inventoryBreakdown, isVoidStale,
       reconcileConsignmentMirrors, linkedShippingSummary,
@@ -523,7 +523,7 @@ describe('renderHist — pending author submissions', () => {
     const body = document.getElementById('hist-body');
     expect(body.textContent).toContain('Submitted');
     expect(body.querySelector('.appr-btn.approve').getAttribute('onclick'))
-      .toBe("approveSubmission('sales', 'sub1')");
+      .toBe('approveSubmission(\'sales\', "sub1")');
     expect(body.querySelector('.appr-btn.reject')).not.toBeNull();
   });
 
