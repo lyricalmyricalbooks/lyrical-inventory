@@ -27,9 +27,11 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 > - **Vanilla JS:** No framework (no React/Vue/Svelte) and no runtime dependencies. Vite is the bundler and must stay a thin build step — don't add framework runtimes or a heavier toolchain on top of it.
 > - **Serverless Backend:** Firebase Firestore database and static hosting on GitHub Pages. No server or secret keys in client code.
 > - **Offline Resilience:** Must work fully offline (PWA) and synchronize local queue states later.
+> - **Local helper server:** `backend/server.js` (`npm run dev:backend`) is a local helper for carrier and email APIs; its keys stay in `backend/.env`, never in client code.
+> - **Layout:** feature code lives in `src/features/`, shared helpers in `src/lib/`; `src/main.js` is the wiring hub, so don't grow it.
 
 > [!WARNING]
-> **Apps Script ↔ client copy must stay in sync.** Whenever [Code.gs](apps-script/Code.gs) changes, copy it **verbatim** (no HTML-escaping) into [gas-code.txt](public/gas-code.txt) — the "Connect your Google Sheet" tab lazy-fetches that file via `loadGasCode()` in [main.js](src/main.js). Don't re-embed the script inline in [index.html](index.html).
+> **Apps Script ↔ client copy must stay in sync.** Whenever [Code.gs](apps-script/Code.gs) changes, copy it **verbatim** (no HTML-escaping) into [gas-code.txt](public/gas-code.txt) — the "Connect your Google Sheet" tab lazy-fetches that file via `loadGasCode()` in [sheets-bridge.js](src/features/sheets-bridge.js). Don't re-embed the script inline in [index.html](index.html).
 
 > [!WARNING]
 > **Bump the script version whenever `Code.gs`'s behavior changes** (new action, changed response shape, changed email/side-effect logic — not comment-only or pure-refactor edits), moving all three together in the same commit:
@@ -42,7 +44,7 @@ Angles worth scanning each time: bug/edge case the change introduced · the next
 - When asked for "a new pull request", "new PR", or similar: **create it immediately** from the current branch.
 - Do NOT investigate merge status, git history, or ask clarifying questions.
 - **Exception — merged branch:** if the current branch's PR is already merged, treat the request as fresh work: restart the branch from the latest default branch (`git fetch origin <default> && git checkout -B <branch> origin/<default>`) before pushing. Never stack new commits onto merged history.
-- Before pushing, run `npm test` (and `npm run build` if the change touches build config or entry points); fix failures before opening the PR rather than after.
+- Before pushing, run `npm test`, `npm run lint` and `npm run typecheck`; fix failures before opening the PR rather than after. CI also runs `lint:contrast`, `build`, `check:size` and `e2e`: run `lint:contrast` for style changes, and `build` + `check:size` when the change touches build config or entry points.
 - Action: Push branch with `git push -u origin <branch>` then create PR via GitHub MCP.
 - Use a descriptive PR title based on the feature/fix being implemented.
 - **After a PR is merged, start the next change on a brand-new branch and open a new PR** — never push commits onto a merged branch to revive it.
@@ -61,6 +63,11 @@ Apply the full process (understand → assess risk → plan → implement → ve
 **Never fabricate a change to satisfy this.** A commit must reflect a real, behavior-preserving improvement — invented churn (renaming things with no ambiguity, wrapping code in needless indirection, reformatting) is not a substitute for finding real work, and risks introducing bugs in what is a financial ledger app. When consolidating apparent duplication, verify the two implementations are actually behaviorally identical (matching inputs and edge cases, not just similar-looking code) before merging them — a near-duplicate with a different fallback or edge case is a correctness bug waiting to happen, not dead code.
 
 **Always leave a paper trail.** State plainly, in the PR description (or the session summary if no PR was warranted), which original issue was already resolved and by what commit/PR, and which real issue was fixed instead. That confirms the run wasn't idle, and gives whoever maintains the code-health scanner what they need to dedupe at the source.
+
+## Standing product decisions
+- Big Cartel is retired: don't build or prioritise Big Cartel features.
+- Shipping defaults to metric (kg/g, cm).
+- A profit-sharing author's share is worked out on the full sale price, before Stripe card fees.
 
 ## General Principles
 - Prefer action over investigation when intent is clear.
