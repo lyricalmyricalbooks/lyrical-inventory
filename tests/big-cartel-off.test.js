@@ -37,4 +37,5 @@ describe('switching Big Cartel off', () => {
     expect(app.window.localStorage.getItem('lm-bigcartel-orders-cache')).toBeNull();
     vi.unstubAllGlobals();
   });
+
 });
