@@ -35,8 +35,8 @@ test('the height-capped pop-up classes exist in both units and are used by the m
   expect(html).toMatch(/class="modal modal-max-85" role="dialog"/);
 });
 
-test('the phone sheet keeps its keyboard-aware height at 600px and below', () => {
-  expect(phone).toMatch(/@media \(max-width: 600px\) \{[\s\S]*?\.overlay \.modal \{ max-height: min\(92dvh, calc\(100dvh - env\(safe-area-inset-top\) - var\(--kb-inset, 0px\)\)\); \}/);
+test('the phone sheet keeps its keyboard-aware height on phones', () => {
+  expect(phone).toMatch(/@media \(max-width: 768px\) \{[\s\S]*?\.overlay \.modal \{ max-height: min\(92dvh, calc\(100dvh - env\(safe-area-inset-top\) - var\(--kb-inset, 0px\)\)\); \}/);
 });
 
 test('one token sets the bottom nav height, and every bar above it is built from that token', () => {
@@ -50,8 +50,8 @@ test('one token sets the bottom nav height, and every bar above it is built from
   expect(uses.length).toBeGreaterThanOrEqual(10);
 });
 
-test('publishers from 769px to 860px get the bottom nav, not the old tab bar', () => {
-  const start = style.indexOf('@media (max-width: 860px){');
+test('publishers on a phone get the bottom nav, not the old tab bar', () => {
+  const start = style.indexOf('@media (max-width: 768px){\n  /* Phones (768px and below) get this bottom nav');
   expect(start).toBeGreaterThan(-1);
   const block = style.slice(start, start + 1500);
   expect(block).toMatch(/\.pub-shell \.tab-bar\{display:none;\}/);
@@ -78,11 +78,13 @@ test('the installed app opens standalone, with the night-mode page colour as its
   expect(darkTheme).toMatch(/:root\[data-theme="dark"\] \{[\s\S]*?--cream: #262624;/);
 });
 
-test('toasts and the update prompt clear the bottom nav on 769-860px screens too', () => {
-  const css = read('src/style.css');
-  const block = css.match(/@media \(min-width: 769px\) and \(max-width: 860px\)\{([\s\S]*?)\n\}/);
-  expect(block).not.toBeNull();
-  expect(block[1]).toMatch(/#pw-app\.pub-shell ~ \.toast/);
-  expect(block[1]).toMatch(/#pw-app\.pub-shell ~ \.pwa-prompt/);
-  expect(block[1]).toMatch(/var\(--mnav-h\)/);
+test('three screen sizes: the sidebar starts where the phone layout ends', () => {
+  // Phone up to 768px (bottom nav), tablet 769-1100px (icon rail), computer
+  // above. The old 769-860px band, with its own bottom nav and toast lift, is gone.
+  const all = read('src/style.css') + read('src/styles/phone.css') + read('src/styles/app-switch.css');
+  expect(all).not.toMatch(/max-width:\s*860px\)/);
+  expect(all).not.toMatch(/min-width:\s*861px\)/);
+  expect(read('src/style.css')).toMatch(/@media\(min-width: 769px\)\{\s*\/\* ---- Sidebar ---- \*\//);
+  const widths = new Set([...all.matchAll(/@media[^{]*?(?:max|min)-width:\s*(\d+)px/g)].map(m => Number(m[1])));
+  expect([...widths].sort((a, b) => a - b)).toEqual([360, 480, 768, 769, 1100, 1600]);
 });

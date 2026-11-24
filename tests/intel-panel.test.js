@@ -554,7 +554,7 @@ describe('the panel in the app shell', () => {
     expect(INDEX_HTML).toContain('id="tab-intel"');
     expect(INDEX_HTML).toContain("switchTab('intel')");
     expect(appSource).toMatch(/intel: 'Intelligence'/);
-    expect(appSource).toMatch(/if \(name === 'intel'\) renderIntel\(\);/);
+    expect(appSource).toMatch(/if \(name === 'intel'\) intelScreen\.call\('renderIntel'\);/);
   });
 
   it('sends an author back to the dashboard', () => {

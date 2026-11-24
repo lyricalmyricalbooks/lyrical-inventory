@@ -24,7 +24,7 @@ describe('screen-adaptive shell', () => {
 
   it('adapts short landscape screens and narrow-screen dialogs', () => {
     expect(css).toMatch(/@media\s*\(max-height:\s*560px\)\s*and\s*\(orientation:\s*landscape\)/);
-    expect(css).toMatch(/@media\s*\(max-width:\s*600px\)[\s\S]*?\.overlay\s*\{[^}]*align-items:\s*flex-end/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*768px\)[\s\S]*?\.overlay\s*\{[^}]*align-items:\s*flex-end/);
     expect(css).toMatch(/max-height:\s*min\(92dvh/);
   });
 

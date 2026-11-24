@@ -5,11 +5,11 @@
    logged-out gate never see it. The JS sets [hidden] too, as a second lock.
 
    Three places, one control:
-     - the desktop sidebar, under the brand (≥861px; an upright pair in the
-       861–1100px icon rail),
-     - the phone/tablet header, as a compact "Website ↗" button (≤860px,
+     - the desktop sidebar, under the brand (≥769px; an upright pair in the
+       769–1100px icon rail),
+     - the phone/tablet header, as a compact "Website ↗" button (≤768px,
        where there is no sidebar),
-     - the top of the phone's More sheet (≤860px).
+     - the top of the phone's More sheet (≤768px).
    ============================================================ */
 
 [data-app-switch][hidden],
@@ -80,10 +80,10 @@ a.app-switch-seg:focus-visible,
 .app-switch .app-switch-seg.is-offline .app-switch-state { display: inline; }
 
 /* ---- Desktop sidebar ---- */
-@media (min-width: 861px) {
+@media (min-width: 769px) {
   .pub-shell #pub-sidebar .app-switch { display: flex; flex-shrink: 0; margin: 0 0 var(--space-3); }
 
-  /* 861–1100px: the rail is 64px of icons, so the pair stands upright. */
+  /* 769–1100px: the rail is 64px of icons, so the pair stands upright. */
   @media (max-width: 1100px) {
     .pub-shell #pub-sidebar .app-switch { flex-direction: column; width: 52px; }
     .pub-shell #pub-sidebar .app-switch-seg { flex: none; min-height: 34px; padding: 4px 2px; font-size: var(--text-3xs); letter-spacing: 0; }
@@ -96,7 +96,7 @@ a.app-switch-seg:focus-visible,
 }
 
 /* ---- Phone and tablet: no sidebar here ---- */
-@media (max-width: 860px) {
+@media (max-width: 768px) {
   /* The header way in: one tap from every screen. */
   .pub-shell .app-switch-pill {
     display: inline-flex;
