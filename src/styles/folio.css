@@ -1,0 +1,331 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   FOLIO — the app's visual layer (replaces the Riso Press look, 2026-11-24).
+
+   A re-theme, not a re-markup: every screen keeps its markup, sections and
+   order. The palette, corners, line weights and fonts live in the first
+   :root of src/style.css and the shadows in src/styles/system.css; this file
+   holds the rule bodies tokens alone can't change (sentence-case display
+   type, white buttons, sand table headers, the lead KPI).
+
+   Imported LAST in main.js so it wins over style.css and the phone sheets at
+   equal specificity. Colours come from tokens, so night mode
+   (theme-dark.css) still flips them. Printed/emailed invoices and receipts
+   are untouched: they use raw values on purpose.
+   ───────────────────────────────────────────────────────────────────────── */
+:root {
+  --folio-accent:#D93A22;
+  --folio-accent-hover:#C23019;
+  --folio-danger-line:#F0C9C2;
+  --folio-subtle:#FBF9F3;
+  --folio-line-btn:rgba(23,20,15,.18);
+  --folio-shadow-card:0 1px 2px rgba(23,20,15,.04);
+  --folio-shadow-btn:0 1px 0 rgba(23,20,15,.05);
+  --folio-shadow-primary:0 1px 0 rgba(0,0,0,.15),inset 0 1px 0 rgba(255,255,255,.18);
+  --folio-shadow-modal:0 24px 60px -12px rgba(23,20,15,.4),0 0 0 1px rgba(23,20,15,.06);
+  --folio-halo:0 0 0 3px rgba(217,58,34,.18);
+}
+:root[data-theme="dark"] { --folio-subtle:var(--ink3); --folio-line-btn:var(--border); --folio-danger-line:var(--border); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --folio-subtle:var(--ink3); --folio-line-btn:var(--border); --folio-danger-line:var(--border); }
+}
+
+/* One accent: Folio has a single vermilion action colour, so a book's cover
+   colour no longer re-tints the chrome (applyBookAccentTokens still writes
+   these inline; !important on a stylesheet custom property beats that). */
+:root {
+  --book-accent:var(--gold) !important;
+  --book-accent-fill:var(--gold) !important;
+  --book-accent-text:var(--gold-text) !important;
+  --book-accent-bg:var(--cream2) !important;
+  --book-accent-light:var(--gold3) !important;
+  --book-accent-contrast:var(--on-accent) !important;
+}
+
+/* Riso's hard offset shadows become Folio's whisper shadow. */
+#pw-gate .pw-frame,
+.apb-pay:hover,
+.apb-riso .metric-banner-link:hover,
+.finder-pile.active,
+.pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]), .pub-shell #tab-pos .fm-undo:not([hidden]),
+.pub-shell #tab-today .today-grid > .today-card-ink,
+.thanks-riso {
+  box-shadow:var(--folio-shadow-card) !important;
+}
+/* Riso's heavy ink outlines become hairlines. */
+#d-pending-expenses-list .pending-card,
+#tab-consignment .con-section-tab,
+#tab-consignment .con-section-tabs,
+#tab-consignment .store-card,
+#tab-history #hist-body .edit-btn,
+#tab-history .tbl tr.hist-row,
+#tab-intel .intel-notice, #tab-intel .intel-disclosure,
+#tab-intel .intel-rail-btn:not(.intel-rail-recent),
+#tab-manual .card > .card-actions,
+#tab-manual .manual-more > summary,
+#tab-manual .order-preview,
+#tab-opencall :is(.oc-topbar, .oc-list-card, .oc-settings-card),
+#tab-pos .fm-sync,
+#tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]), #tab-pos .fm-undo:not([hidden]),
+#tab-pos .pos-subtab-nav,
+#tab-reconcile .recon-fold-body .toggle-row, #tab-reconcile .recon-fold-body .sale-codes-box,
+#tab-reconcile .recon-keyrow input,
+#tab-sheets .catalog-card,
+#tab-shipping .ship-sender-fold > summary, #tab-shipping .ship-more-options > summary,
+#tab-today .fm-sync,
+#tab-today .today-card,
+#tab-today .today-card-count,
+#tab-today .today-label,
+#tab-today .today-sofar,
+#tab-today .today-sold,
+.all-consignment-table,
+.all-consignment-table .tbl tbody tr.con-group-row,
+.apb-pay,
+.apb-riso .metric-banner-link,
+.apb-stamp,
+.appr-btn,
+.author-subs-card,
+.book-chip,
+.book-context,
+.book-modal-stepper,
+.book-strip,
+.btn,
+.ch-book-card,
+.ch-cur-toggle,.intel-model-switch,
+.ch-panel,
+.con-action-btn,.con-group-toggle-btn,
+.con-search-input,
+.con-toolbar-filters,
+.consignment-stat-card,
+.consignment-stat-icon-wrap,
+.filter-chip,.cf-detail-filter,.tcc-filter-pill,.rec-filter,.activity-filter-btn,.store-quick-chip,
+.finder-failures,
+.finder-next,
+.finder-pile,
+.finder-tabs,
+.fm-ccy-select,
+.fm-pay-btn,
+.fm-sum-sync,
+.fm-tile-add,
+.fm-tile-minus,
+.fm-tile-qty,
+.fm-today-btn,
+.fm-undo-btn,
+.fm-undo-check,
+.help-aud-btn,
+.help-q,
+.help-search,
+.help-tool-btn,
+.intel-composer,
+.intel-panel,
+.intel-rail,
+.kpi,
+.kpi-more,
+.manual-link-modal,
+.metric-banner,
+.metric-banner-items .apb-row,
+.metric-banner-items .apb-row:first-child,
+.modal,
+.modal .modal-close-btn,
+.modal-tabs.segmented-control,
+.more-sheet-avatar,
+.more-sheet-close,
+.more-sheet[open],
+.notif-item,
+.payment-methods-card,
+.phone-section-picker select,
+.pill-select-input,.pill-search-input,
+.pub-shell #stores-list:has(.store-card),
+.pub-shell #tab-consignment .con-section-tabs,
+.pub-shell #tab-expenses .exp-log-fold > summary,
+.pub-shell #tab-history #hist-body,
+.pub-shell #tab-pos .fm-charge-btn,
+.pub-shell #tab-pos .fm-tile .fm-tile-add, .pub-shell #tab-pos .fm-tile.is-in-cart .fm-tile-add,
+.pub-shell #tab-pos .fm-tile .fm-tile-minus,
+.pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-bar:not([hidden]), .pub-shell #tab-pos .fm-undo:not([hidden]),
+.pub-shell #tab-pos .pos-layout[data-mobile-view="books"] .fm-top,
+.pub-shell #tab-pos .pos-subtab-nav,
+.pub-shell #tab-today .today-grid > .today-card,
+.pub-shell #tab-today .today-rows,
+.pub-shell #tab-todo #todo-total-chip,
+.pub-shell .app-header,
+.pub-shell .hist-kpi-card,
+.pub-shell .kpi-grid > .kpi, .pub-shell .kpi-grid > .kpi.is-lead, .pub-shell #tab-reconcile .recon-kpis > .kpi,
+.pub-shell .ledger-fig,
+.pub-shell .mnav,
+.pub-shell .mnav .mnav-sell,
+.pub-shell .more-sheet .app-switch,
+.pub-shell .more-sheet .app-switch-seg + .app-switch-seg,
+.pub-shell .more-sheet-body .snav,
+.pub-shell .phone-kpi + .phone-kpi,
+.pub-shell .phone-kpis,
+.pub-shell .phone-mix-bar,
+.pub-shell .phone-sheet,
+.pub-shell .publisher-action-banner,
+.pub-shell .store-row-tag,
+.publisher-action-banner,
+.publisher-action-banner .pab-btn,
+.publisher-action-banner .pab-icon,
+.pwa-prompt,
+.qr-card,
+.recon-fold > summary,
+.recon-sec-head,
+.scan-box,
+.settle-menu,
+.stock-block,
+.tc-action-card,
+.tc-cat-tbl tfoot .tc-cat-foot-row td,
+.tc-receipt-tile,
+.tc-receipts-card,
+.test-profile-banner,
+.thanks-close,
+.thanks-riso,
+.todo-row,
+:is(.fm-tile-minus, .fm-line-minus),
+:is(.phone-mode-opt, .phone-seg-opt),
+:is(.switch .track, .pm-switch .pm-track),
+:is(.tab-panel, .modal) .phone-record-toggle,
+:is(.tab-panel, .modal) .phone-records tr.phone-group-row,
+:where(.tab-panel, .modal) label > input[type=checkbox]:not(:is(.tc-toggle-wrap, .email-card-check, .email-select-all) *) {
+  border-color:var(--border2) !important;
+  border-width:1px !important;
+}
+
+/* Display type: Geist 600, sentence case, tight tracking (was Anton caps). */
+#pw-gate .pw-logo,
+#ship-analysis-hub .shipping-pnl-header h2, #ship-analysis-hub .shipping-pnl-section-header h3,
+#tab-customers .cust-buyers-title,
+#tab-pos .phone-sell-head h1,
+#tab-qrcodes .qr-card-title,
+#tab-select-book h2,
+#tab-sheets .catalog-info h4,
+#tab-taxcenter .cf-title,
+#tab-taxcenter .rec-card-title,
+#tab-today .today-title, .phone-sell-head h1,
+#tab-website .web-orders-copy h2,
+.apb-riso #apb-amount,
+.apb-riso .metric-banner-label,
+.apb-stamp,
+.audience-summary-copy h3,
+.author-subs-title,
+.book-context-title,
+.cf-detail-head strong,
+.ch-book-title,
+.finder-next-num,
+.help-sec-title,
+.modal-title,
+.more-sheet-title,
+.oc-funnel-num,
+.oc-hero-stat-num,
+.oc-hero-title,
+.oc-panel-name,
+.ps-settle-result .ps-stat-val,
+.pub-shell #book-context-con .book-context-masthead,
+.pub-shell #tab-pos .fm-charge-btn,
+.pub-shell #tab-pos .phone-sell-head h1,
+.pub-shell #tab-today .today-card-ink .today-card-name,
+.pub-shell #tab-today .today-title,
+.pub-shell #tab-todo #todo-total-chip,
+.pub-shell .header-wordmark,
+.pub-shell .mnav .mnav-sell .mnav-label,
+.pub-shell .more-sheet-title,
+.pub-shell .phone-books-count,
+.pub-shell .phone-kpi-value,
+.pub-shell .phone-masthead,
+.pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-meta,
+.ri-detail-head h3,
+.section-hed,
+.settle-q,
+.sf-cur-title,
+.store-name,
+.test-profile-banner .tpb-title,
+.thanks-stamp span,
+.thanks-title,
+.web-empty strong,
+.web-orders-copy h2,
+.wl-title {
+  font-family:var(--font-display) !important;
+  text-transform:none !important;
+  font-weight:600 !important;
+  letter-spacing:-.02em !important;
+}
+/* Rules that named Archivo outright follow the interface font. */
+.author-subs-title .pill {
+  font-family:var(--font-ui) !important;
+}
+/* Phone cards' hard offset shadow token. */
+.pub-shell { --riso-off:var(--folio-shadow-card) !important; --riso-off-sm:var(--folio-shadow-btn) !important; }
+
+/* Mono caps micro-labels become Geist caps labels; mono stays for figures. */
+#ship-analysis-hub .shipping-active-filters-label,
+#ship-analysis-hub .shipping-pnl-eyebrow, #ship-analysis-hub .shipping-pnl-kpi-label,
+#ship-analysis-hub .shipping-pnl-ledger-table td::before,
+#ship-analysis-hub .shipping-pnl-ledger-table th, #ship-analysis-hub .shipping-pnl-insight-table th,
+#tab-bigcartel .bc-connection-status,
+.gas-code-lang,
+.more-sheet-who > span,
+.phone-sync-mark,
+.reticle-guide,
+.toolbar-label {
+  font-family:var(--font-ui) !important;
+  font-weight:600 !important;
+  letter-spacing:.1em !important;
+}
+
+/* Cards, panels, KPI tiles, tables: white, hairline, 12px, whisper shadow. */
+.kpi, .kpi-more, .tbl-wrap, .card, .metric-banner, .pending-card {
+  border:1px solid var(--border2) !important;
+  border-radius:12px !important;
+  box-shadow:var(--folio-shadow-card) !important;
+}
+.metric-banner, .metric-banner.metric-banner-danger { background:var(--surface-card) !important; }
+.metric-banner-overlay { display:none !important; }
+.kpi-label { font-size:11px !important; font-weight:600 !important; letter-spacing:.1em !important; color:var(--text3) !important; }
+.kpi-value { font-family:var(--font-display) !important; font-weight:600 !important; letter-spacing:-.02em !important; }
+/* Lead KPI: a 3px vermilion top bar and a vermilion figure, not a filled tile. */
+.tab-panel .kpi.is-lead, .tab-panel .kpi.is-lead:hover, .pub-shell .kpi-grid > .kpi.is-lead, .kpi.is-lead { background:var(--surface-card) !important; border-color:var(--border2) !important; border-top:3px solid var(--folio-accent) !important; box-shadow:var(--folio-shadow-card) !important; }
+.kpi.is-lead .kpi-label, .kpi.is-lead .kpi-sub { color:var(--text3) !important; opacity:1 !important; }
+.pub-shell .tab-panel :is(.kpi-grid, .recon-kpis) > .kpi.is-lead .kpi-value, .tab-panel .kpi.is-lead .kpi-value, .tab-panel .kpi.is-lead .kpi-value.gold, .kpi.is-lead .kpi-value, .kpi.is-lead .kpi-value.gold, .kpi.is-lead .kpi-value.warn, .kpi.is-lead .kpi-value.danger { color:var(--gold-text) !important; }
+
+/* Tables: sand header with grey caps labels instead of the ink band. */
+.tbl thead, table thead, table thead tr { background:var(--cream) !important; }
+.tbl th, table thead th { background:var(--cream) !important; color:var(--text3) !important; font-size:11px !important; font-weight:600 !important; letter-spacing:.1em !important; border-bottom:1px solid var(--border2) !important; }
+.tbl tfoot td, .tbl tfoot th { background:var(--folio-subtle) !important; }
+
+/* Status pills: tint fill, no outline. */
+.pill { border:0 !important; font-weight:600 !important; font-size:11px !important; }
+
+/* Buttons: sentence case. White secondary by default, vermilion primary for
+   .btn.gold, soft red for danger, bare for .tx. A gold button repeated on
+   every card of a list stays secondary so a list isn't a column of red. */
+.btn {
+  background:var(--surface-card) !important; color:var(--text) !important;
+  border:1px solid var(--folio-line-btn) !important; border-radius:8px !important;
+  box-shadow:var(--folio-shadow-btn) !important;
+  font-family:var(--font-ui) !important; font-weight:600 !important; font-size:13px !important;
+  text-transform:none !important; letter-spacing:0 !important;
+}
+.btn.sm { font-size:12px !important; }
+.btn:hover { background:var(--folio-subtle) !important; box-shadow:var(--folio-shadow-btn) !important; }
+.btn.gold:not(.outline) { background:var(--folio-accent) !important; color:var(--on-accent) !important; border-color:var(--folio-accent-hover) !important; box-shadow:var(--folio-shadow-primary) !important; }
+.btn.gold:not(.outline):hover { background:var(--folio-accent-hover) !important; border-color:var(--folio-accent-hover) !important; }
+.btn.gold.outline, .btn.ink,
+.pending-card .btn.gold:not(.outline) { background:var(--surface-card) !important; color:var(--text) !important; border-color:var(--folio-line-btn) !important; box-shadow:var(--folio-shadow-btn) !important; }
+.btn.danger-btn { background:var(--red-bg) !important; color:var(--red) !important; border-color:var(--folio-danger-line) !important; box-shadow:none !important; }
+.btn.tx { background:transparent !important; border-color:transparent !important; color:var(--text2) !important; box-shadow:none !important; }
+
+/* Side menu: the active item is a soft white wash, no accent rail. */
+.pub-shell .snav.active { background:rgba(255,255,255,.1) !important; color:var(--on-inverse) !important; border-radius:8px !important; }
+.pub-shell .snav.active::before { display:none !important; }
+.pub-shell .snav.active .snav-ic { color:var(--on-inverse) !important; }
+
+/* Pop-ups: 16px corners, soft popover shadow. */
+.modal { border:0 !important; border-radius:16px !important; box-shadow:var(--folio-shadow-modal) !important; }
+
+/* Form fields: 1px line, 8px corners, vermilion focus with a soft halo. */
+input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea {
+  border:1px solid var(--border) !important; border-radius:8px !important; box-shadow:none !important; font-family:var(--font-ui) !important;
+}
+input:focus, select:focus, textarea:focus { border-color:var(--gold) !important; box-shadow:var(--folio-halo) !important; outline:none !important; }
+
+/* Receipt drop zone: calm sand instead of a pink wash. */
+.dropzone, .receipt-panel { background:var(--folio-subtle) !important; border-color:var(--border) !important; border-radius:10px !important; box-shadow:none !important; }

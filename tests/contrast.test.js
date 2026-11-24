@@ -26,7 +26,7 @@ describe('contrastRatio', () => {
 describe('makeColorResolver', () => {
   it('resolves var() chains, hex, rgba, and named colors from :root', () => {
     const resolve = makeColorResolver(cssVars);
-    expect(resolve('var(--cream)')).toEqual({ r: 0xfa, g: 0xf6, b: 0xec, a: 1 });
+    expect(resolve('var(--cream)')).toEqual({ r: 0xf5, g: 0xf1, b: 0xe8, a: 1 });
     expect(resolve('#fff')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
     expect(resolve('rgba(255,255,255,.5)')).toEqual({ r: 255, g: 255, b: 255, a: 0.5 });
     expect(resolve('white')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
@@ -98,7 +98,7 @@ describe('dark palette resolution', () => {
     // NOT re-pointed — must still resolve, inherited from the light :root.
     // If the overlay were replaced by a straight read of the dark block, these
     // would come back null and every check touching them would silently skip.
-    expect(resolve('var(--on-inverse)')).toEqual({ r: 0xfa, g: 0xf6, b: 0xec, a: 1 });
+    expect(resolve('var(--on-inverse)')).toEqual({ r: 0xf5, g: 0xf1, b: 0xe8, a: 1 });
     expect(resolve('var(--on-accent)')).toEqual({ r: 255, g: 255, b: 255, a: 1 });
   });
 
