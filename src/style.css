@@ -21682,3 +21682,15 @@ a.notif-action:hover { text-decoration: underline; }
 @media (max-width: 768px) {
   .settings-save-row .btn { width: 100%; }
 }
+
+/* Big Cartel switched off (no store saved): its menu entries, the Orders
+   strip and the Shipping shortcuts go. Settings › All settings keeps a row
+   that opens the screen, to connect a store again. */
+body.bc-off :is(.snav, .tab-btn, .mnav-btn)[onclick*="'bigcartel'"],
+body.bc-off #web-bc-gap-strip,
+body.bc-off #ship-bc-queue,
+body.bc-off .dest-chip[data-cat="bc"],
+body.bc-off #ship-prefill-bc-group { display: none !important; }
+.bc-stop-row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-top: var(--space-3); }
+.bc-stop-hint { flex: 1; min-width: 12rem; font-size: var(--text-xs); color: var(--text3); }
+body.bc-off .bc-stop-row { display: none; }
