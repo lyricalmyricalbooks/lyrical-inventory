@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { planArtistSettlement, applyArtistSettlement, undoArtistSettlement, artistSettlementStatement, artistSettlementIssues, planSettlementForPayment, pricedExpensesTag, pricedExpensesFromTag, expensesInSettleUp } from '../src/lib/artist-settlement.js';
-import { expensesWithSettlements } from '../src/lib/receipt-storage.js';
+import { expensesWithSettlements, expensesRepaidBySettlement } from '../src/lib/receipt-storage.js';
 import { calcArtistEarnings, describeArtistSettlement } from '../src/lib/earnings.js';
 import { mergeRows } from '../src/lib/merge-state.js';
 import { computeCashFlowMetrics } from '../src/lib/cashflow.js';
@@ -166,7 +166,7 @@ describe('a linked author settlement', () => {
     const deps = { document: { getElementById: () => ({ value: '2026' }) }, today: () => '2026-10-08',
       csvCell, BOOK_LIST: [{ ...book, id: 'harbour' }], states: { harbour: s }, defaultState: () => ({}),
       getBookCurrencyCode, roundCents, datedCadRate, saleCadAmounts, _fxRateCache: {}, isTestBook: () => false, isTestBookId: () => false,
-      filterArtistEarningsByYear: () => 0, payoutNetted, TAX_CENTER: { businessExpenses: [] },
+      filterArtistEarningsByYear: () => 0, payoutNetted, expensesRepaidBySettlement, TAX_CENTER: { businessExpenses: [] },
       downloadCsv: content => { csv = content; }, showToast: () => {} };
     new Function(...Object.keys(deps), source)(...Object.values(deps));
     expect(csv).toContain('"Earnings settled"');

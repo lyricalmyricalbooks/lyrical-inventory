@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { importDateIssues, latestImport, parseImportDate } from '../src/lib/import-batch.js';
+import { classifyImportRows, importBatches, importDateIssues, latestImport, parseImportDate } from '../src/lib/import-batch.js';
 import { loadApp, makeBook } from './helpers/load-app.js';
 
 const todayStr = '2026-10-27';
@@ -55,6 +55,25 @@ describe('latestImport', () => {
     ];
     expect(latestImport(hist)).toEqual({ id: 'b', at: '2026-10-20T00:00:00Z', name: 'b.csv', count: 1 });
     expect(latestImport([{ num: 'x' }])).toBeNull();
+  });
+
+  it('lists every import still counting, newest first', () => {
+    const hist = [
+      { importId: 'a', importedAt: '2026-10-01T00:00:00Z' },
+      { importId: 'b', importedAt: '2026-10-20T00:00:00Z' },
+      { importId: 'a', importedAt: '2026-10-01T00:00:00Z' },
+      { importId: 'c', importedAt: '2026-10-25T00:00:00Z', voided: true },
+    ];
+    expect(importBatches(hist).map(b => [b.id, b.count])).toEqual([['b', 1], ['a', 2]]);
+  });
+});
+
+describe('classifyImportRows', () => {
+  it('marks rows already in the book and repeats, keeping the last repeat as the new one', () => {
+    const rows = [{ num: 'A' }, { num: 'B' }, { num: 'C' }, { num: 'B' }];
+    const hist = [{ num: 'A' }, { num: 'C', voided: true }];
+    expect(classifyImportRows(rows, hist)).toEqual({ fresh: 2, inBook: 1, repeat: 1 });
+    expect(rows.map(r => r.status)).toEqual(['inBook', 'repeat', 'new', 'new']);
   });
 });
 
@@ -146,5 +165,41 @@ describe('importing a file, then undoing it', () => {
     await undoing;
     expect(st().hist.find(h => h.num === 'W-1').voided).toBeFalsy();
     expect(st().hist.find(h => h.num === 'W-2').voided).toBe(true);
+  });
+
+  it('says before importing which rows are already in the book', async () => {
+    const csv = 'Order #,Date,Channel,Qty,Unit price,Notes\nW-1,2025-07-01,Website,1,30,\nN-1,2025-08-01,Website,1,30,\n';
+    await importCsv(csv, 'mixed.csv');
+    const summary = document.getElementById('import-summary').textContent;
+    expect(summary).toMatch(/1 is already in this book/);
+    expect(summary).toMatch(/1 new will be added/);
+    expect(document.getElementById('import-count').textContent).toBe('1');
+    const pills = [...document.querySelectorAll('#import-preview-body .pill')].map(p => p.textContent);
+    expect(pills).toEqual(['Already in book', 'New']);
+  });
+
+  it('remembers how dates are written for the next file', async () => {
+    app.window.setImportDateOrder('dmy');
+    const csv = 'Order #,Date,Channel,Qty,Unit price,Notes\nD-1,03/04/2025,Website,1,30,\n';
+    await importCsv(csv, 'day-first.csv');
+    expect(document.querySelector('#import-summary select').value).toBe('dmy');
+    app.window.confirmImport();
+    expect(st().hist.find(h => h.num === 'D-1').date).toBe('2025-04-03');
+    expect(window.localStorage.getItem('lm-import-date-order')).toBe('dmy');
+  });
+
+  it('keeps every earlier import undoable from History', async () => {
+    app.window.renderHist();
+    const host = document.getElementById('hist-import-notice');
+    expect(host.querySelector('.hist-import-notice').textContent).toMatch(/from “day-first.csv”/);
+    const earlier = host.querySelector('.hist-past-imports');
+    expect(earlier.querySelector('summary').textContent).toMatch(/Earlier imports \(\d+\)/);
+    expect(earlier.textContent).toMatch(/from “old-orders.csv”/);
+
+    const latestId = st().hist.find(h => h.num === 'D-1').importId;
+    app.window.closeImportNotice(latestId);
+    const past = document.querySelector('#hist-import-notice .hist-past-imports');
+    expect(past.querySelector('summary').textContent).toMatch(/Past imports/);
+    expect(past.querySelector(`[data-import="${latestId}"]`)).not.toBeNull();
   });
 });

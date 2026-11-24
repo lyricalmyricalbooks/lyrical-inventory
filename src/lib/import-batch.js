@@ -86,11 +86,11 @@ export function newImportId(now = Date.now(), rand = Math.random) {
 }
 
 /**
- * The most recent import that still has rows counting in this book's history,
- * or null. Rows carry `importId`, `importedAt` (ISO) and `importName` (the
+ * Every import that still has rows counting in this book's history, newest
+ * first. Rows carry `importId`, `importedAt` (ISO) and `importName` (the
  * file's name) from confirmImport.
  */
-export function latestImport(hist) {
+export function importBatches(hist) {
   const groups = new Map();
   for (const h of hist || []) {
     if (!h || !h.importId || h.voided) continue;
@@ -98,7 +98,30 @@ export function latestImport(hist) {
     g.count++;
     groups.set(h.importId, g);
   }
-  let best = null;
-  for (const g of groups.values()) if (!best || g.at > best.at) best = g;
-  return best;
+  return [...groups.values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+/** The most recent of importBatches, or null. */
+export function latestImport(hist) {
+  return importBatches(hist)[0] || null;
+}
+
+/**
+ * Marks each row about to be imported: `new`, `inBook` (an order with that
+ * number already counts in the book) or `repeat` (the same number comes again
+ * in this file). confirmImport walks the file from the bottom, so the last of
+ * repeated rows is the one that goes in; this marks them the same way.
+ */
+export function classifyImportRows(rows, hist) {
+  const existing = new Set((hist || []).filter(h => h && !h.voided).map(h => h.num));
+  const seen = new Set();
+  const out = { fresh: 0, inBook: 0, repeat: 0 };
+  for (let i = (rows || []).length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (existing.has(r.num)) { r.status = 'inBook'; out.inBook++; }
+    else if (seen.has(r.num)) { r.status = 'repeat'; out.repeat++; }
+    else { r.status = 'new'; out.fresh++; }
+    seen.add(r.num);
+  }
+  return out;
 }

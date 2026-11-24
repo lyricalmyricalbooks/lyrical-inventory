@@ -38,7 +38,7 @@ import { needsSettleUp, settleByHandMenu } from './lib/settle-up-view.js';
 import { normalizeLetterhead, renderLetterhead } from './lib/letterhead.js';
 import { bookSizeMessage, bookSizeReport } from './lib/book-size.js';
 import { keepPreviewEdits } from './lib/tax-center-preview.js';
-import { importDateIssues, latestImport, newImportId, parseImportDate } from './lib/import-batch.js';
+import { classifyImportRows, importBatches, importDateIssues, newImportId, parseImportDate } from './lib/import-batch.js';
 import { ensureXlsx, loadExternalScript } from './lib/external-scripts.js';
 import { buildActivityFeed } from './lib/activity-feed.js';
 import { buildAttentionSignals, SIGNAL_GROUPS, GROUP_LABELS, GROUP_ICONS, isUrgent } from './lib/attention-signals.js';
@@ -9408,7 +9408,10 @@ let _importRows = [];
 // says their file is day-first.
 let _importParsed = [];
 let _importFileName = '';
-let _importDateOrder = 'mdy';
+// How dates like 03/04 are written: remembered on this device, since a shop's
+// spreadsheets tend to come from the same place each time.
+const IMPORT_DATE_ORDER_KEY = 'lm-import-date-order';
+let _importDateOrder = storageRead(IMPORT_DATE_ORDER_KEY) === 'dmy' ? 'dmy' : 'mdy';
 
 // The confirm button has nothing to import until a file has been read. The
 // hint says what to do instead. The Sheets restore path reuses this pop-up and
@@ -9476,7 +9479,6 @@ async function handleImportFile(event) {
       _importParsed = mapped.filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
       if (skippedNonSales) showToast(`${skippedNonSales} row${skippedNonSales === 1 ? '' : 's'} with a quantity of 0 or less (cancelled or refunded) left out`, 'warn', 6000);
       _importFileName = String(file.name || sheetName || '');
-      _importDateOrder = 'mdy';
       readImportDates();
 
       if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
@@ -9538,6 +9540,7 @@ function readImportDates() {
 
 function setImportDateOrder(order) {
   _importDateOrder = order === 'dmy' ? 'dmy' : 'mdy';
+  storageSet(IMPORT_DATE_ORDER_KEY, _importDateOrder);
   readImportDates();
   renderImportPreview();
 }
@@ -9563,12 +9566,23 @@ function renderImportPreview() {
   if (issues.shortYear) notes.push(`<strong>${issues.shortYear} date${issues.shortYear === 1 ? '' : 's'}</strong> ${issues.shortYear === 1 ? 'has' : 'have'} a two-digit year (like 26-10-01). Check ${issues.shortYear === 1 ? 'it was' : 'they were'} read the right way round below.`);
   const asToday = issues.unreadable + issues.missing;
   if (asToday) notes.push(`<strong>${asToday} date${asToday === 1 ? '' : 's'}</strong> couldn’t be read and will go in as today (marked <em>Check date</em> below). Fix ${asToday === 1 ? 'it' : 'them'} in the file and import again if that’s wrong.`);
-  $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource} — review below then confirm.`
+  // Rows already in the book are skipped on import: say so before, not after.
+  const kinds = classifyImportRows(_importRows, getState().hist);
+  const skipped = kinds.inBook + kinds.repeat;
+  const skipParts = [];
+  if (kinds.inBook) skipParts.push(`${kinds.inBook} ${kinds.inBook === 1 ? 'is' : 'are'} already in this book`);
+  if (kinds.repeat) skipParts.push(`${kinds.repeat} ${kinds.repeat === 1 ? 'comes' : 'come'} again further down the file`);
+  const skipLine = skipped
+    ? (kinds.fresh
+      ? ` ${skipParts.join(' and ')}, so ${skipped === 1 ? 'it' : 'they'} will be left out and <strong>${kinds.fresh} new</strong> will be added.`
+      : ` All of them are already in this book, so there is nothing new to add.`)
+    : '';
+  $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource}.${skipLine} Review below then confirm.`
     + (notes.length ? `<div class="stock-alert warn import-date-notes">${notes.map(n => `<p>${n}</p>`).join('')}</div>` : '');
-  $('import-count').textContent = _importRows.length;
-  setImportReady(_importRows.length > 0);
+  $('import-count').textContent = kinds.fresh;
+  setImportReady(kinds.fresh > 0);
   $('import-preview-body').innerHTML = _importRows.map(r => `
-        <tr>
+        <tr${r.status !== 'new' ? ' class="import-row-skip"' : ''}>
           <td class="mono">${escapeHtml(r.num)}</td>
           <td style="font-size:var(--text-sm);color:var(--text3);">${fmtD(r.date)}${r.dateIssue && r.dateWritten ? `<div class="import-date-written">written “${escapeHtml(r.dateWritten)}”</div>` : ''}</td>
           <td>${escapeHtml(r.chan)}</td>
@@ -9576,9 +9590,13 @@ function renderImportPreview() {
           <td class="r">${book.currency}${r.price.toFixed(2)}</td>
           <td class="r" style="font-weight:600;">${book.currency}${(r.qty * r.price).toFixed(2)}</td>
           <td style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(r.notes) || '—'}</td>
-          <td>${r.dateIssue
-            ? `<span class="pill amber" style="font-size:var(--text-2xs);" title="${escapeHtml(IMPORT_DATE_NOTE[r.dateIssue])}">Check date</span>`
-            : '<span class="pill blue" style="font-size:var(--text-2xs);">New</span>'}</td>
+          <td>${r.status === 'inBook'
+            ? '<span class="pill" style="font-size:var(--text-2xs);" title="An order with this number is already in this book, so this row is left out.">Already in book</span>'
+            : r.status === 'repeat'
+              ? '<span class="pill" style="font-size:var(--text-2xs);" title="The same order number comes again further down the file. Only one goes in.">Repeat</span>'
+              : r.dateIssue
+                ? `<span class="pill amber" style="font-size:var(--text-2xs);" title="${escapeHtml(IMPORT_DATE_NOTE[r.dateIssue])}">Check date</span>`
+                : '<span class="pill blue" style="font-size:var(--text-2xs);">New</span>'}</td>
         </tr>`).join('');
 }
 
@@ -9667,15 +9685,30 @@ const IMPORT_NOTICE_DAYS = 14;
 function renderImportNotice(s) {
   const host = $('hist-import-notice');
   if (!host) return;
-  const last = isAuthor() ? null : latestImport(s.hist);
+  const batches = isAuthor() ? [] : importBatches(s.hist);
+  const last = batches[0] || null;
   const fresh = last && last.at && (Date.now() - Date.parse(last.at)) < IMPORT_NOTICE_DAYS * 864e5;
-  if (!fresh || _importNoticeClosed === last.id) { host.hidden = true; host.innerHTML = ''; return; }
+  const showNotice = fresh && _importNoticeClosed !== last.id;
+  // Older imports (and the newest one, once its notice is closed or stale)
+  // stay undoable from a folded list, so a bad file found weeks later can
+  // still be taken back in one step.
+  const past = showNotice ? batches.slice(1) : batches;
+  if (!showNotice && !past.length) { host.hidden = true; host.innerHTML = ''; return; }
+  const what = b => `${b.count} order${b.count === 1 ? '' : 's'}${b.name ? ` from “${escapeHtml(b.name)}”` : ''}`;
+  const when = b => (b.at ? fmtD(b.at.slice(0, 10)) : 'an earlier date');
   host.hidden = false;
-  host.innerHTML = `<div class="stock-alert ok hist-import-notice">
-      <span>Imported ${last.count} order${last.count === 1 ? '' : 's'}${last.name ? ` from “${escapeHtml(last.name)}”` : ''} on ${fmtD(last.at.slice(0, 10))}.</span>
+  host.innerHTML = (showNotice ? `<div class="stock-alert ok hist-import-notice">
+      <span>Imported ${what(last)} on ${when(last)}.</span>
       <button type="button" class="btn sm" data-action="import.undo" data-import="${escapeHtml(last.id)}">Undo this import</button>
       <button class="card-x" type="button" data-action="import.closeNotice" data-import="${escapeHtml(last.id)}" aria-label="Close this notice" title="Close until you next open the app">✕</button>
-    </div>`;
+    </div>` : '')
+    + (past.length ? `<details class="hist-past-imports">
+      <summary>${showNotice ? 'Earlier imports' : 'Past imports'} (${past.length})</summary>
+      <ul>${past.map(b => `<li>
+        <span>${what(b)}, imported ${when(b)}</span>
+        <button type="button" class="btn sm" data-action="import.undo" data-import="${escapeHtml(b.id)}">Undo</button>
+      </li>`).join('')}</ul>
+    </details>` : '');
 }
 
 function updateManualForm() {
