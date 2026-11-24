@@ -317,10 +317,11 @@ async function renderBigCartelTab() {
 // Past Big Cartel orders stay in the history either way. Only a settings read
 // that worked decides this, so a failed read never hides it from a shop that
 // still sells there.
+// Big Cartel is retired for this shop (2026-11-24): it stays out of the menus
+// even while an old store is still saved. Settings › All settings keeps the
+// row that opens the screen, and past orders stay in history and totals.
 async function refreshBigCartelVisibility() {
-  const config = await loadBigCartelConfig();
-  if (!bigCartelConfig) return;
-  document.body.classList.toggle('bc-off', !bigCartelConfigured(config));
+  document.body.classList.add('bc-off');
 }
 
 // For a shop that has left Big Cartel: forget the saved store and what the
@@ -519,7 +520,6 @@ async function saveBigCartelSettings() {
     const config = { subdomain, username, password };
     await window._fbSaveSettings('bigCartelConfig', config);
     bigCartelConfig = config;
-    document.body.classList.remove('bc-off');
     showToast('✓ Big Cartel credentials saved & synced', 'ok');
 
     $('bc-dashboard-content').style.display = 'block';
