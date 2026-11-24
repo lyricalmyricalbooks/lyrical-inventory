@@ -45,6 +45,19 @@ jobs:
         with:
           path: dist/
 
+      # deploy-pages sometimes looks up the artifact a moment before GitHub's
+      # artifact list shows it ("No artifacts named github-pages were found",
+      # 2026-11-24: three deploys in a row), so a merge silently never goes
+      # live. Try once more after a pause before failing.
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+
+      - name: Wait before retrying the deploy
+        if: steps.deployment.outcome == 'failure'
+        run: sleep 30
+
+      - name: Deploy to GitHub Pages (retry)
+        if: steps.deployment.outcome == 'failure'
         uses: actions/deploy-pages@v5
