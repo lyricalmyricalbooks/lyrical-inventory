@@ -329,3 +329,108 @@ input:focus, select:focus, textarea:focus { border-color:var(--gold) !important;
 
 /* Receipt drop zone: calm sand instead of a pink wash. */
 .dropzone, .receipt-panel { background:var(--folio-subtle) !important; border-color:var(--border) !important; border-radius:10px !important; box-shadow:none !important; }
+
+/* ─── Folio round two (2026-11-24) ──────────────────────────────────────────
+   Same layout; the last Riso-looking pieces. Icons are the Lucide-shaped
+   sprite in index.html (1.75 stroke, round ends); the emoji in the sidebar,
+   top bar and banner now use it. Colours come from tokens so night mode
+   follows. */
+svg.ic { stroke-width:1.75; }
+.snav-ic .ic, .ttb-ico .ic, .pab-icon .ic, .con-search-icon .ic, .tso-ico .ic { width:18px; height:18px; display:block; }
+.pub-shell .snav .snav-ic { display:inline-flex; align-items:center; justify-content:center; width:20px; opacity:.85; }
+.pub-shell .snav.active .snav-ic { opacity:1; }
+.ttb-ico, .tso-ico { display:inline-flex !important; align-items:center; justify-content:center; }
+.theme-toggle-btn:hover .ttb-ico { transform:none; }
+
+/* Top bar: the page's own colour with a hairline, not an ink band. */
+.app-header {
+  background:var(--cream) !important; background-image:none !important; color:var(--text) !important;
+  border-bottom:1px solid var(--border2) !important; box-shadow:none !important;
+}
+.app-header::before, .app-header::after { display:none !important; }
+.app-header :is(#shell-page-title, #book-dropdown-label, .header-wordmark, .ttb-ico) { color:var(--text) !important; }
+.app-header #shell-page-title { font-weight:600 !important; letter-spacing:-.02em !important; }
+.app-header .theme-toggle-btn {
+  background:var(--surface-card) !important; border:1px solid var(--folio-line-btn) !important; color:var(--text) !important;
+  border-radius:var(--r) !important; box-shadow:var(--folio-shadow-btn) !important;
+}
+.app-header .theme-toggle-btn::after { display:none !important; }
+.app-header .profile-toggle-group { background:var(--cream2) !important; border:0 !important; border-radius:var(--r) !important; padding:3px !important; box-shadow:none !important; }
+.app-header .profile-toggle-group .profile-tab { background:transparent !important; color:var(--text2) !important; border:0 !important; border-radius:6px !important; box-shadow:none !important; font-weight:600 !important; }
+.app-header .profile-toggle-group .profile-tab.active { background:var(--surface-card) !important; color:var(--text) !important; box-shadow:0 1px 2px rgba(23,20,15,.1) !important; }
+
+/* "Needs approval" banner: a calm amber card, sentence case, no pulse. */
+.publisher-action-banner {
+  background:var(--amber-bg) !important; background-image:none !important; color:var(--text) !important;
+  border:1px solid var(--border2) !important; border-radius:var(--r3) !important; box-shadow:none !important; animation:none !important;
+}
+.publisher-action-banner::before, .publisher-action-banner::after, .publisher-action-banner .pab-pulse { display:none !important; }
+.publisher-action-banner .pab-icon { animation:none !important; color:var(--amber) !important; }
+.publisher-action-banner .pab-title { text-transform:none !important; letter-spacing:0 !important; font-weight:600 !important; color:var(--text) !important; }
+.publisher-action-banner :is(.pab-sub, .pab-short, .pab-where) { color:var(--text2) !important; letter-spacing:0 !important; }
+.publisher-action-banner .pab-btn {
+  background:var(--surface-card) !important; color:var(--text) !important; border:1px solid var(--folio-line-btn) !important;
+  border-radius:var(--r) !important; text-transform:none !important; letter-spacing:0 !important; font-weight:600 !important;
+  text-decoration:none !important; box-shadow:var(--folio-shadow-btn) !important; padding:7px 12px !important;
+}
+.publisher-action-banner .pab-dismiss { color:var(--amber) !important; }
+
+/* Small notes leave the typewriter face; figures and codes stay mono. */
+:is(.pab-where, .ledger-sub, .bar-meta-lead, .bar-meta-note, .fm-today-sum, .fm-tile-stock, .store-row-meta,
+    .toast, .shipping-pnl-freshness, .shipping-pnl-disclosure, .sec-head-note, .inv-sum-part, .save-indicator, .more-sheet-title-sub) {
+  font-family:var(--font-ui) !important; letter-spacing:0 !important;
+}
+
+/* Book chips, store tags: rounded, sentence case. */
+.book-chip { border-radius:999px !important; text-transform:none !important; letter-spacing:0 !important; font-family:var(--font-ui) !important; font-weight:600 !important; border:1px solid var(--folio-line-btn) !important; background:var(--surface-card) !important; box-shadow:none !important; }
+.book-chip.is-on { background:var(--ink) !important; color:var(--on-inverse) !important; border-color:var(--ink) !important; }
+.book-chip-sw { border-radius:999px !important; }
+.filter-chip { border-radius:999px !important; text-transform:none !important; letter-spacing:0 !important; }
+.store-row-tag { border-radius:var(--r) !important; border:0 !important; box-shadow:none !important; font-family:var(--font-ui) !important; font-weight:600 !important; }
+.store-row-tag.is-amber { background:var(--amber-bg) !important; color:var(--amber) !important; }
+.pill, .phone-pill { text-transform:none !important; letter-spacing:0 !important; }
+.phone-pill { border-radius:999px !important; box-shadow:none !important; font-family:var(--font-ui) !important; font-weight:600 !important; }
+@media (min-width: 769px) { .publisher-action-banner { margin:16px 24px 0 !important; } }
+
+@media (max-width: 768px) {
+  /* Phone top bar */
+  .pub-shell .app-header { background:var(--cream) !important; }
+  .pub-shell .header-wordmark { font-weight:600 !important; letter-spacing:-.02em !important; }
+  .pub-shell .phone-menu-btn { color:var(--text) !important; background:transparent !important; }
+  .phone-menu-dot { border-radius:999px !important; background:var(--folio-accent) !important; box-shadow:0 0 0 2px var(--cream) !important; }
+  .phone-sync-mark { color:var(--green) !important; font-family:var(--font-ui) !important; }
+  .phone-sync-mark .sync-dot { border-radius:999px !important; }
+  .pub-shell .app-header :is(#app-search-header-btn, #notif-header-btn, #theme-toggle-btn) { background:transparent !important; border:0 !important; box-shadow:none !important; color:var(--text) !important; }
+  .pub-shell .app-header .ttb-ico[data-ink]::before { content:none !important; }
+  .pub-shell .app-header .ttb-ico .ic { width:22px; height:22px; }
+  .pub-shell .publisher-action-banner .pab-btn { padding:8px 12px !important; }
+
+  /* Bottom menu: card colour, hairline, rounded Sell */
+  .pub-shell .mnav { background:var(--surface-card) !important; background-image:none !important; border-top:1px solid var(--border2) !important; box-shadow:none !important; }
+  .pub-shell .mnav .mnav-btn { color:var(--text3) !important; }
+  .pub-shell .mnav .mnav-btn::before, .pub-shell .mnav .mnav-btn::after { display:none !important; }
+  .pub-shell .mnav .mnav-label { text-transform:none !important; letter-spacing:0 !important; font-family:var(--font-ui) !important; font-weight:500 !important; }
+  .pub-shell .mnav .mnav-btn.active { color:var(--gold-text) !important; }
+  .pub-shell .mnav .mnav-btn.active .mnav-label { font-weight:600 !important; }
+  .pub-shell .mnav .mnav-dot { border-radius:999px !important; }
+  .pub-shell .mnav .mnav-sell { background:var(--folio-accent) !important; color:#fff !important; border:0 !important; border-radius:16px !important; box-shadow:0 6px 16px -6px rgba(217,58,34,.55), inset 0 1px 0 rgba(255,255,255,.18) !important; }
+  .pub-shell .mnav .mnav-sell::before, .pub-shell .mnav .mnav-sell::after { display:none !important; }
+  .pub-shell .mnav .mnav-sell .mnav-label { color:#fff !important; font-weight:600 !important; }
+
+  /* Today tiles and the Sell hero */
+  .pub-shell #tab-today .today-grid > .today-card { border-radius:var(--r3) !important; border:1px solid var(--border2) !important; }
+  .pub-shell #tab-today .today-grid > .today-card-ink { background:var(--folio-accent) !important; border-color:transparent !important; box-shadow:var(--folio-shadow-primary) !important; }
+  .pub-shell #tab-today .today-card-ink :is(.today-card-name, .today-card-sub) { color:#fff !important; }
+  .pub-shell #tab-today .today-card-ink .today-card-ic { border:0 !important; background:rgba(255,255,255,.16) !important; border-radius:10px !important; color:#fff !important; }
+  .pub-shell #tab-today .today-card .today-card-count { border-radius:999px !important; }
+  .pub-shell :is(#tab-today .today-date, .phone-kicker, .phone-eyebrow, .book-context-title)::before { border-radius:999px !important; }
+  .pub-shell .book-context-title { font-family:var(--font-ui) !important; letter-spacing:.06em !important; font-weight:600 !important; }
+
+  /* Sell screen cards, store list, side menu tiles */
+  .pub-shell #tab-pos :is(.fm-top, .fm-tile, .fm-tile-add) { border-radius:var(--r3) !important; border:1px solid var(--border2) !important; box-shadow:var(--folio-shadow-card) !important; }
+  .pub-shell :has(> .store-row) { border-radius:var(--r3) !important; overflow:hidden; border:1px solid var(--border2) !important; }
+  .pub-shell .more-sheet-body .snav { border-radius:var(--r3) !important; border:1px solid var(--border2) !important; box-shadow:var(--folio-shadow-card) !important; }
+  .pub-shell .more-sheet-body .snav-ic[data-ink]::before, .pub-shell .more-sheet-foot .more-sheet-row .snav-ic[data-ink]::before { content:none; }
+  .pub-shell :is(.more-sheet-body, .more-sheet-foot, .mnav) :is(.nav-badge, .bc-gap-badge) { border-radius:999px !important; }
+  .pub-shell .more-sheet-close { border-radius:999px !important; }
+}

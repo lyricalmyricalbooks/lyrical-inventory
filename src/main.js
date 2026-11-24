@@ -3862,7 +3862,7 @@ let themePreference = readThemePreference();
 // what's on screen, not relative to the stored preference.
 let resolvedTheme = 'light';
 
-const THEME_OPTION_ICONS = { system: '◐', light: '☀', dark: '☾' };
+const THEME_OPTION_ICONS = { system: moreIconHtml('contrast'), light: moreIconHtml('sun'), dark: moreIconHtml('moon') };
 const THEME_SUB_COPY = {
   system: 'Following your device',
   light: 'Always light',
@@ -3909,7 +3909,7 @@ function renderThemeControls() {
     const goingDark = resolvedTheme !== 'dark';
     const label = goingDark ? 'Switch to dark mode' : 'Switch to light mode';
     const icon = toggle.querySelector('.ttb-ico');
-    if (icon) icon.textContent = goingDark ? '☾' : '☀';
+    if (icon) icon.innerHTML = moreIconHtml(goingDark ? 'moon' : 'sun');
     toggle.title = label;
     toggle.setAttribute('aria-label', label);
     // aria-pressed reports the STATE (dark is on), which is the opposite of

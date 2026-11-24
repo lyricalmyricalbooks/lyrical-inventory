@@ -2,7 +2,7 @@
 // the symbols in the sprite at the top of index.html (#ic-NAME), so a tile can
 // draw one with <use> and no extra files.
 const ICON_FOR_TAB = {
-  today: 'today', dashboard: 'dashboard', todo: 'todo', website: 'orders', manual: 'order',
+  today: 'today', dashboard: 'dashboard', todo: 'todo', website: 'orders', manual: 'pencil',
   consignment: 'consignment', history: 'history', expenses: 'expenses', intel: 'intel', pos: 'sell',
   taxcenter: 'tax', reconcile: 'payments', qrcodes: 'qr', customers: 'customers', opencall: 'opencall',
   webanalytics: 'analytics', shipping: 'shipping', sheets: 'settings', bigcartel: 'bigcartel',
