@@ -543,7 +543,7 @@ tbody.sys-long-list > tr {
 
 /* On a phone the card spans the width rather than floating in a corner it would
    otherwise cover half of. */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .app-alert-region {
     left: var(--space-3);
     right: var(--space-3);

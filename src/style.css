@@ -795,7 +795,7 @@ tr.hist-row:hover {
 .theme-seg-opt .tso-ico{font-size:var(--text-sm);line-height:1;}
 /* The word is the affordance on desktop; below the shell breakpoint the icon
    carries it alone so three 44px targets still fit a phone header. */
-@media (max-width:520px){
+@media (max-width: 480px){
   .theme-seg-opt .tso-txt{display:none;}
   .theme-seg-opt{min-width:46px;padding:0 6px;}
 }
@@ -869,7 +869,7 @@ tr.hist-row:hover {
 @keyframes pab-shimmer{0%{background-position:0% 0;}100%{background-position:200% 0;}}
 @keyframes pab-glow{0%,100%{opacity:.4;}50%{opacity:1;}}
 @keyframes pab-shake{0%,100%{transform:rotate(0);}25%{transform:rotate(-8deg);}75%{transform:rotate(8deg);}}
-@media(max-width:640px){
+@media(max-width: 768px){
   .publisher-action-banner{flex-wrap:wrap;padding:10px 14px;gap:10px;}
   .publisher-action-banner .pab-title{font-size:var(--text-base);}
   .publisher-action-banner .pab-sub{font-size:var(--text-sm);}
@@ -1648,7 +1648,7 @@ tr.hist-row:hover {
   #ship-analysis-hub .shipping-pnl-insight-card + .shipping-pnl-insight-card { border-left: 0; border-top:var(--stroke-hair) solid var(--shipping-pnl-border); }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 768px) {
   #ship-analysis-hub .shipping-pnl-header,
   #ship-analysis-hub .shipping-pnl-section-header { display: grid; }
   #ship-analysis-hub .shipping-pnl-header { padding: var(--shipping-pnl-space-4) var(--shipping-pnl-space-3) var(--shipping-pnl-space-3); }
@@ -3341,7 +3341,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 }
 .email-file-chip-x:hover, .email-file-chip-x:focus-visible { color: var(--red); background: var(--surface-inset); }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .email-manual-grid { grid-template-columns: 1fr; }
   .email-paste-textarea, .email-dropzone { min-height: 150px; }
 }
@@ -3456,7 +3456,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .bx-footer{align-items:center;}
 .bx-summary{flex:1;font-size:var(--text-sm);color:var(--content-secondary);font-weight:600;}
 
-@media (max-width:900px){
+@media (max-width: 1100px){
   .bx-intake{grid-template-columns:1fr;}
   .bx-tbl-wrap{max-height:none;}
 }
@@ -4349,7 +4349,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 /* Inventory valuation footer: Adjust stays on the left of a wide footer even
    though it comes last in the markup (last is what a phone folds away). */
 .iv-footer-actions .iv-adjust-btn{order:-1;margin-right:auto;}
-@media (max-width:600px){
+@media (max-width: 768px){
   .inventory-adjustment-modes{grid-template-columns:1fr;}
   .inventory-adjustment-history{flex-direction:column;gap:var(--space-1);}
   .inventory-adjustment-history strong{white-space:normal;}
@@ -4441,7 +4441,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .apb-pay{text-decoration:none;min-height:48px;padding:12px 22px;border:var(--stroke) solid var(--rule-ink);box-shadow:var(--elev-2);transition:transform var(--dur-fast) var(--ease-standard),box-shadow var(--dur-fast) var(--ease-standard);}
 .apb-pay:hover{transform:translate(-2px,-2px);box-shadow:5px 5px 0 var(--rule-ink);}
 .apb-pay:active{transform:translate(3px,3px);box-shadow:0 0 0 var(--rule-ink);}
-@media (max-width:600px){
+@media (max-width: 768px){
   .apb-riso #apb-amount{font-size:48px;} /* token-ok: poster-scale amount at phone width */
   .metric-banner-items .apb-row{grid-template-columns:auto 1fr;}
   .metric-banner-items .apb-row > :last-child{grid-column:1 / -1;justify-self:stretch;text-align:center;justify-content:center;}
@@ -4476,7 +4476,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .settle-opt strong{font-size:var(--text-sm);font-weight:700;}
 .settle-opt span{font-size:var(--text-xs);color:var(--text2);line-height:1.4;}
 .settle-opt:hover,.settle-opt:focus-visible{border-color:var(--rule-ink);background:var(--gold-bg);}
-@media (max-width:600px){ .settle-menu{position:static;width:100%;margin-top:8px;} }
+@media (max-width: 768px){ .settle-menu{position:static;width:100%;margin-top:8px;} }
 
 /* TOOLTIPS (#10) — add data-tip="..." to any element. */
 .tip{position:relative;cursor:help;}
@@ -4655,7 +4655,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 #pw-gate .err{min-height:18px;margin-top:14px;text-align:center;font-family:var(--font-mono);font-size:var(--text-sm);letter-spacing:.04em;color:#ff8a80;}
 #pw-gate .pw-footnote{margin-top:clamp(10px,1.4vw,16px);text-align:center;font-weight:600;font-size:var(--text-sm);letter-spacing:0.18em;text-transform:uppercase;color:rgba(242,237,225,0.4);}
 
-@media(max-width:880px){
+@media(max-width: 1100px){
   #pw-gate{padding:14px;}
   #pw-gate .pw-frame{box-shadow:8px 8px 0 rgba(242,237,225,0.12);padding:10px;} /* token-ok: same poster shadow, scaled down */
   #pw-gate .pw-inner{padding:26px 18px;}
@@ -5031,7 +5031,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
 /* On a narrow handset, dialogs become edge-to-edge bottom sheets. This leaves
    more usable width for forms and respects the home-indicator safe area. */
-@media (max-width: 600px){
+@media (max-width: 768px){
   .overlay{align-items:flex-end;padding:0;}
   .modal{
     width:100%;max-width:none;max-height:min(92dvh,calc(100dvh - env(safe-area-inset-top)));
@@ -5228,7 +5228,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .ch-leg-meta{grid-column:2 / -1;grid-row:2;font-size:var(--text-2xs);color:var(--text3);}
 .pill.ch-top{font-size:8px;padding:0 5px;line-height:1.5;}
 
-@media(max-width:640px){
+@media(max-width: 768px){
   .ch-book-grid{grid-template-columns:1fr;gap:var(--space-4);}
   /* Upright phone: the title is the entry point of each card. It was regular-weight
      body type, so the channel names under it (600) outweighed it and the stack
@@ -6053,7 +6053,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .email-receipt-source { margin-top: 6px; font-size: var(--text-xs); color: var(--content-secondary); overflow-wrap: anywhere; }
 .email-receipt-source summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; color: var(--accent-color); }
 .email-receipt-source div { margin: 3px 0; }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .erd-table-wrap { overflow-x: auto; }
   .erd-table { min-width: 760px; }
 }
@@ -6308,7 +6308,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .cf-detail-income{color:var(--green)!important;font-weight:700;}
 .cf-detail-expense{color:var(--red)!important;font-weight:700;}
 
-@media (max-width:760px){
+@media (max-width: 768px){
   .cf-stats{grid-template-columns:1fr;}
   .cf-kpis{grid-template-columns:repeat(2,minmax(0,1fr));}
   .cf-detail-totals{grid-template-columns:1fr;}
@@ -6437,7 +6437,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .order-actions{display:flex;gap:.45rem;align-items:center;}
 .order-done{font-size:var(--text-xs);color:var(--text3);}
 .orders-hidden-note{text-align:center;font-size:var(--text-xs);color:var(--text3);padding:12px 0;}
-@media(max-width:760px){.web-orders-hero{align-items:stretch;flex-direction:column;padding:1.2rem;}.web-orders-actions{justify-content:stretch;}.web-orders-actions .btn{flex:1 1 auto;justify-content:center;}.web-orders-status{grid-template-columns:1fr;}.order-row{align-items:flex-start;flex-direction:column;}.order-actions{width:100%;}.order-actions .btn{flex:1 1 auto;justify-content:center;}.shipping-reconciliation-row{grid-template-columns:1fr;}.shipping-reconciliation-row .btn{min-height:44px;justify-content:center;}}
+@media(max-width: 768px){.web-orders-hero{align-items:stretch;flex-direction:column;padding:1.2rem;}.web-orders-actions{justify-content:stretch;}.web-orders-actions .btn{flex:1 1 auto;justify-content:center;}.web-orders-status{grid-template-columns:1fr;}.order-row{align-items:flex-start;flex-direction:column;}.order-actions{width:100%;}.order-actions .btn{flex:1 1 auto;justify-content:center;}.shipping-reconciliation-row{grid-template-columns:1fr;}.shipping-reconciliation-row .btn{min-height:44px;justify-content:center;}}
 
 /* ── Section heads on the "All books" landing screen ──────────────────────
    The home screen used to run: a 9px uppercase micro-label + a list of book
@@ -6844,8 +6844,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .audience-stat span{display:block;font-size:var(--text-3xs);font-weight:800;letter-spacing:.15em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .audience-stat strong{display:block;font-family:var(--font-mono);font-size:28px;font-weight:600;line-height:1;color:var(--gold-text);}
 .audience-stat em{display:block;margin-top:8px;font-style:normal;font-size:var(--text-xs);line-height:1.35;color:var(--text3);}
-@media(max-width:980px){.audience-summary-card{grid-template-columns:1fr;}.audience-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
-@media(max-width:560px){.audience-summary-card{padding:var(--space-4);}.audience-summary-copy{flex-direction:column;}.audience-stat-grid{grid-template-columns:1fr;}}
+@media(max-width: 1100px){.audience-summary-card{grid-template-columns:1fr;}.audience-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width: 480px){.audience-summary-card{padding:var(--space-4);}.audience-summary-copy{flex-direction:column;}.audience-stat-grid{grid-template-columns:1fr;}}
 
 /* ─── SETTINGS CUSTOM PREMIUM UX/UI STYLES ─────────────────────────── */
 
@@ -7662,7 +7662,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
    PUBLISHER ONLY. Activated by `.pub-shell` on #pw-app (set in
    syncRoleUI). Every rule below is scoped under .pub-shell, so
    authors, the logged-out gate, and mobile are untouched. The
-   desktop shell layout lives in @media(min-width:861px); below
+   desktop shell layout lives in @media(min-width: 769px); below
    that we keep the existing header + tab bar.
    ============================================================ */
 
@@ -7670,7 +7670,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 #pub-sidebar{display:none;}
 #shell-page-title{display:none;}
 
-@media(min-width:861px){
+@media(min-width: 769px){
   /* ---- Sidebar ---- */
   .pub-shell #pub-sidebar{
     display:flex;flex-direction:column;gap:4px;
@@ -7787,7 +7787,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 
   /* The account/sync control now lives in the sidebar footer in desktop shell
      mode, so hide the header copy to avoid showing it twice. This is INSIDE
-     min-width:861px, so mobile publishers (<861px) and authors (no .pub-shell)
+     min-width:769px, so phone publishers (768px and below) and authors (no .pub-shell)
      keep the header account untouched. */
   .pub-shell #hmenu-account{display:none;}
 
@@ -7799,7 +7799,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   }
 
   /* ============================================================
-     MID-WIDTH ICON RAIL (861–1100px): collapse the 212px sidebar
+     MID-WIDTH ICON RAIL (769–1100px, tablets): collapse the 212px sidebar
      to a ~64px icon-only rail. Nested inside the desktop shell so
      both queries are satisfied here; where the same selector is set
      twice (e.g. #pub-sidebar width, .pub-shell padding-left) these
@@ -8185,7 +8185,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   gap: var(--space-4);
   margin-top: var(--space-4);
 }
-@media (max-width: 980px) {
+@media (max-width: 1100px) {
   .composer-container {
     grid-template-columns: 1fr;
   }
@@ -8417,7 +8417,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   gap: 24px;
   align-items: start;
 }
-@media (max-width: 950px) {
+@media (max-width: 1100px) {
   .oc-layout {
     grid-template-columns: 1fr;
   }
@@ -9862,7 +9862,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .oc-hero-stats { width: 100%; }
   .oc-hero-stat { flex: 1; }
 }
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .oc-contributor-card {
     padding: 16px 14px;
   }
@@ -10664,7 +10664,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   margin-bottom: var(--space-2);
 }
 
-@media (max-width: 620px) {
+@media (max-width: 768px) {
   .shipping-dims-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -11054,7 +11054,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   align-items: start;
   margin-top: 1rem;
 }
-@media(max-width: 900px) {
+@media(max-width: 1100px) {
   .shipping-grid {
     grid-template-columns: 1fr;
   }
@@ -12103,7 +12103,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 @container cpkeysets (max-width: 620px) {
   .tc-cp-sets { grid-template-columns: 1fr; }
 }
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .tc-cp-sets { grid-template-columns: 1fr; }
 }
 .tc-cp-set {
@@ -12916,7 +12916,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   .addr-verify { animation: none; }
   .addr-verify-skeleton-bar { animation: none; }
 }
-@media(max-width: 760px) {
+@media(max-width: 768px) {
   .shipping-predictor-settings {
     grid-template-columns: 1fr;
   }
@@ -13243,7 +13243,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
     width: 100%;
   }
 }
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .oc-layout {
     padding: 8px 0 32px;
   }
@@ -14030,7 +14030,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 /* On a phone the deductible total is the column that matters; drop the bar
    track (the number carries the same information) so the money column stays
    on screen instead of being pushed into the horizontal scroll. */
-@media (max-width:720px){
+@media (max-width: 768px){
   .tc-cat-pct .con-row-progress{display:none;}
   .tc-cat-pct-label{min-width:0;}
 }
@@ -14413,7 +14413,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   padding: 9px 12px;
 }
 
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .tc-trip-form {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -14599,7 +14599,7 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
   height: auto;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .tc-pending-row {
     flex-direction: column;
   }
@@ -16787,7 +16787,7 @@ button[onclick="refreshUmamiStats()"]:active {
    There is no room for a column beside the list, so the preview leads instead
    of trailing: the counts and the print button sit directly under the toolbar
    rather than at the far end of the packing list. */
-@media (max-width:1080px){
+@media (max-width: 1100px){
   .fk-body{grid-template-columns:minmax(0,1fr);}
   .fk-rail{position:static;order:-1;}
   .fk-preview{
@@ -18849,7 +18849,7 @@ button[onclick="refreshUmamiStats()"]:active {
   flex-shrink: 0;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 768px) {
   .bc-gap-row,
   .bc-gap-decision,
   .bc-gap-head { flex-direction: column; align-items: stretch; }
@@ -19758,7 +19758,7 @@ a.notif-action:hover { text-decoration: underline; }
    went unnoticed while its badge slot was just one usually-hidden button;
    the model switch is permanent and wide enough to squeeze the title into a
    one-word-per-line wrap at phone width without its own stacking rule. */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   #tab-intel .sec-head { flex-direction: column; align-items: stretch; }
 }
 .intel-panel {
@@ -20130,7 +20130,7 @@ a.notif-action:hover { text-decoration: underline; }
 .sync-review-sub { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--content-secondary); text-wrap: pretty; }
 .sync-review-card > .btn { flex: 0 0 auto; align-self: center; }
 .sync-review-card > .btn[hidden] { display: none; }
-@media (max-width: 560px) {
+@media (max-width: 480px) {
   .sync-review-card { flex-wrap: wrap; padding: var(--space-4); }
   .sync-review-card > .btn { flex: 1 1 100%; }
 }
@@ -20245,9 +20245,9 @@ a.notif-action:hover { text-decoration: underline; }
 .more-sheet{display:none;}
 .pos-mobile-steps{display:none;}
 
-@media (max-width: 860px){
-  /* Publishers from 769px to 860px: the sidebar only starts at 861px, so they
-     get this bottom nav instead of the old horizontal tab bar. The nav is the
+@media (max-width: 768px){
+  /* Phones (768px and below) get this bottom nav instead of the old
+     horizontal tab bar; from 769px the sidebar takes over. The nav is the
      same height at every width here (--mnav-h), so content clears it the same way. */
   .pub-shell .tab-bar{display:none;}
   .pub-shell .tab-panel{padding-bottom:calc(var(--mnav-h) + 30px + env(safe-area-inset-bottom));}
@@ -20328,13 +20328,6 @@ a.notif-action:hover { text-decoration: underline; }
 
 }
 
-/* 769-860px: the bottom nav shows here too (above), but toasts and the "new
-   version" prompt keep their desktop corner placement, which the nav covers.
-   Lift them above it, the way the phone rules do at 768px and below. */
-@media (min-width: 769px) and (max-width: 860px){
-  #pw-app.pub-shell ~ .toast,
-  #pw-app.pub-shell ~ .pwa-prompt{bottom:calc(var(--mnav-h) + var(--space-3) + env(safe-area-inset-bottom));}
-}
 
 /* Phone-only header: the slimmer one-row-plus-picker layout stops at 768px. */
 @media (max-width: 768px){
@@ -20454,7 +20447,7 @@ a.notif-action:hover { text-decoration: underline; }
 #tab-select-book .book-choice-author { font-size: var(--text-sm); line-height: 1.5; font-weight: 400; color: var(--content-secondary); }
 #tab-select-book .book-choice-arrow { font-size: var(--text-xl); line-height: 1.2; font-weight: 400; }
 #tab-select-book .book-choice-note { margin: 24px 0 0; font-size: var(--text-sm); line-height: 1.6; color: var(--content-secondary); }
-@media (max-width: 540px) {
+@media (max-width: 480px) {
   #tab-select-book .book-choice-header { gap: 12px; align-items: flex-start; }
   #tab-select-book .book-choice-count { margin-top: 4px; }
   #tab-select-book .book-choice-card { min-height: 112px; padding: 20px 16px; }
@@ -21368,7 +21361,7 @@ a.notif-action:hover { text-decoration: underline; }
 .ship-queue-wait.is-late { color: var(--orange-deep); font-weight: 700; }
 .ship-queue-btn { min-height: 44px; min-width: 64px; }
 .ship-queue-more { margin: 8px 0 0; font-size: var(--text-xs); color: var(--text3); }
-@media (max-width: 520px) {
+@media (max-width: 480px) {
   .ship-queue-row { flex-wrap: wrap; }
   .ship-queue-wait { order: 3; flex-basis: 100%; }
 }
@@ -21518,8 +21511,8 @@ a.notif-action:hover { text-decoration: underline; }
 .letterhead-signoff { line-height:1.6;margin-top:28px; }
 .letterhead-signoff:empty { display:none; }
 .letterhead-paper-footer { margin-top:auto;border-top:1px solid var(--border-subtle);padding-top:10px;text-align:center;color:var(--content-secondary);font:10px Arial,sans-serif; }
-@media (max-width:1000px) { .letterhead-layout { grid-template-columns:1fr; } }
-@media (max-width:600px) { .letterhead-page { min-height:700px;padding:32px 26px; } .letterhead-paper-header { flex-wrap:wrap; } .letterhead-contact { text-align:left; } }
+@media (max-width: 1100px) { .letterhead-layout { grid-template-columns:1fr; } }
+@media (max-width: 768px) { .letterhead-page { min-height:700px;padding:32px 26px; } .letterhead-paper-header { flex-wrap:wrap; } .letterhead-contact { text-align:left; } }
 
 /* A logged message whose task has since been finished says so instead of offering a dead button. */
 .notif-done { font-size: var(--text-xs); font-weight: 600; color: var(--content-secondary); }

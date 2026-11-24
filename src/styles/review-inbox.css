@@ -168,7 +168,7 @@
 .ri-footer { flex-wrap: wrap; }
 
 /* Phones: the list and the pane take turns instead of sharing the width. */
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .ri-shell { grid-template-columns: 1fr; max-height: none; }
   .ri-shell[data-view="list"] .ri-detail { display: none; }
   .ri-shell[data-view="detail"] .ri-list { display: none; }

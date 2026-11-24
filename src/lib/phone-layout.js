@@ -319,7 +319,7 @@ export function initPhoneLayouts(root, { closeModal = (id) => globalThis.attempt
   const cleanups = [...root.querySelectorAll('.settings-sub-nav')]
     .filter(nav => nav.querySelector('.settings-sub-tab')).map(enhanceSections);
   root.querySelectorAll('.modal-footer > div').forEach(foldFooterActions);
-  const isPhone = () => globalThis.matchMedia?.('(max-width: 600px)').matches ?? false;
+  const isPhone = () => globalThis.matchMedia?.('(max-width: 768px)').matches ?? false;
   cleanups.push(enableSwipeToClose(root, closeModal, isPhone));
   if (root.ownerDocument?.defaultView) cleanups.push(trackKeyboard(root.ownerDocument.defaultView));
   root.querySelectorAll('.tab-bar, .today-books').forEach(strip => cleanups.push(trackStripMore(strip)));

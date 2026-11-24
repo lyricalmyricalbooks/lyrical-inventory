@@ -24,7 +24,7 @@ test('book overview KPI rails retain one shared width when a value is longer', (
 });
 
 test('upright phone: the combined channel panel is inked like the per-book cards under it', () => {
-  const phone = styles.match(/@media\(max-width:640px\)\{\s*\.ch-book-grid[\s\S]*?\n\}/);
+  const phone = styles.match(/@media\(max-width: 768px\)\{\s*\.ch-book-grid[\s\S]*?\n\}/);
   expect(phone).not.toBeNull();
   const panel = phone[0].match(/\.ch-panel\{([^}]*)\}/);
   expect(panel).not.toBeNull();

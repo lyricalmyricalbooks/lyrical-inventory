@@ -69,7 +69,7 @@ function reviewInboxIsOpen() {
 }
 
 function isNarrow() {
-  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 720px)').matches;
+  return typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 768px)').matches;
 }
 
 /** What is waiting right now, for the inbox and for the landing page's counts. */
