@@ -7888,6 +7888,8 @@ option,optgroup{background-color:var(--surface-raised);color:var(--content-prima
 .recon-matched-toggle{background:transparent;border:var(--stroke-hair) dashed var(--gold-line);margin-top:16px;}
 .recon-nowrap{white-space:nowrap;}
 .recon-status-note{font-size:var(--text-xs);color:var(--text3);}
+/* What Stripe kept on a recorded sale: a quiet aside, not a status. */
+.recon-fee-note{display:inline-block;font-size:var(--text-xs);color:var(--text3);font-family:var(--font-mono);}
 .recon-card{margin-bottom:10px;padding:12px 14px;}
 .recon-info{min-width:0;}
 .recon-amount{font-family:var(--font-mono);font-weight:600;font-size:var(--text-base);}
@@ -15861,6 +15863,11 @@ button[onclick="refreshUmamiStats()"]:active {
   padding:16px;border:var(--stroke-hair) dashed var(--border);border-radius:var(--r2);
   font-size:var(--text-sm);color:var(--text3);line-height:1.6;text-align:center;
 }
+
+/* Card fees on this book's Stripe sales (publisher only). Calm: it is a fact
+   to know, not a problem to fix. */
+.hist-fee-note{margin:10px 0 0;font-size:var(--text-xs);line-height:1.55;color:var(--text2);}
+.hist-fee-note strong{font-weight:700;color:var(--text);}
 
 /* Currency-drift banner in the History reconciliation strip. Deliberately loud:
    while it's showing, every total on the screen is a sum of two currencies. */

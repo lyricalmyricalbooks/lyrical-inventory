@@ -11,6 +11,7 @@ import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from 
 import { isWebsiteFulfilled } from '../src/lib/website-link.js';
 import { IN_PERSON_CHANNELS } from '../src/lib/channel-mix.js';
 import { plural } from '../src/lib/plural.js';
+import { bookFeeTotals } from '../src/lib/stripe-sale-fee.js';
 
 // Order History is where a mis-rendered row reads as a sale that didn't happen
 // or stock the publisher doesn't have, so this covers what it actually puts on
@@ -38,7 +39,7 @@ function mountDom() {
   `;
 }
 
-function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {}, taxCenter = { businessExpenses: [] } } = {}) {
+function makeHarness({ state, book = BOOK, isPublisher = true, author = false, submissions = {}, taxCenter = { businessExpenses: [] } } = {}) {
   return buildHarness({
     names: [
       'CHANNEL_COLORS', 'CHAN_OTHER', 'HIST_PAGE', 'HIST_SEARCH_MIN',
@@ -46,7 +47,7 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {},
       'copiesLabel', 'renderConsignHistRow', 'deliveryPhrase', 'linkablePostageExpenses', 'renderOrderShippingSummary',
       'renderHistSearchBar', 'histNoSearchMatchHtml',
       'histEmptyStateHtml', 'renderHistFilterBar',
-      'renderHistReconciliationPanel', 'scheduleHistVoidSweep',
+      'histFeeNoteHtml', 'renderHistReconciliationPanel', 'scheduleHistVoidSweep',
       'renderHistRowHtml', 'renderHist',
     ],
     deps: {
@@ -63,7 +64,8 @@ function makeHarness({ state, book = BOOK, isPublisher = true, submissions = {},
       buildOrderTimeline, inventoryBreakdown, isVoidStale,
       reconcileConsignmentMirrors, linkedShippingSummary,
       filterHistoryRows, historySearchIsActive, describeHistorySearch,
-      isWebsiteFulfilled, IN_PERSON_CHANNELS,
+      isWebsiteFulfilled, IN_PERSON_CHANNELS, bookFeeTotals,
+      isAuthor: () => author,
       // The website link's parcel line reads every book; none here is from the website.
       websiteShipmentNote: () => null,
       renderImportNotice: () => {},
@@ -115,6 +117,26 @@ describe('renderHist — order rows', () => {
     expect(cells(r[0])[4]).toContain('20');   // 1 × 20
     expect(cells(r[1])[2]).toBe('-2');
     expect(cells(r[1])[4]).toContain('30');   // 2 × 15
+  });
+
+  it('shows the publisher what Stripe kept, per sale and for the book, and hides it from the author', () => {
+    const state = {
+      stock: 98, hist: [
+        { num: 'S1', chan: 'Book Fair', qty: 1, price: 22, date: '2026-11-21', notes: 'Card reader', sheetsId: 'stripe-ch_1',
+          payment: { currency: 'CAD', amount: 22, fee: 0.94, feeCurrency: 'CAD' } },
+        { num: 'S2', chan: 'Book Fair', qty: 1, price: 22, date: '2026-11-21', notes: 'Card reader', sheetsId: 'stripe-ch_2',
+          payment: { currency: 'CAD', amount: 22, fee: 0.94, feeCurrency: 'CAD' } },
+      ], ledger: [], stores: [],
+    };
+    makeHarness({ state }).renderHist();
+    expect(cells(rows()[0])[6]).toContain('Stripe kept');
+    const note = document.querySelector('#hist-recon .hist-fee-note');
+    expect(note?.textContent).toContain('1.88');
+    expect(note?.textContent).toContain('full price');
+
+    makeHarness({ state, author: true }).renderHist();
+    expect(cells(rows()[0])[6]).not.toContain('Stripe kept');
+    expect(document.querySelector('#hist-recon .hist-fee-note')).toBeNull();
   });
 
   it('shows a running stock-after column counting down from the print run', () => {
