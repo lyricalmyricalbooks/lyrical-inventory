@@ -116,3 +116,56 @@ describe('Open Call loads on demand', () => {
     });
   });
 });
+
+// The assistant and stock valuation load on demand too.
+describe('the assistant and stock valuation load on demand', () => {
+  const staticImporters = (rel) => {
+    const target = path.join(root, rel);
+    const offenders = [];
+    const walk = (dir) => {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const file = path.join(dir, entry.name);
+        if (entry.isDirectory()) { walk(file); continue; }
+        if (!file.endsWith('.js') || file === target) continue;
+        for (const m of fs.readFileSync(file, 'utf8').matchAll(/\bfrom\s*'(\.[^']*)'/g)) {
+          if (path.resolve(path.dirname(file), m[1]) === target) offenders.push(path.relative(root, file));
+        }
+      }
+    };
+    walk(path.join(root, 'src'));
+    return offenders;
+  };
+
+  it('are not imported statically from anywhere in src', () => {
+    expect(staticImporters('src/features/intel.js')).toEqual([]);
+    expect(staticImporters('src/features/inventory-valuation.js')).toEqual([]);
+  });
+
+  it('have a stub for every handler and named action they offer', async () => {
+    const names = await import('../src/lib/lazy-screen-names.js');
+    const intel = await import('../src/features/intel.js');
+    const valuation = await import('../src/features/inventory-valuation.js');
+    for (const n of names.INTEL_WINDOW_NAMES) expect(typeof intel[n], n).toBe('function');
+    expect([...names.INTEL_ACTION_NAMES].sort()).toEqual(Object.keys(intel.intelActions).sort());
+    for (const n of names.INVENTORY_VALUATION_WINDOW_NAMES) expect(typeof valuation[n], n).toBe('function');
+  });
+
+  describe('in the running app', () => {
+    let app;
+    beforeAll(async () => { app = await loadApp({}); }, 30000);
+
+    it('paints the assistant from the first click and then uses the real handlers', async () => {
+      await app.window.renderIntel();
+      const mod = app.main.intelScreen.module();
+      expect(mod).not.toBeNull();
+      expect(app.window.sendIntelMessage).toBe(mod.sendIntelMessage);
+    });
+
+    it('opens stock valuation from the first click', async () => {
+      await app.window.openInventoryValuationModal();
+      const mod = app.main.inventoryValuationTools.module();
+      expect(mod).not.toBeNull();
+      expect(app.window.openInventoryValuationModal).toBe(mod.openInventoryValuationModal);
+    });
+  });
+});

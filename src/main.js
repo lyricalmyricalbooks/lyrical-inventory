@@ -496,16 +496,7 @@ import {
   bigCartelOrdersToReview,
   bigCartelActions,
 } from './features/bigcartel.js';
-import {
-  acceptIntelDisclosure,
-  toggleIntelPrivacyDetails,
-  clearIntelThread,
-  intelActions,
-  intelComposerKey,
-  renderIntel,
-  sendIntelMessage,
-  stopIntelTurn,
-} from './features/intel.js';
+import { INTEL_WINDOW_NAMES, INTEL_ACTION_NAMES, INVENTORY_VALUATION_WINDOW_NAMES } from './lib/lazy-screen-names.js';
 import {
   getShippingReconciliationOrders,
   linkablePostageExpenses,
@@ -700,8 +691,25 @@ export { BOOKS, BOOK_LIST, states, activeBook, defaultState, getState, getBook, 
 
 // Buttons that name an action (data-action) instead of carrying inline code;
 // see lib/actions.js. Screens move onto this one at a time.
+// The assistant and stock valuation load on demand, like Open Call: they are
+// rarely opened, and leaving them out of the first download opens the app
+// sooner on a weak signal.
+const lazyLoadFailed = (what) => (e) => {
+  console.warn(`${what} failed to load`, e);
+  showToast(`⚠ ${what} couldn’t load. Check your connection and try again, or reload the app.`, 'err', 7000);
+};
+export const intelScreen = lazyFeature(() => import('./features/intel.js'), INTEL_WINDOW_NAMES, {
+  onError: lazyLoadFailed('The assistant'),
+});
+export const inventoryValuationTools = lazyFeature(() => import('./features/inventory-valuation.js'), INVENTORY_VALUATION_WINDOW_NAMES, {
+  onError: lazyLoadFailed('Stock valuation'),
+});
+const intelActionStubs = Object.fromEntries(INTEL_ACTION_NAMES.map(name => [
+  name, (el, event) => intelScreen.get().then(m => m.intelActions[name](el, event), () => undefined),
+]));
+
 registerActions({
-  ...intelActions, ...bigCartelActions,
+  ...intelActionStubs, ...bigCartelActions,
   // Phone navigation: the bottom bar, the Today tiles and rows, the All Books list.
   'nav.tab': el => switchTab(el.dataset.go),
   'nav.book': el => switchBook(el.dataset.book),
@@ -860,16 +868,6 @@ import {
   printPaymentQRCodes,
   printFairKit,
 } from './features/fair-kit.js';
-import {
-  setInventoryAdjustmentMode,
-  openInventoryWriteOffModal,
-  onWriteOffBookChange,
-  recalcWriteOffValue,
-  submitInventoryWriteOff,
-  downloadInventoryValuationCSV,
-  openInventoryValuationModal,
-  printInventoryValuationReport,
-} from './features/inventory-valuation.js';
 import {
   _posSlugId,
   renderPosBookModalQR,
@@ -6105,7 +6103,7 @@ export function switchTab(name) {
     if (name === 'shipping') { initShippingTab(); }
     if (name === 'bigcartel') { renderBigCartelTab(); }
     if (name === 'todo') renderTodoTab();
-    if (name === 'intel') renderIntel();
+    if (name === 'intel') intelScreen.call('renderIntel');
     if (name === 'backups') refreshSyncConflictUi();
     if (name === 'help') initHelpAudience();
   });
@@ -19734,9 +19732,11 @@ function exposeLegacyInlineHandlers() {
   // The Intelligence panel's buttons are rendered from template strings, so
   // every one of its handlers has to be reachable off window at click time.
   // Its names lead the list below.
+  // Screens that load on demand get a stub under each name until they arrive
+  // (a screen that has already arrived keeps its real functions).
+  if (!intelScreen.module()) Object.assign(window, intelScreen.stubs);
+  if (!inventoryValuationTools.module()) Object.assign(window, inventoryValuationTools.stubs);
   Object.assign(window, {
-    acceptIntelDisclosure, toggleIntelPrivacyDetails, clearIntelThread,
-    intelComposerKey, renderIntel, sendIntelMessage, stopIntelTurn,
     dismissDeductionGap, renderDeductionGaps, restoreDeductionGaps, snoozeDeductionGap,
     revealUpdatingScreen, hideUpdatePrompt, bindUpdatePromptInteractions, isTestBook, isTestBookId,
     ownersFromBooks, saveCatalogWithDeletions, loadCatalog, syncCatalog, switchBookModalTab,
@@ -19954,8 +19954,7 @@ function exposeLegacyInlineHandlers() {
     updateShippoCustomsTotalHint,
     buyShippoLabel, verifyDestinationAddress, applyVerifiedAddressCorrections,
     dismissAddressVerification, verifyLedgerOrderAddress, batchVerifyLedgerAddresses,
-    applyLedgerAddressCorrections, downloadInventoryValuationCSV, openInventoryValuationModal, printInventoryValuationReport,
-    setInventoryAdjustmentMode, openInventoryWriteOffModal, onWriteOffBookChange, recalcWriteOffValue, submitInventoryWriteOff,
+    applyLedgerAddressCorrections,
     renderShippingAnalysisHub, changeShipAnalysisPage, onShipAnalysisBookFilterChange, setShipAnalysisMarginFilter,
     onShipAnalysisSearch, onInlinePostageChange,
     confirmSuggestedShippoLink, openManualShippoLinkModal, filterManualShippoLinkRows,
@@ -20115,7 +20114,6 @@ window.dismissAddressVerification = dismissAddressVerification;
 window.verifyLedgerOrderAddress = verifyLedgerOrderAddress;
 window.batchVerifyLedgerAddresses = batchVerifyLedgerAddresses;
 window.applyLedgerAddressCorrections = applyLedgerAddressCorrections;
-window.downloadInventoryValuationCSV = downloadInventoryValuationCSV;
 window.renderShippingAnalysisHub = renderShippingAnalysisHub;
 window.changeShipAnalysisPage = changeShipAnalysisPage;
 window.onShipAnalysisBookFilterChange = onShipAnalysisBookFilterChange;
