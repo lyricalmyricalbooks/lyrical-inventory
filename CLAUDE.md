@@ -1,5 +1,41 @@
 # CLAUDE.md — lyrical-inventory
 
+## Commands
+
+```bash
+npm ci                 # install (npm, package-lock.json)
+npm run dev            # Vite dev server
+npm test               # Vitest, once (tests/*.test.js); npm run test:watch to watch
+npm run lint           # ESLint over src
+npm run lint:contrast  # colour-contrast ratchet (scripts/contrast-baseline.json)
+npm run lint:tokens    # design-token ratchet (scripts/token-baseline.json)
+npm run typecheck      # tsc over the JS (JSDoc types)
+npm run build          # Vite production build; npm run check:size checks the bundle budget
+npm run e2e            # browser walk-through of a fair day (scripts/e2e/fair-day.mjs)
+npm run shots          # phone screenshots (scripts/phone-shots/)
+```
+
+CI (`.github/workflows/ci.yml`) runs lint, lint:contrast, typecheck, test, build, check:size and e2e on every PR.
+`deploy.yml` publishes `main` to GitHub Pages.
+
+## Layout
+
+```
+index.html              App shell (single page, offline PWA)
+src/main.js             App wiring, tabs and most screens (large; search before adding)
+src/core/store.js       Local state + offline queue
+src/features/           One file per screen or workflow (pos, receipts, invoices, taxcentre, shipping, sales-ledger...)
+src/lib/                Shared helpers (cents.js for money, csv, carriers/ for Canada Post, consignment, barcode-scan...)
+src/firebase.js         Firestore + Auth
+src/style.css           Riso Press palette (:root); src/styles/system.css scales, theme-dark.css night mode
+apps-script/            Google Apps Script (Code.gs; copy verbatim to public/gas-code.txt, see warning below)
+backend/server.js       Optional local Node helper for development (npm run dev:backend / dev:all); not deployed
+android/                Android wrapper assets
+tests/                  Vitest tests
+docs/                   Carrier API rules (Canada Post, Chit Chats), receipt finder setup, design hand-offs
+firestore.rules, database.rules.json, storage.rules   Security rules
+```
+
 ## Your job after every change
 After completing any code enhancement, end your turn with a short "Next moves" list: 5 genuinely high-value suggestions for improving the app, ranked best-first.
 
