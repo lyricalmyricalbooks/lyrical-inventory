@@ -7,7 +7,7 @@
 // records behind each line with their own buttons, and the answer on top.
 // Pure — no DOM, no app state — so the wording in both voices is testable.
 import { roundCents, fmt, fmtD, transferAmount, transferQtyLabel } from './money.js';
-import { escapeHtml } from './html.js';
+import { escapeHtml, jsArg } from './html.js';
 
 // Does this account run toward the publisher at all? Only then is there
 // anything to settle beyond an ordinary payout, which has its own form.
@@ -228,9 +228,9 @@ export function settleUpHtml(model, opts) {
       <div class="ps-payout-actions ps-receipt-actions">
         ${record ? `<button type="button" class="btn gold sys-target" id="artist-settlement-record-button-${id}"
           aria-expanded="false" aria-controls="artist-settlement-form-${id}"
-          onclick="toggleArtistSettlementForm('${id}')">${model.recordLabel}</button>` : ''}
+          onclick="toggleArtistSettlementForm(${jsArg(bookId)})">${model.recordLabel}</button>` : ''}
         ${actions}
-        <button type="button" class="btn ${record || actions ? 'tx' : ''} sys-target" onclick="shareArtistSettlement('${id}')">${model.author ? 'Copy statement' : 'Share statement'}</button>
+        <button type="button" class="btn ${record || actions ? 'tx' : ''} sys-target" onclick="shareArtistSettlement(${jsArg(bookId)})">${model.author ? 'Copy statement' : 'Share statement'}</button>
       </div>
     </div>
     ${record ? `<div id="artist-settlement-form-${id}" class="ps-payout-form ps-settle-form" hidden>
@@ -241,8 +241,8 @@ export function settleUpHtml(model, opts) {
         <div class="form-group"><label for="as-notes-${id}">Notes (optional)</label><input id="as-notes-${id}" placeholder="Payment reference or agreement"></div>
       </div>
       <div class="ps-payout-actions">
-        <button type="button" class="btn gold" onclick="recordArtistSettlement('${id}')">Save settlement</button>
-        <button type="button" class="btn tx" onclick="toggleArtistSettlementForm('${id}')">Cancel</button>
+        <button type="button" class="btn gold" onclick="recordArtistSettlement(${jsArg(bookId)})">Save settlement</button>
+        <button type="button" class="btn tx" onclick="toggleArtistSettlementForm(${jsArg(bookId)})">Cancel</button>
       </div>
     </div>` : ''}
     <div class="ps-ledger" aria-label="How the amount adds up">

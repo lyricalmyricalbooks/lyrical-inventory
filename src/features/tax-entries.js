@@ -53,7 +53,7 @@ import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { addExpenseRule, cleanExpenseRules, findExpenseRule, removeExpenseRule } from '../lib/expense-rules.js';
 import { registerActions } from '../lib/actions.js';
 import { expensesRepaidBySettlement } from '../lib/receipt-storage.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, jsArg } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { fmt, getBookCurrencyCode, getSym, roundCents, setSelectCurrency } from '../lib/money.js';
 import { followableUrl } from '../lib/receipt-links.js';
@@ -622,9 +622,9 @@ function showTripDetail(tripName) {
         <td class="r" style="font-size:var(--text-sm);">${origDisplay}</td>
         <td class="r" style="font-weight:600;">- ${fmt(item.baseAmount, baseCurrency)}</td>
         <td style="display:flex;gap:4px;align-items:center;justify-content:flex-end;">
-          <button class="btn" style="font-size:var(--text-2xs);padding:3px 8px;" onclick="openEditTrip('${item.id}')" title="Move to a different trip">Move</button>
-          <button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('businessExpense', '', '${item.id}')" title="Edit entry">✏️</button>
-          <button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('businessExpense', '', '${item.id}')" title="Delete entry">🗑️</button>
+          <button class="btn" style="font-size:var(--text-2xs);padding:3px 8px;" onclick="openEditTrip(${jsArg(item.id)})" title="Move to a different trip">Move</button>
+          <button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('businessExpense', '', ${jsArg(item.id)})" title="Edit entry">✏️</button>
+          <button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('businessExpense', '', ${jsArg(item.id)})" title="Delete entry">🗑️</button>
         </td>
       </tr>`;
   }).join('');
@@ -708,13 +708,13 @@ function showCategoryDetail(catName) {
     const origSym = getSym(item.origCurrency || 'CAD');
     const origDisplay = `${origSym}${Number(item.origAmount || 0).toFixed(2)}`;
     const moveCell = item.sourceType === 'businessExpense'
-      ? `<select onchange="changeExpenseCategory('${item.itemId}', this.value)" style="font-size:var(--text-xs);padding:2px 4px;border:var(--stroke-hair) solid rgba(255,255,255,.15);border-radius:var(--r);max-width:170px;" title="Move to another category">
+      ? `<select onchange="changeExpenseCategory(${jsArg(item.itemId)}, this.value)" style="font-size:var(--text-xs);padding:2px 4px;border:var(--stroke-hair) solid rgba(255,255,255,.15);border-radius:var(--r);max-width:170px;" title="Move to another category">
           ${TC_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${c === item.cat ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
         </select>`
       : '<span style="font-size:var(--text-xs);color:var(--text3);">—</span>';
     const showEdit = (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense');
-    const editBtn = showEdit ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry" style="margin-right:4px;">✏️</button>` : '';
-    const deleteBtn = item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry">🗑️</button>` : '';
+    const editBtn = showEdit ? `<button class="btn-icon" aria-label="Edit entry" onclick="openEditExpense(${jsArg(item.sourceType)}, ${jsArg(item.sourceId || '')}, ${jsArg(item.itemId)})" title="Edit entry" style="margin-right:4px;">✏️</button>` : '';
+    const deleteBtn = item.itemId ? `<button class="btn-icon" aria-label="Delete entry" onclick="removeLedgerEntry(${jsArg(item.sourceType)}, ${jsArg(item.sourceId || '')}, ${jsArg(item.itemId)})" title="Delete entry">🗑️</button>` : '';
     return `
       <tr style="color:var(--red);">
         <td style="font-size:var(--text-sm);">${item.date || '—'}</td>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
+import { jsArg } from '../src/lib/html.js';
 import { deductibleAmount, deductibleRate } from '../src/lib/deductibility.js';
 
 // _tcRenderCategoryPanel gained real arithmetic when the table grew a "% of
@@ -21,6 +22,7 @@ function render(expenses) {
         { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
       )),
       fmt: (n) => `CA$${n.toFixed(2)}`,
+      jsArg,
       deductibleAmount,
       deductibleRate,
       window: win,

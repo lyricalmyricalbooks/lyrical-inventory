@@ -43,11 +43,12 @@ import {
 import { BOOKS, states, activeBook, withActiveBook } from '../core/store.js';
 import { recordOrder, voidHistEntry } from './sales-ledger.js';
 import { updateDash } from './dashboard.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, jsArg } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
 import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } from '../lib/money.js';
 import { posOversellSummary, posStockView } from '../lib/pos-stock.js';
 import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, appendRegisterLog, compExpense, registerLogAsHist, removeRegisterSale, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
+import { storageSet, storageRead } from '../lib/safe-storage.js';
 
 // ── EVENT POS ──
 let posCart = {};
@@ -123,7 +124,7 @@ function posCadRate(code) {
 }
 
 function savePosExchangeRates() {
-  localStorage.setItem(POS_FX_STORAGE_KEY, JSON.stringify(posExchangeRates));
+  storageSet(POS_FX_STORAGE_KEY, JSON.stringify(posExchangeRates));
 }
 
 // Delegate to the canonical helpers defined earlier so the POS uses the
@@ -273,7 +274,6 @@ function posSyncCheckoutAvailability(hasItems) {
 // phone. They are now real targets, and the destructive one is a separated
 // icon so it cannot be confused with Adjust at a glance.
 function posCartRowHtml(row, txnCurrency) {
-  const idAttr = escapeHtml(String(row?.book?.id ?? ''));
   const title = escapeHtml(row?.book?.title ?? 'Untitled');
   const qty = row?.qty ?? 0;
   const unitLabel = row.overridden
@@ -290,9 +290,9 @@ function posCartRowHtml(row, txnCurrency) {
         </div>
         <div class="pos-line-total mono-num">${lineTotal}</div>
         <div class="pos-line-actions">
-          <button type="button" class="pos-line-btn" onclick="openPosPriceModal('${idAttr}')" title="Adjust the price of this line">Adjust</button>
-          <button type="button" class="pos-line-btn" onclick="posGenerateLineQR('${idAttr}')" title="Payment QR for this line">QR</button>
-          <button type="button" class="pos-line-btn danger" onclick="posRemoveItem('${idAttr}')" title="Remove ${title} from the cart" aria-label="Remove ${title} from the cart">✕</button>
+          <button type="button" class="pos-line-btn" onclick="openPosPriceModal(${jsArg(row?.book?.id ?? '')})" title="Adjust the price of this line">Adjust</button>
+          <button type="button" class="pos-line-btn" onclick="posGenerateLineQR(${jsArg(row?.book?.id ?? '')})" title="Payment QR for this line">QR</button>
+          <button type="button" class="pos-line-btn danger" onclick="posRemoveItem(${jsArg(row?.book?.id ?? '')})" title="Remove ${title} from the cart" aria-label="Remove ${title} from the cart">✕</button>
         </div>
       </div>
     `;
@@ -330,7 +330,6 @@ function posBookCardHtml(book) {
     ? `No FX rate → ${posFormat(book.listPrice || 0, sourceCode)}`
     : `${posFormat(converted, posTransactionCurrency)} (${sourceCode})`;
   const posOnly = isPosOnlyBook(book.id);
-  const idAttr = escapeHtml(book.id);
   const badge = posOnly
     ? `<span style="display:inline-block;font-size:var(--text-3xs);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);background:var(--gold-bg);border:var(--stroke-hair) solid var(--gold-line);border-radius:var(--r);padding:2px 6px;margin-bottom:6px;">POS-only</span>`
     : '';
@@ -345,8 +344,8 @@ function posBookCardHtml(book) {
     : '';
   const editControls = posOnly
     ? `<div class="pos-card-actions">
-           <button class="btn sm pos-card-btn" onclick="openPosBookModal('${idAttr}')" aria-label="Edit or view QR">✎ Edit / QR</button>
-           <button class="btn sm danger-btn pos-card-btn pos-card-btn-danger" onclick="removePosBook('${idAttr}')" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
+           <button class="btn sm pos-card-btn" onclick="openPosBookModal(${jsArg(book.id)})" aria-label="Edit or view QR">✎ Edit / QR</button>
+           <button class="btn sm danger-btn pos-card-btn pos-card-btn-danger" onclick="removePosBook(${jsArg(book.id)})" title="Remove POS-only book" aria-label="Remove POS-only book">✕</button>
          </div>`
     : '';
   const isActiveClass = qty > 0 ? ' is-active' : '';
@@ -361,9 +360,9 @@ function posBookCardHtml(book) {
         </div>
         <div>
           <div class="pos-qty-wrapper">
-            <button class="pos-qty-btn" aria-label="Decrease quantity" onclick="posUpdateQty('${idAttr}', -1)">-</button>
+            <button class="pos-qty-btn" aria-label="Decrease quantity" onclick="posUpdateQty(${jsArg(book.id)}, -1)">-</button>
             <span class="pos-qty-val"${qty > 0 ? ' style="color:var(--gold-text);"' : ''}>${qty}</span>
-            <button class="pos-qty-btn" aria-label="Increase quantity" onclick="posUpdateQty('${idAttr}', 1)">+</button>
+            <button class="pos-qty-btn" aria-label="Increase quantity" onclick="posUpdateQty(${jsArg(book.id)}, 1)">+</button>
           </div>
           ${editControls}
         </div>
@@ -1144,7 +1143,7 @@ async function posConfigureRates({ silent = false } = {}) {
   posExchangeRates.CAD = 1;
   _fxRateCache['CAD_CAD'] = 1;
   savePosExchangeRates();
-  localStorage.setItem(POS_FX_FETCHED_AT_KEY, new Date().toISOString());
+  storageSet(POS_FX_FETCHED_AT_KEY, new Date().toISOString());
 
   renderPOS();
   renderPOSFxStatus();
@@ -1162,7 +1161,7 @@ async function posConfigureRates({ silent = false } = {}) {
 function renderPOSFxStatus() {
   const el = document.getElementById('pos-fx-status');
   if (!el) return;
-  const ts = localStorage.getItem(POS_FX_FETCHED_AT_KEY);
+  const ts = storageRead(POS_FX_FETCHED_AT_KEY);
   if (!ts) {
     el.textContent = 'Using saved rates. Use ↻ FX Rates to refresh them.';
     el.style.color = 'var(--amber)';

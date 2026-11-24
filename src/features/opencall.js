@@ -33,7 +33,7 @@ import {
   switchCustomersSubTab,
 } from './customers.js';
 import { confirmDialog } from '../lib/modal.js';
-import { escapeHtml, hasHtmlTag } from '../lib/html.js';
+import { escapeHtml, hasHtmlTag, jsArg } from '../lib/html.js';
 import { fmtDateTime } from '../lib/dates.js';
 import { parseMarkdownToHtml } from '../lib/markdown.js';
 import { legacyCopy } from '../lib/clipboard.js';
@@ -48,6 +48,7 @@ import {
   ocMatchesSearch, ocSortContributors, OC_NUDGE_AFTER_DAYS, ocStageStates,
   ocNextEmailKey, ocFieldWords, ocTrimQuotedReply,
 } from '../lib/opencall.js';
+import { storageRead, storageSet } from '../lib/safe-storage.js';
 
 let ocImportOpen = false;
 let ocSortBy = 'dateDesc';
@@ -84,12 +85,12 @@ function ocStamp_(c) {
 }
 
 function ocUiOpen_(key, dflt = false) {
-  const v = localStorage.getItem('lm-oc-ui-' + key);
+  const v = storageRead('lm-oc-ui-' + key);
   return v === null ? dflt : v === 'true';
 }
 
 function ocToggleSection(key, dflt = false) {
-  localStorage.setItem('lm-oc-ui-' + key, ocUiOpen_(key, dflt) ? 'false' : 'true');
+  storageSet('lm-oc-ui-' + key, ocUiOpen_(key, dflt) ? 'false' : 'true');
   renderOpenCall();
 }
 
@@ -273,7 +274,7 @@ function renderOcBulkModalContent(retryMode = false) {
     : '<div style="font-size:var(--text-sm);color:var(--text3);font-style:italic;padding:10px 0;">No eligible contributors found for this stage.</div>';
 
   const tmpl = proj.templates ? proj.templates[stage] : null;
-  const dl = localStorage.getItem('lm-oc-last-deadline') || 'July 15th';
+  const dl = storageRead('lm-oc-last-deadline') || 'July 15th';
   const previewSub = tmpl ? tmpl.subject
     .replace(/\{\{name\}\}/g, 'Alex Mercer')
     .replace(/\{\{photo\}\}/g, 'alex_artwork.jpg')
@@ -1146,8 +1147,8 @@ function ocInboxHtml_(inboxItems, contributorsById) {
           ${creditInput}
         </div>
         <div class="oc-queue-row-actions">
-          <button type="button" class="btn sm gold" onclick="ocApproveProposal('${p.id}')">✓ Approve</button>
-          <button type="button" class="btn sm" onclick="ocDismissProposal('${p.id}')">✕ Dismiss</button>
+          <button type="button" class="btn sm gold" onclick="ocApproveProposal(${jsArg(p.id)})">✓ Approve</button>
+          <button type="button" class="btn sm" onclick="ocDismissProposal(${jsArg(p.id)})">✕ Dismiss</button>
         </div>
       </div>`;
   }).join('');
@@ -1165,7 +1166,7 @@ function ocInboxHtml_(inboxItems, contributorsById) {
 function ocOutboxHtml_(activeProj, outboxItems, contributorsById) {
   if (!outboxItems.length) return '';
   const outboxStageLabels = { cmykSent: 'Request files', preorderSent: 'Pre-order' };
-  const outboxDl = localStorage.getItem('lm-oc-last-deadline') || '';
+  const outboxDl = storageRead('lm-oc-last-deadline') || '';
   const rows = outboxItems.map(e => {
     const c = contributorsById.get(e.contributorId);
     const tmpl = activeProj.templates ? activeProj.templates[e.stageKey] : null;
@@ -1181,8 +1182,8 @@ function ocOutboxHtml_(activeProj, outboxItems, contributorsById) {
           <div class="oc-queue-subject">${escapeHtml(subjectPreview)}</div>
         </div>
         <div class="oc-queue-row-actions">
-          <button type="button" class="btn sm gold" onclick="ocComposeStageEmail('${c.id}','${e.stageKey}')">✎ Review &amp; send</button>
-          <button type="button" class="btn sm" onclick="ocOutboxRemove('${e.id}')">✕ Remove</button>
+          <button type="button" class="btn sm gold" onclick="ocComposeStageEmail(${jsArg(c.id)},${jsArg(e.stageKey)})">✎ Review &amp; send</button>
+          <button type="button" class="btn sm" onclick="ocOutboxRemove(${jsArg(e.id)})">✕ Remove</button>
         </div>
       </div>`;
   }).join('');
@@ -1250,7 +1251,7 @@ function renderOcList() {
     const on = ocFilterStage === st.key;
     const def = OC_TAB_DEFS.find(t => t.key === st.key);
     const tip = on ? 'Show everyone' : `Show only who is at this step: ${def ? def.label : st.label}`;
-    return `<th scope="col" class="oc-col-stage"><button type="button" class="oc-stage-head ${on ? 'is-on' : ''}" aria-pressed="${on}" onclick="ocFilterByStage('${on ? '' : st.key}')" title="${escapeHtml(tip)}"><span class="oc-stage-num">${i + 1}</span>${escapeHtml(st.label)}</button></th>`;
+    return `<th scope="col" class="oc-col-stage"><button type="button" class="oc-stage-head ${on ? 'is-on' : ''}" aria-pressed="${on}" onclick="ocFilterByStage(${jsArg(on ? '' : st.key)})" title="${escapeHtml(tip)}"><span class="oc-stage-num">${i + 1}</span>${escapeHtml(st.label)}</button></th>`;
   }).join('');
 
   listEl.innerHTML = `
@@ -1303,7 +1304,7 @@ function ocRenderTabs_(all) {
     const n = counts[t.key] || 0;
     const on = ocFilterStage === t.key;
     return `<button type="button" class="oc-view ${on ? 'is-on' : ''} ${n && t.tone ? `is-${t.tone}` : ''}" aria-pressed="${on}"
-      onclick="ocFilterByStage('${on && t.key ? '' : t.key}')" title="${escapeHtml(t.tip)}"><span class="oc-view-label">${t.label}</span><span class="oc-view-num">${n}</span></button>`;
+      onclick="ocFilterByStage(${jsArg(on && t.key ? '' : t.key)})" title="${escapeHtml(t.tip)}"><span class="oc-view-label">${t.label}</span><span class="oc-view-num">${n}</span></button>`;
   }).join('');
 }
 
@@ -1362,20 +1363,20 @@ function ocRowStatus_(c) {
   const waitTxt = waited !== null && waited >= 1 ? ` · ${waited} day${waited === 1 ? '' : 's'}` : '';
   const sendLabels = { selectionSent: '✉ Send selection', cmykSent: '✉ Request files', preorderSent: '✉ Send pre-order' };
 
-  if (!c.email) return { text: 'Add an email address to get started', tone: 'alert', cta: `<button type="button" class="btn sm" onclick="openOcEditModal('${c.id}')">✎ Add email</button>` };
-  if (c.undeliverable) return { text: 'Last email bounced — check the address', tone: 'alert', cta: `<button type="button" class="btn sm" onclick="openOcEditModal('${c.id}')">✎ Fix email</button>` };
+  if (!c.email) return { text: 'Add an email address to get started', tone: 'alert', cta: `<button type="button" class="btn sm" onclick="openOcEditModal(${jsArg(c.id)})">✎ Add email</button>` };
+  if (c.undeliverable) return { text: 'Last email bounced — check the address', tone: 'alert', cta: `<button type="button" class="btn sm" onclick="openOcEditModal(${jsArg(c.id)})">✎ Fix email</button>` };
   if (stage === 'complete') return { text: 'All stages complete', tone: 'done', cta: '' };
   if (suppressed) return { text: 'Unsubscribed — emails paused', tone: 'muted', cta: '' };
 
   const send = ocSendStageFor_(c);
   if (send) {
     const what = { selectionSent: 'Send the selection email', cmykSent: 'Credit name is in — request the files', preorderSent: 'Files are in — send the pre-order email' }[send];
-    return { text: `Your move: ${what}${waitTxt}`, tone: 'you', cta: `<button type="button" class="btn sm gold" onclick="ocComposeStageEmail('${c.id}','${send}')">${sendLabels[send]}</button>` };
+    return { text: `Your move: ${what}${waitTxt}`, tone: 'you', cta: `<button type="button" class="btn sm gold" onclick="ocComposeStageEmail(${jsArg(c.id)},${jsArg(send)})">${sendLabels[send]}</button>` };
   }
   const owes = stage === 'creditReceived' ? 'their credit name' : 'their high-res files';
   const nudged = ocDaysAgoLabel_(c.lastNudgedAt);
   if (ocNudgeDue(c)) {
-    return { text: `Waiting on ${owes}${waitTxt}${nudged ? ` · reminded ${nudged}` : ''}`, tone: 'warn', cta: `<button type="button" class="btn sm" onclick="ocComposeNudge('${c.id}')">↻ Send reminder</button>` };
+    return { text: `Waiting on ${owes}${waitTxt}${nudged ? ` · reminded ${nudged}` : ''}`, tone: 'warn', cta: `<button type="button" class="btn sm" onclick="ocComposeNudge(${jsArg(c.id)})">↻ Send reminder</button>` };
   }
   return { text: `Waiting on ${owes}${waitTxt}${nudged ? ` · reminded ${nudged}` : ''}`, tone: 'artist', cta: '' };
 }
@@ -1412,9 +1413,9 @@ function ocRowHtml_(c, isActive, hasReply = false) {
 
   return `
     <tr class="oc-lrow tone-${status.tone} ${isActive ? 'is-active' : ''} ${selected ? 'is-selected' : ''}" id="oc-card-${c.id}">
-      <td class="oc-col-check"><label class="oc-check"><input type="checkbox" ${selected ? 'checked' : ''} onchange="ocToggleSelect('${c.id}', this.checked)" aria-label="Tick ${escapeHtml(name)}"></label></td>
+      <td class="oc-col-check"><label class="oc-check"><input type="checkbox" ${selected ? 'checked' : ''} onchange="ocToggleSelect(${jsArg(c.id)}, this.checked)" aria-label="Tick ${escapeHtml(name)}"></label></td>
       <td class="oc-col-who">
-        <button type="button" class="oc-lrow-who" id="oc-row-toggle-${c.id}" aria-pressed="${isActive}" aria-controls="oc-panel" onclick="ocSelectArtist('${c.id}')">
+        <button type="button" class="oc-lrow-who" id="oc-row-toggle-${c.id}" aria-pressed="${isActive}" aria-controls="oc-panel" onclick="ocSelectArtist(${jsArg(c.id)})">
           <span class="oc-lrow-name">${escapeHtml(name)}${c.creditName && c.creditName !== c.name ? `<span class="oc-row-credit">as “${escapeHtml(c.creditName)}”</span>` : ''}</span>
           <span class="oc-lrow-note">${escapeHtml(status.text)}</span>
           <span class="oc-track" role="img" aria-label="${doneCount} of ${OC_STAGES.length} steps done">${track}</span>
@@ -1440,15 +1441,15 @@ function ocPhotosHtml_(c) {
         const isPicked = picks.includes(p);
         return `
         <span class="oc-photo-chip ${isPicked ? 'picked' : ''}">
-          <span class="oc-photo-pick ${isPicked ? 'on' : ''}" role="button" tabindex="0" aria-pressed="${isPicked}" onclick="ocTogglePhotoPick('${c.id}', ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocTogglePhotoPick('${c.id}', ${idx});}" title="${isPicked ? 'Unpick this photo' : 'Pick this photo — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
+          <span class="oc-photo-pick ${isPicked ? 'on' : ''}" role="button" tabindex="0" aria-pressed="${isPicked}" onclick="ocTogglePhotoPick(${jsArg(c.id)}, ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocTogglePhotoPick(${jsArg(c.id)}, ${idx});}" title="${isPicked ? 'Unpick this photo' : 'Pick this photo — emails will reference it'}">${isPicked ? '★' : '☆'}</span>
           ${escapeHtml(p)}
-          <span class="oc-photo-chip-remove" role="button" tabindex="0" onclick="ocRemovePhotoFromContributor('${c.id}', ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocRemovePhotoFromContributor('${c.id}', ${idx});}" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</span>
+          <span class="oc-photo-chip-remove" role="button" tabindex="0" onclick="ocRemovePhotoFromContributor(${jsArg(c.id)}, ${idx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();ocRemovePhotoFromContributor(${jsArg(c.id)}, ${idx});}" title="Remove photo" aria-label="Remove ${escapeHtml(p)}">✕</span>
         </span>`;
       }).join('')}
       ${photosArr.length ? '' : '<span class="oc-panel-meta">No photo files listed yet.</span>'}
       ${pickStatus}
       <button type="button" id="oc-add-photo-btn-${c.id}" class="oc-add-photo-trigger" onclick="document.getElementById('oc-add-photo-input-${c.id}').style.display='inline-block'; this.style.display='none'; document.getElementById('oc-add-photo-input-${c.id}').focus();">＋ Add</button>
-      <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" aria-label="New photo file name" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor('${c.id}', this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
+      <input id="oc-add-photo-input-${c.id}" class="oc-add-photo-input" type="text" placeholder="photo_file.jpg (Enter)" aria-label="New photo file name" onkeydown="if(event.key==='Enter') { ocAddPhotoToContributor(${jsArg(c.id)}, this.value); } else if(event.key==='Escape') { this.style.display='none'; document.getElementById('oc-add-photo-btn-${c.id}').style.display='inline-flex'; }">
     </div>`;
 }
 
@@ -1466,19 +1467,19 @@ function ocPanelHtml_(c) {
     const sup = _isCustomerSuppressed(c.email);
     if (sup) {
       mailStatusHtml = `<span class="oc-mail-badge sup">unsubscribed</span>`;
-      mailActionsHtml = `<button type="button" class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Allow emailing this contributor again">Re-subscribe</button>`;
+      mailActionsHtml = `<button type="button" class="btn sm" onclick="toggleCustomerSuppress(${jsArg(encodeURIComponent(c.email))})" title="Allow emailing this contributor again">Re-subscribe</button>`;
     } else {
       if (mailingListHas(c.email)) {
         mailStatusHtml = `<span class="oc-mail-badge on">✓ On mailing list</span>`;
       } else {
         mailStatusHtml = `<span class="oc-mail-badge off">not on mailing list</span>`;
-        mailActionsHtml = `<button type="button" class="btn sm" onclick="addBuyerToMailingList('${encodeURIComponent(c.email)}')" title="Add to mailing list">＋ Mailing list</button>`;
+        mailActionsHtml = `<button type="button" class="btn sm" onclick="addBuyerToMailingList(${jsArg(encodeURIComponent(c.email))})" title="Add to mailing list">＋ Mailing list</button>`;
       }
-      mailActionsHtml += ` <button type="button" class="btn sm" onclick="toggleCustomerSuppress('${encodeURIComponent(c.email)}')" title="Stop all emails to this contributor">Unsubscribe</button>`;
+      mailActionsHtml += ` <button type="button" class="btn sm" onclick="toggleCustomerSuppress(${jsArg(encodeURIComponent(c.email))})" title="Stop all emails to this contributor">Unsubscribe</button>`;
     }
     if (c.undeliverable) {
       mailStatusHtml = `<span class="oc-mail-badge sup" title="${escapeHtml(OC_PROBLEM_LABELS.bounced.tip)}">⚠ Undeliverable</span> ` + mailStatusHtml;
-      mailActionsHtml += ` <button type="button" class="btn sm" onclick="ocClearUndeliverable('${c.id}')" title="Clear the bounce flag (e.g. after correcting the address)">Clear bounce</button>`;
+      mailActionsHtml += ` <button type="button" class="btn sm" onclick="ocClearUndeliverable(${jsArg(c.id)})" title="Clear the bounce flag (e.g. after correcting the address)">Clear bounce</button>`;
     }
   }
 
@@ -1512,8 +1513,8 @@ function ocPanelHtml_(c) {
           <div class="oc-panel-found">
             <span>${OC_INBOX_LABELS[p.type] || escapeHtml(p.type)}${p.type === 'creditReceived' && p.creditName ? `: “${escapeHtml(p.creditName)}”` : ''}</span>
             <span class="oc-inline-actions">
-              <button type="button" class="btn sm gold" onclick="ocApproveProposal('${p.id}')">✓ Approve</button>
-              <button type="button" class="btn sm" onclick="ocDismissProposal('${p.id}')">Dismiss</button>
+              <button type="button" class="btn sm gold" onclick="ocApproveProposal(${jsArg(p.id)})">✓ Approve</button>
+              <button type="button" class="btn sm" onclick="ocDismissProposal(${jsArg(p.id)})">Dismiss</button>
             </span>
           </div>`).join('')}
       </div>`;
@@ -1542,7 +1543,7 @@ function ocPanelHtml_(c) {
   const steps = OC_STAGES.map((st, i) => {
     const done = states[i] === 'done';
     return `
-      <li><button type="button" class="oc-ladder-step is-${states[i]}" onclick="ocToggle('${c.id}','${st.key}')" aria-pressed="${done}" title="${done ? 'Mark “' + st.label + '” as not done' : 'Mark “' + st.label + '” as done'}">
+      <li><button type="button" class="oc-ladder-step is-${states[i]}" onclick="ocToggle(${jsArg(c.id)},${jsArg(st.key)})" aria-pressed="${done}" title="${done ? 'Mark “' + st.label + '” as not done' : 'Mark “' + st.label + '” as done'}">
         <span class="oc-ladder-dot" aria-hidden="true">${done ? '✓' : i + 1}</span>
         <span class="oc-ladder-label">${escapeHtml(st.label)}</span>
         <span class="oc-ladder-state">${stateWord[states[i]]}</span>
@@ -1565,7 +1566,7 @@ function ocPanelHtml_(c) {
         ${c.creditName ? `<div class="oc-credit-line">Credited as <strong>${escapeHtml(c.creditName)}</strong></div>` : ''}
         <div class="oc-email-row">${emailCell} ${mailStatusHtml}</div>
       </div>
-      <button type="button" class="btn sm" onclick="openOcEditModal('${c.id}')" title="Edit contributor details">✎ Edit</button>
+      <button type="button" class="btn sm" onclick="openOcEditModal(${jsArg(c.id)})" title="Edit contributor details">✎ Edit</button>
     </div>
     ${callout}
     <div class="oc-panel-sec">
@@ -1586,12 +1587,12 @@ function ocPanelHtml_(c) {
     </div>
     ${ocQuickReplyHtml_(c, proj)}
     <div class="oc-panel-foot">
-      ${canNudge ? `<button type="button" class="btn sm" onclick="ocComposeNudge('${c.id}')" title="Send a friendly reminder, replying into their conversation">↻ Send a reminder now</button>` : ''}
-      <button type="button" class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle('${c.id}')" title="Check Gmail for replies from this artist only">📥 Check replies</button>
+      ${canNudge ? `<button type="button" class="btn sm" onclick="ocComposeNudge(${jsArg(c.id)})" title="Send a friendly reminder, replying into their conversation">↻ Send a reminder now</button>` : ''}
+      <button type="button" class="btn sm" id="oc-scan-single-${c.id}" onclick="ocScanRepliesSingle(${jsArg(c.id)})" title="Check Gmail for replies from this artist only">📥 Check replies</button>
       ${mailActionsHtml}
-      <button type="button" class="btn sm danger-btn" onclick="ocDelete('${c.id}')" title="Remove contributor">✕ Remove</button>
+      <button type="button" class="btn sm danger-btn" onclick="ocDelete(${jsArg(c.id)})" title="Remove contributor">✕ Remove</button>
     </div>
-    <button type="button" class="oc-text-link oc-panel-back" onclick="ocBackToRow('${c.id}')">↑ Back to the list</button>`;
+    <button type="button" class="oc-text-link oc-panel-back" onclick="ocBackToRow(${jsArg(c.id)})">↑ Back to the list</button>`;
 }
 
 // ── Panel: the next email, the latest emails, and a quick reply ────────────
@@ -1610,7 +1611,7 @@ function ocNextEmailPreviewHtml_(c, proj) {
   if (!tmpl) {
     return `<div class="oc-next-email"><div class="oc-panel-label">Next email · ${label}</div><div class="oc-panel-meta">Uses the built-in wording — save your own under “Emails &amp; settings”.</div></div>`;
   }
-  const savedDate = localStorage.getItem('lm-oc-last-deadline') || '';
+  const savedDate = storageRead('lm-oc-last-deadline') || '';
   const ctx = { project: proj.title, date: savedDate };
   const raw = (tmpl.subject || '') + '\n' + (tmpl.body || '');
   const asksForDate = key !== 'nudgeCredit' && key !== 'nudgeFiles' && raw.includes('{{date}}');
@@ -1663,7 +1664,7 @@ function ocLatestEmailsHtml_(c, cached, note = '') {
     }).join('')}
     <div class="oc-latest-foot">
       <span class="oc-panel-meta">${cached.messages.length > 2 ? `Latest 2 of ${cached.messages.length} emails` : 'Whole conversation'} · checked ${escapeHtml(ocAgo_(new Date(cached.at).toISOString()))}</span>
-      <button type="button" class="oc-text-link" onclick="ocRefreshLatestEmails('${c.id}')">↻ Refresh</button>
+      <button type="button" class="oc-text-link" onclick="ocRefreshLatestEmails(${jsArg(c.id)})">↻ Refresh</button>
     </div>`;
 }
 
@@ -1728,11 +1729,11 @@ function ocQuickReplyHtml_(c, proj) {
     <div class="oc-panel-sec oc-reply">
       <label class="oc-panel-label" for="oc-reply-${c.id}">Write to ${escapeHtml(first)}</label>
       ${thread ? '' : `<input id="oc-reply-subject-${c.id}" type="text" class="oc-reply-subject" placeholder="Subject" value="${escapeHtml(proj?.title || 'Open call')}" aria-label="Subject">`}
-      <textarea id="oc-reply-${c.id}" class="oc-reply-box" rows="3" placeholder="A quick note — e.g. “Got your files, thank you!”" oninput="ocReplyDraft('${c.id}', this.value)">${escapeHtml(draft)}</textarea>
+      <textarea id="oc-reply-${c.id}" class="oc-reply-box" rows="3" placeholder="A quick note — e.g. “Got your files, thank you!”" oninput="ocReplyDraft(${jsArg(c.id)}, this.value)">${escapeHtml(draft)}</textarea>
       ${c.undeliverable ? '<div class="oc-next-warn">⚠ Their last email bounced — fix the address with ✎ Edit or this may bounce too.</div>' : ''}
       <div class="oc-reply-foot">
         <span class="oc-panel-meta">${thread ? 'Replies into your conversation with them.' : 'Starts a new email; later step emails will reply into it.'}</span>
-        <button type="button" class="btn sm gold" id="oc-reply-send-${c.id}" onclick="ocSendQuickReply('${c.id}')">✉ Send</button>
+        <button type="button" class="btn sm gold" id="oc-reply-send-${c.id}" onclick="ocSendQuickReply(${jsArg(c.id)})">✉ Send</button>
       </div>
     </div>`;
 }
@@ -1886,7 +1887,7 @@ function ocComposeNudge(cId) {
   if (!key) { showToast('Nothing to remind this artist about right now', 'warn'); return; }
   ocEnsureTemplates_(proj);
   const tmpl = proj.templates[key];
-  const ctx = { project: proj.title, date: localStorage.getItem('lm-oc-last-deadline') || '' };
+  const ctx = { project: proj.title, date: storageRead('lm-oc-last-deadline') || '' };
   const subject = ocMergeTemplate(tmpl.subject, c, ctx);
   const body = ocMergeTemplate(ocTemplateBodyHtml_(tmpl.body), c, ctx);
   openOcEmailPreviewModal(cId, 'nudge', subject, body, c);
@@ -1900,8 +1901,8 @@ function ocTemplatesEditorHtml_(activeProj) {
   const subjectVal = draft ? draft.subject : saved.subject;
   const initialHtml = draft ? draft.html : deserializeHtmlToEditor(ocTemplateBodyHtml_(saved.body));
   const tmplOpen = ocUiOpen_('tmpl', false);
-  const tabBtn = (t) => `<button type="button" class="oc-tmpl-tab ${activeTmplTab === t.key ? 'is-on' : ''}" aria-pressed="${activeTmplTab === t.key}" onclick="ocSetTmplTab('${t.key}')">${t.label}${_ocTmplDrafts[t.key] ? ' •' : ''}</button>`;
-  const swatches = (type, colors) => colors.map(col => `<div class="oc-color-swatch" style="background:${col};${col === '#ffffff' ? 'border:var(--stroke-hair) solid #ccc;' : col === 'transparent' ? 'border:var(--stroke-hair) dashed #ccc;' : ''}" onmousedown="event.preventDefault()" onclick="ocApplyColor('${type}', '${col}')"></div>`).join('');
+  const tabBtn = (t) => `<button type="button" class="oc-tmpl-tab ${activeTmplTab === t.key ? 'is-on' : ''}" aria-pressed="${activeTmplTab === t.key}" onclick="ocSetTmplTab(${jsArg(t.key)})">${t.label}${_ocTmplDrafts[t.key] ? ' •' : ''}</button>`;
+  const swatches = (type, colors) => colors.map(col => `<div class="oc-color-swatch" style="background:${col};${col === '#ffffff' ? 'border:var(--stroke-hair) solid #ccc;' : col === 'transparent' ? 'border:var(--stroke-hair) dashed #ccc;' : ''}" onmousedown="event.preventDefault()" onclick="ocApplyColor(${jsArg(type)}, ${jsArg(col)})"></div>`).join('');
 
   return `
     <div class="card oc-collapse-card oc-settings-card ${tmplOpen ? 'open' : ''}">
@@ -1964,10 +1965,10 @@ function ocTemplatesEditorHtml_(activeProj) {
 
 function ocAutomationHtml_(sched, lastScannedVal) {
   const open = ocUiOpen_('sender', false);
-  const useResend = localStorage.getItem('lm-oc-use-resend') === 'true';
-  const ocFromAlias = localStorage.getItem('lm-oc-fromalias') || '';
-  const ocFromName = localStorage.getItem('lm-oc-fromname') || '';
-  const scanDays = localStorage.getItem('lm-oc-scan-days') || '120';
+  const useResend = storageRead('lm-oc-use-resend') === 'true';
+  const ocFromAlias = storageRead('lm-oc-fromalias') || '';
+  const ocFromName = storageRead('lm-oc-fromname') || '';
+  const scanDays = storageRead('lm-oc-scan-days') || '120';
   let ocAliasCache = [];
   try { ocAliasCache = JSON.parse(localStorage.getItem('lm-oc-alias-cache') || '[]'); } catch (_) { ocAliasCache = []; }
   const summary = [
@@ -2022,10 +2023,10 @@ function ocAutomationHtml_(sched, lastScannedVal) {
           <label class="oc-check-line"><input type="checkbox" id="oc-use-resend" onchange="ocToggleResend(this.checked)" ${useResend ? 'checked' : ''}> Send through Resend on this computer</label>
           <div id="oc-resend-fields" style="display:${useResend ? 'flex' : 'none'};flex-direction:column;gap:8px;">
             <label class="oc-field"><span>Resend API key</span>
-              <input id="oc-resend-key" type="password" placeholder="re_..." value="${escapeHtml(localStorage.getItem('lm-resend-api-key') || '')}" oninput="ocSaveResendConfig()">
+              <input id="oc-resend-key" type="password" placeholder="re_..." value="${escapeHtml(storageRead('lm-resend-api-key') || '')}" oninput="ocSaveResendConfig()">
             </label>
             <label class="oc-field"><span>Sender email (verified)</span>
-              <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(localStorage.getItem('lm-resend-from') || '')}" oninput="ocSaveResendConfig()">
+              <input id="oc-resend-from" type="email" placeholder="e.g. hello@yourdomain.com" value="${escapeHtml(storageRead('lm-resend-from') || '')}" oninput="ocSaveResendConfig()">
             </label>
           </div>
           <div class="oc-add-hint">Only for testing on a developer machine. On the live site, sending goes through your connected Google account.</div>
@@ -2037,20 +2038,20 @@ function ocAutomationHtml_(sched, lastScannedVal) {
 let _ocNewContributorPhotos = [];
 
 function ocToggleResend(checked) {
-  localStorage.setItem('lm-oc-use-resend', checked ? 'true' : 'false');
+  storageSet('lm-oc-use-resend', checked ? 'true' : 'false');
   // The key/sender fields show and hide with the checkbox, in place.
   const fields = $('oc-resend-fields');
   if (fields) fields.style.display = checked ? 'flex' : 'none';
 }
 
 function ocSaveResendConfig() {
-  localStorage.setItem('lm-resend-api-key', $('oc-resend-key')?.value?.trim() || '');
-  localStorage.setItem('lm-resend-from', $('oc-resend-from')?.value?.trim() || '');
+  storageSet('lm-resend-api-key', $('oc-resend-key')?.value?.trim() || '');
+  storageSet('lm-resend-from', $('oc-resend-from')?.value?.trim() || '');
 }
 
 function ocSaveSenderConfig() {
-  localStorage.setItem('lm-oc-fromalias', $('oc-from-alias')?.value?.trim() || '');
-  localStorage.setItem('lm-oc-fromname', $('oc-from-name')?.value?.trim() || '');
+  storageSet('lm-oc-fromalias', $('oc-from-alias')?.value?.trim() || '');
+  storageSet('lm-oc-fromname', $('oc-from-name')?.value?.trim() || '');
 }
 
 async function ocFetchMailSenderInfo() {
@@ -2071,7 +2072,7 @@ function _ocScheduleCache() {
 
 function _ocScheduleCacheSet(data) {
   const cfg = { enabled: !!data.enabled, minutes: parseInt(data.minutes, 10) || 30, digest: !!data.digest };
-  localStorage.setItem('lm-oc-schedule-cache', JSON.stringify(cfg));
+  storageSet('lm-oc-schedule-cache', JSON.stringify(cfg));
   return cfg;
 }
 
@@ -2466,7 +2467,7 @@ async function ocOutboxSendAll() {
 
   // Resolve every entry up front; rows with blank merge fields or no saved
   // template are held back rather than sent half-filled.
-  const dl = localStorage.getItem('lm-oc-last-deadline') || '';
+  const dl = storageRead('lm-oc-last-deadline') || '';
   const ctx = { project: proj.title, date: dl };
   const jobs = [];
   const held = [];
@@ -2514,7 +2515,7 @@ async function ocOutboxSendAll() {
   const btn = $('oc-outbox-sendall-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Sending…'; }
   const statusEl = $('oc-outbox-status');
-  const replyTo = localStorage.getItem('lm-oc-replyto') || '';
+  const replyTo = storageRead('lm-oc-replyto') || '';
   let sent = 0;
   let failed = 0;
   try {
@@ -2958,9 +2959,9 @@ function ocComposeStageEmail(cId, stageKey) {
   if (tmpl) {
     let dl = '';
     if (tmpl.subject.includes('{{date}}') || tmpl.body.includes('{{date}}')) {
-      dl = prompt('Enter a deadline date for this email (e.g. July 15th):', localStorage.getItem('lm-oc-last-deadline') || 'July 15th');
+      dl = prompt('Enter a deadline date for this email (e.g. July 15th):', storageRead('lm-oc-last-deadline') || 'July 15th');
       if (dl === null) return; // Cancelled
-      if (dl) localStorage.setItem('lm-oc-last-deadline', dl);
+      if (dl) storageSet('lm-oc-last-deadline', dl);
     }
 
     subject = ocMergeTemplate(tmpl.subject, c, { project: proj.title, date: dl || 'July 15th' });
@@ -3044,8 +3045,8 @@ function openOcEmailPreviewModal(cId, stageKey, subject, body, c) {
       
       <div class="row-between" style="border-top:1px solid var(--border);padding:14px 20px;background:var(--cream2);justify-content:flex-end;gap:8px;">
         <button class="btn" onclick="closeOcEmailPreviewModal()">Cancel</button>
-        <button class="btn" onclick="ocPreviewModalEditInWizard('${cId}', '${stageKey}')">Edit in Wizard</button>
-        <button id="oc-preview-send-btn" class="btn gold" onclick="ocPreviewModalSend('${cId}', '${stageKey}')" style="font-weight:700;">Send Email</button>
+        <button class="btn" onclick="ocPreviewModalEditInWizard(${jsArg(cId)}, ${jsArg(stageKey)})">Edit in Wizard</button>
+        <button id="oc-preview-send-btn" class="btn gold" onclick="ocPreviewModalSend(${jsArg(cId)}, ${jsArg(stageKey)})" style="font-weight:700;">Send Email</button>
       </div>
     </div>
   `;
@@ -3077,7 +3078,7 @@ async function ocPreviewModalSend(cId, stageKey) {
   // Let the browser's parser produce the text version; a tag-stripping regex
   // can leave half-tags behind in the plain-text copy.
   const plainBody = new DOMParser().parseFromString(htmlBody, 'text/html').body.textContent || '';
-  const replyTo = localStorage.getItem('lm-oc-replyto') || '';
+  const replyTo = storageRead('lm-oc-replyto') || '';
 
   const replyThread = $('oc-preview-reply-thread')?.checked || false;
   const threadId = replyThread ? ($('oc-preview-thread-id')?.value || '').trim() : null;
@@ -3162,7 +3163,7 @@ async function ocScanReplies(options = {}) {
     btn.innerHTML = '<span class="spinner"></span>Scanning…';
   }
 
-  const daysBack = parseInt($('oc-scan-days')?.value || localStorage.getItem('lm-oc-scan-days') || 120, 10);
+  const daysBack = parseInt($('oc-scan-days')?.value || storageRead('lm-oc-scan-days') || 120, 10);
 
   try {
     const payload = {
@@ -3269,8 +3270,8 @@ function closeOcImportGmailModal() {
 function renderOcImportGmailModal() {
   const modal = $('oc-import-gmail-modal');
   if (!modal) return;
-  const lastQuery = localStorage.getItem('lm-oc-submission-query') || 'subject:(open call)';
-  const lastDays = localStorage.getItem('lm-oc-submission-days') || '120';
+  const lastQuery = storageRead('lm-oc-submission-query') || 'subject:(open call)';
+  const lastDays = storageRead('lm-oc-submission-days') || '120';
 
   const resultsHtml = _ocSubmissionResults.length > 0
     ? `<div style="display:flex;gap:6px;margin:10px 0 6px;">
@@ -3325,8 +3326,8 @@ async function ocImportGmailSearch() {
   const query = ($('oc-sub-query')?.value || '').trim();
   if (!query) { showToast('Enter a Gmail search first', 'warn'); return; }
   const daysBack = parseInt($('oc-sub-days')?.value || '120', 10);
-  localStorage.setItem('lm-oc-submission-query', query);
-  localStorage.setItem('lm-oc-submission-days', String(daysBack));
+  storageSet('lm-oc-submission-query', query);
+  storageSet('lm-oc-submission-days', String(daysBack));
 
   const btn = $('oc-sub-search-btn');
   const prev = btn ? btn.innerHTML : '';
@@ -3416,7 +3417,7 @@ async function ocScanRepliesSingle(cId) {
     btn.innerHTML = '<span class="spinner"></span>';
   }
 
-  const daysBack = parseInt($('oc-scan-days')?.value || localStorage.getItem('lm-oc-scan-days') || 120, 10);
+  const daysBack = parseInt($('oc-scan-days')?.value || storageRead('lm-oc-scan-days') || 120, 10);
 
   try {
     const payload = {
@@ -3614,7 +3615,7 @@ function renderOcEditModalContent(cId) {
       
       <div style="display:flex;justify-content:flex-end;gap:8px;">
         <button class="btn" onclick="closeOcEditModal()">Cancel</button>
-        <button class="btn gold" onclick="saveOcContributor('${c.id}')">Save Changes</button>
+        <button class="btn gold" onclick="saveOcContributor(${jsArg(c.id)})">Save Changes</button>
       </div>
     </div>`;
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { buildHarness } from './helpers/extract-decl.js';
-import { escapeHtml } from '../src/lib/html.js';
+import { escapeHtml, jsArg } from '../src/lib/html.js';
 
 function makeConsignmentHarness() {
   return buildHarness({
@@ -18,6 +18,7 @@ function makeConsignmentHarness() {
     deps: {
       $: (id) => document.getElementById(id),
       escapeHtml,
+      jsArg,
       window: globalThis.window,
       switchBook: () => {},
       switchTab: () => {},

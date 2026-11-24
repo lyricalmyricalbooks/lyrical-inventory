@@ -41,7 +41,7 @@ import { consignmentSyncPayload, stampLedgerInvoiceLink } from '../lib/consignme
 import { downloadText } from '../lib/download.js';
 import { registerActions, registeredActions } from '../lib/actions.js';
 import { loadExternalScript } from '../lib/external-scripts.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, jsArg } from '../lib/html.js';
 import { isZeroDecimalCurrency } from '../lib/invoice-payments.js';
 import {
   BILL_TO_PERSON,
@@ -86,6 +86,7 @@ import { pdfLinkPlacements, pdfSafeLinkUrl } from '../lib/pdf-links.js';
 import { followableUrl } from '../lib/receipt-links.js';
 import { createStripePriceAndLink } from '../lib/stripe-payment-link.js';
 import { syncToSheets } from './sheets-bridge.js';
+import { storageSet } from '../lib/safe-storage.js';
 
 // ═══════════════════════════════════════════════════════════════════════
 //  INVOICES (publisher-only, lives inside Consignment tab)
@@ -95,7 +96,7 @@ function getInvoiceSettings() {
   try { return JSON.parse(localStorage.getItem(INVOICE_SETTINGS_KEY) || '{}'); }
   catch (e) { return {}; }
 }
-function saveInvoiceSettingsObj(o) { localStorage.setItem(INVOICE_SETTINGS_KEY, JSON.stringify(o || {})); }
+function saveInvoiceSettingsObj(o) { return storageSet(INVOICE_SETTINGS_KEY, JSON.stringify(o || {})); }
 
 function openInvoiceTemplateSettings() {
   const s = getInvoiceSettings();
@@ -140,7 +141,7 @@ async function saveInvoiceSettings() {
     if (!ok) { if ($('ivs-remind-auto')) $('ivs-remind-auto').checked = false; return; }
   }
 
-  saveInvoiceSettingsObj({
+  const kept = saveInvoiceSettingsObj({
     name: $('ivs-name').value.trim(),
     email: $('ivs-email').value.trim(),
     phone: $('ivs-phone') ? $('ivs-phone').value.trim() : '',
@@ -157,6 +158,11 @@ async function saveInvoiceSettings() {
     remindDays: next.days,
     remindMsg: next.message,
   });
+  if (!kept) {
+    // Private browsing or a full phone: say so instead of claiming it saved.
+    showToast('⚠ This device couldn\'t keep your invoice settings (private browsing or full storage).', 'err', 7000);
+    return;
+  }
   closeM('invoice-settings');
   showToast('✓ Invoice settings saved');
   // The New invoice form may be open underneath, showing these details.
@@ -436,7 +442,7 @@ function renderInvoices() {
     const chaseEmail = String(inv.storeEmail || '').trim();
     const chaseBtn = inv.status === 'sent'
       ? (chaseEmail
-        ? `<button class="btn sm gold" id="inv-chase-${escapeHtml(inv.id)}" onclick="remindInvoiceFromList('${inv.id}')" title="Email ${escapeHtml(chaseEmail)} a follow-up about ${escapeHtml(inv.num)}, with a link to pay it">⏰ ${remState.count ? 'Chase again' : 'Remind'}</button>`
+        ? `<button class="btn sm gold" id="inv-chase-${escapeHtml(inv.id)}" onclick="remindInvoiceFromList(${jsArg(inv.id)})" title="Email ${escapeHtml(chaseEmail)} a follow-up about ${escapeHtml(inv.num)}, with a link to pay it">⏰ ${remState.count ? 'Chase again' : 'Remind'}</button>`
         : `<button class="btn sm" disabled title="No email address on this invoice — add one and you can chase it from here">⏰ Remind</button>`)
       : '';
     return `<div class="invoice-card">
@@ -449,8 +455,8 @@ function renderInvoices() {
         <span class="inv-status ${statusCls}">${statusLabel}</span>
         <div class="inv-c-btns">
           ${chaseBtn}
-          <button class="btn sm" onclick="viewInvoice('${inv.id}')">View</button>
-          <button class="btn sm ink" onclick="openCreateInvoice(null,'${inv.id}')">Edit</button>
+          <button class="btn sm" onclick="viewInvoice(${jsArg(inv.id)})">View</button>
+          <button class="btn sm ink" onclick="openCreateInvoice(null,${jsArg(inv.id)})">Edit</button>
         </div>
       </div>
     </div>`;
@@ -937,7 +943,7 @@ function renderInvoiceAddBookChips() {
   const books = invoiceBookOptions();
   if (!books.length) { wrap.innerHTML = ''; return; }
   wrap.innerHTML = `<span class="inv-chip-row-label">Add a book</span>` + books.map(b =>
-    `<button type="button" class="preset-chip-btn inv-chip" onclick="addInvoiceBookLine('${escapeHtml(b.id)}')">+ ${escapeHtml(b.title)}</button>`).join('');
+    `<button type="button" class="preset-chip-btn inv-chip" onclick="addInvoiceBookLine(${jsArg(b.id)})">+ ${escapeHtml(b.title)}</button>`).join('');
 }
 
 function addInvoiceBookLine(bookId) {

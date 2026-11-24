@@ -451,7 +451,7 @@ describe('the batch scanner is wired up safely', () => {
   it('keys the order-side link picker the same way', () => {
     // Widening it to counter receipts gave it the same blank-ref collision.
     expect(appSource).not.toContain("find(e => e.ref === txRef)");
-    expect(appSource).toContain("doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(postageExpenseKey(e))}')");
+    expect(appSource).toContain('doManualShippoLink(${jsArg(orderNum)}, ${jsArg(postageExpenseKey(e))})');
   });
 
   it('exposes the batch handler to its inline onclick', () => {

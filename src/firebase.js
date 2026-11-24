@@ -9,6 +9,7 @@ import { readOldCopyCached, oldCopyCache } from './lib/old-copy-cache.js';
 import { planWebsitePublish } from './lib/website-link.js';
 import { adoptDecision, compareCopies, movedElsewhere } from './lib/storage-mode.js';
 import { isTestProfileActive, installSandboxBackend } from './lib/test-profile.js';
+import { storageSet, storageRead } from './lib/safe-storage.js';
 
 const firebaseConfig = {
   apiKey:"AIzaSyB0BTOjfUFZKCVth9eR8iN0mvfkpRIFKSI",
@@ -74,12 +75,12 @@ async function loadModeFlags() {
       // full device must not drop into the catch below, which would lay this
       // device's older flags over the ones just read from the server.
       try {
-        Object.keys(_modeFlags).forEach(k => localStorage.setItem(k, String(_modeFlags[k])));
+        Object.keys(_modeFlags).forEach(k => storageSet(k, String(_modeFlags[k])));
       } catch (e) { console.warn('[FB] Could not cache mode flags on this device', e); }
     } else {
       // First ever load — seed from whatever localStorage has (migration path)
       const keys = Object.keys(localStorage).filter(k => k.startsWith('fs_mode_'));
-      keys.forEach(k => { _modeFlags[k] = localStorage.getItem(k) === 'true'; });
+      keys.forEach(k => { _modeFlags[k] = storageRead(k) === 'true'; });
       if (keys.length > 0) {
         // Persist the local state to Firestore so other devices pick it up
         await setDoc(doc(fs, 'settings', 'modeFlags'), _modeFlags);
@@ -89,7 +90,7 @@ async function loadModeFlags() {
     console.warn('[FB] Could not load mode flags from Firestore, using localStorage cache', e);
     // Fall back gracefully to localStorage
     const keys = Object.keys(localStorage).filter(k => k.startsWith('fs_mode_'));
-    keys.forEach(k => { _modeFlags[k] = localStorage.getItem(k) === 'true'; });
+    keys.forEach(k => { _modeFlags[k] = storageRead(k) === 'true'; });
   }
 }
 
@@ -109,19 +110,19 @@ window._useFirestoreGlobal = () => {
 
 window._enableFirestoreGlobal = () => {
   _modeFlags['fs_mode_global'] = true;
-  localStorage.setItem('fs_mode_global', 'true');
+  storageSet('fs_mode_global', 'true');
   window._fbSaveModeFlags();
 };
 
 window._disableFirestoreGlobal = () => {
   _modeFlags['fs_mode_global'] = false;
-  localStorage.setItem('fs_mode_global', 'false');
+  storageSet('fs_mode_global', 'false');
   window._fbSaveModeFlags();
 };
 
 window._setBookFirestoreMode = (bookId, enabled) => {
   _modeFlags['fs_mode_' + bookId] = enabled;
-  localStorage.setItem('fs_mode_' + bookId, String(enabled));
+  storageSet('fs_mode_' + bookId, String(enabled));
   window._fbSaveModeFlags();
 };
 

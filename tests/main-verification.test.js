@@ -168,8 +168,8 @@ describe('main.js window binding verification', () => {
     expect(appSource).toContain("function getShipRecoMode");
     expect(appSource).toContain("function getShipWeightOverride");
     expect(appSource).toContain("function onShipInsightsToggle");
-    expect(appSource).toContain("localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val)");
-    expect(appSource).toContain("localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false')");
+    expect(appSource).toContain("storageSet(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val)");
+    expect(appSource).toContain("storageSet(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false')");
   });
 
   it('renders gratuity copies as receipt-exempt and does not dim publisher expenses in renderExpenses', () => {

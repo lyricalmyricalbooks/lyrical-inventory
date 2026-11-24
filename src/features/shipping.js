@@ -82,7 +82,7 @@ import {
   refreshBigCartelOrdersIfDue,
 } from './bigcartel.js';
 import { renderTaxCenter, saveTaxCenter } from './taxcentre.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, jsArg } from '../lib/html.js';
 import {
   REGION_LABELS,
   countryIsUnrecognized,
@@ -259,6 +259,7 @@ import {
   summarizeTrackingAudit,
   describeTrackingAudit,
 } from '../lib/tracking-audit.js';
+import { storageRead, storageSet } from '../lib/safe-storage.js';
 
 /**
  * The return address as last saved on the shipping form.
@@ -345,7 +346,7 @@ function renderOrderShippingSummary(order, expenses = linkablePostageExpenses())
   if (delivery) parts.push(delivery);
   const declId = order.declarationId || order.zonosDeclarationId || '';
   if (declId) {
-    parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declId)}');showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:var(--text-xs);" title="Copy Declaration ID">📋</button></span>`);
+    parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText(${jsArg(declId)});showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:var(--text-xs);" title="Copy Declaration ID">📋</button></span>`);
   }
   return parts.length ? `<span class="subtext-mute">${parts.join(' · ')}</span>` : '';
 }
@@ -360,7 +361,7 @@ async function backfillShipping() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Scanning…'; }
   addLog(log, '🔁 Re-scanning Gmail for missing shipping info…', 'ok');
 
-  const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
+  const daysBack = parseInt(storageRead('lm-scan-days') || '30');
   let parsed = null;
   try {
     const destUrl = sheetsUrl + (sheetsUrl.includes('?') ? '&' : '?') + 'action=scanGmail&daysBack=' + daysBack;
@@ -3574,7 +3575,7 @@ function shipQueueHiddenHtml() {
     <ul class="ship-queue-hidden-list">
       ${hidden.map(num => `
         <li><span>${escapeHtml(num)}</span>
-          <button class="btn sm tag" type="button" onclick="unhideQueuedOrder('${escapeHtml(num)}')">Put back</button></li>`).join('')}
+          <button class="btn sm tag" type="button" onclick="unhideQueuedOrder(${jsArg(num)})">Put back</button></li>`).join('')}
     </ul>` : '';
   return `
     <button class="ship-queue-hidden-toggle" type="button" onclick="toggleShipQueueHidden()" aria-expanded="${_shipQueueShowHidden}">
@@ -3619,8 +3620,8 @@ function renderBigCartelShipQueue() {
           ${parcel ? `<span class="ship-queue-meta">📦 ${escapeHtml(parcel)}</span>` : ''}
         </div>
         ${daysWaiting !== null ? `<span class="ship-queue-wait${late ? ' is-late' : ''}">${daysWaiting <= 0 ? 'Ordered today' : `Waiting ${escapeHtml(waitingPhrase(daysWaiting))}`}</span>` : ''}
-        <button class="btn sm outline ship-queue-btn" type="button" onclick="shipQueuedOrder('${escapeHtml(orderNumber)}')">Ship</button>
-        <button class="ship-queue-x" type="button" onclick="hideQueuedOrder('${escapeHtml(orderNumber)}')" aria-label="Remove ${escapeHtml(orderNumber)} from Ready to ship" title="Already sent or not shipping — remove from this list">✕</button>
+        <button class="btn sm outline ship-queue-btn" type="button" onclick="shipQueuedOrder(${jsArg(orderNumber)})">Ship</button>
+        <button class="ship-queue-x" type="button" onclick="hideQueuedOrder(${jsArg(orderNumber)})" aria-label="Remove ${escapeHtml(orderNumber)} from Ready to ship" title="Already sent or not shipping — remove from this list">✕</button>
       </li>`;
   }).join('');
   const more = queue.length - MAX_ROWS;
@@ -3632,7 +3633,7 @@ function renderBigCartelShipQueue() {
           <p class="ship-queue-sub">${queue.length} Big Cartel order${queue.length === 1 ? ' is' : 's are'} waiting for a parcel. Oldest first.</p>
         </div>
         <div class="ship-queue-head-actions">
-          <button class="btn gold ship-queue-start" type="button" onclick="shipQueuedOrder('${escapeHtml(queue[0].orderNumber)}')">
+          <button class="btn gold ship-queue-start" type="button" onclick="shipQueuedOrder(${jsArg(queue[0].orderNumber)})">
             Start with the oldest <span aria-hidden="true">→</span>
           </button>
           ${shipQueueCloseButton()}
@@ -3729,7 +3730,7 @@ function filterShippoDestMenu() {
   }
 
   const selectedVal = $('ship-prefill-dest')?.value || '';
-  const originCountry = normalizeCountryCode(localStorage.getItem('lm-shippo-origin-country') || 'CA');
+  const originCountry = normalizeCountryCode(storageRead('lm-shippo-origin-country') || 'CA');
 
   listContainer.innerHTML = filtered.map(item => {
     const isSelected = selectedVal === item.value;
@@ -3788,7 +3789,7 @@ function nextOrderCardHtml(justShipped) {
         <strong>${escapeHtml(next.title)}</strong>
         ${next.parcelSummary ? `<span class="cp-next-order-sub">📦 ${escapeHtml(next.parcelSummary)}</span>` : ''}
       </div>
-      <button class="btn gold cp-label-action-btn" type="button" onclick="shipNextOrder('${escapeHtml(justShipped || '')}')">
+      <button class="btn gold cp-label-action-btn" type="button" onclick="shipNextOrder(${jsArg(justShipped || '')})">
         <span>Ship next order</span><span aria-hidden="true">→</span>
       </button>
       <button class="ship-queue-x cp-next-order-x" type="button" onclick="this.closest('.cp-next-order').remove()" aria-label="Close Up next">✕</button>
@@ -5460,7 +5461,7 @@ function renderLiveReadinessChecklist(hostId = 'cp-live-readiness') {
 
   host.innerHTML = `
     <div class="cp-ready-head">${headline}
-      <button class="card-x" type="button" onclick="closeLiveReadinessChecklist('${escapeHtml(hostId)}')" aria-label="Close checklist">✕</button>
+      <button class="card-x" type="button" onclick="closeLiveReadinessChecklist(${jsArg(hostId)})" aria-label="Close checklist">✕</button>
     </div>
     <ul class="cp-ready-list">
       ${readiness.checks.map(c => `
@@ -6406,7 +6407,7 @@ function renderCanadaPostRatesCard(quotes, { stCountryCode, isOffline, isDisable
         </div>
         <button class="btn sm gold cp-buy-btn" type="button"
           ${canBuy ? '' : 'disabled aria-disabled="true"'}
-          onclick="buyCanadaPostLabelHandler('${escapeHtml(q.serviceCode)}', '${escapeHtml(q.serviceName)}', ${q.totalPrice}, this)"
+          onclick="buyCanadaPostLabelHandler(${jsArg(q.serviceCode)}, ${jsArg(q.serviceName)}, ${q.totalPrice}, this)"
           title="${canBuy ? `Buy an official ${escapeHtml(q.serviceName)} label from Canada Post` : escapeHtml(blockedReason)}">
           <span aria-hidden="true">🏷️</span>
           <span>Buy Label</span>
@@ -6493,10 +6494,10 @@ function showArchivedCanadaPostLabels() {
       <span class="tnum" style="font-family:var(--font-mono);font-size:var(--text-xs);">${escapeHtml(l.trackingPin || l.pin)}</span>
       ${l.orderNum ? `<span style="font-size:var(--text-xs);color:var(--text3);">${escapeHtml(l.orderNum)}</span>` : ''}
       ${l.destinationName ? `<span style="font-size:var(--text-xs);color:var(--text3);">→ ${escapeHtml(l.destinationName)}${l.destinationCountry ? ` (${escapeHtml(l.destinationCountry)})` : ''}</span>` : ''}
-      <button class="btn sm tag cp-label-action-btn" type="button" style="margin-left:auto;min-height:36px;padding:6px 12px;" onclick="reprintArchivedCanadaPostLabel('${escapeHtml(l.pin)}')" title="Reopen and reprint this label">
+      <button class="btn sm tag cp-label-action-btn" type="button" style="margin-left:auto;min-height:36px;padding:6px 12px;" onclick="reprintArchivedCanadaPostLabel(${jsArg(l.pin)})" title="Reopen and reprint this label">
         🖨️ Reprint
       </button>
-      <button class="btn sm tag cp-label-action-btn" type="button" style="min-height:36px;padding:6px 12px;color:var(--danger,#e11d48);" onclick="voidCanadaPostLabelAction('${escapeHtml(l.pin)}')" title="Void and refund label">
+      <button class="btn sm tag cp-label-action-btn" type="button" style="min-height:36px;padding:6px 12px;color:var(--danger,#e11d48);" onclick="voidCanadaPostLabelAction(${jsArg(l.pin)})" title="Void and refund label">
         ↩️ Void
       </button>
     </div>
@@ -6582,7 +6583,7 @@ async function showCanadaPostLabelModal(shipmentContext) {
           </div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             ${cleanPin ? `
-              <button class="btn sm tag cp-label-action-btn" type="button" onclick="copyCanadaPostPin('${escapeHtml(cleanPin)}')">
+              <button class="btn sm tag cp-label-action-btn" type="button" onclick="copyCanadaPostPin(${jsArg(cleanPin)})">
                 <span aria-hidden="true">📋</span>
                 <span>Copy PIN</span>
               </button>
@@ -6590,7 +6591,7 @@ async function showCanadaPostLabelModal(shipmentContext) {
                 <span aria-hidden="true">🔍</span>
                 <span>Track Parcel</span>
               </a>
-              <button class="btn sm tag cp-label-action-btn" type="button" style="color:var(--danger,#e11d48);" onclick="voidCanadaPostLabelAction('${escapeHtml(cleanPin)}')" title="Cancel and request postage refund">
+              <button class="btn sm tag cp-label-action-btn" type="button" style="color:var(--danger,#e11d48);" onclick="voidCanadaPostLabelAction(${jsArg(cleanPin)})" title="Cancel and request postage refund">
                 <span aria-hidden="true">↩️</span>
                 <span>Void & Refund</span>
               </button>
@@ -7230,7 +7231,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                   <span aria-hidden="true">🖨️</span>
                   <span>Open &amp; Print Label</span>
                 </button>
-                <button class="btn sm tag cp-label-action-btn" type="button" onclick="copyCanadaPostPin('${escapeHtml(result.trackingPin || '')}')" title="Copy tracking number">
+                <button class="btn sm tag cp-label-action-btn" type="button" onclick="copyCanadaPostPin(${jsArg(result.trackingPin || '')})" title="Copy tracking number">
                   <span aria-hidden="true">📋</span>
                   <span>Copy PIN</span>
                 </button>
@@ -7305,7 +7306,7 @@ async function buyCanadaPostLabelHandler(serviceCode, serviceName, quotedPrice, 
                 </div>
 
                 <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-                  <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText('${escapeHtml(declarationId)}');showToast('✓ Copied Declaration ID');" style="min-height:36px;padding:6px 12px;">
+                  <button class="btn sm tag cp-label-action-btn" type="button" onclick="navigator.clipboard.writeText(${jsArg(declarationId)});showToast('✓ Copied Declaration ID');" style="min-height:36px;padding:6px 12px;">
                     📋 Copy Declaration ID
                   </button>
                   <button class="btn sm tag cp-label-action-btn" type="button" onclick="openZonosPrepayAppHandler()" style="min-height:36px;padding:6px 12px;">
@@ -8268,15 +8269,14 @@ async function markLabelRefundArrived(expenseKey) {
 function labelRefundControlHtml(expense) {
   if (!expense) return '';
   const expenses = TAX_CENTER.businessExpenses || [];
-  const key = escapeHtml(postageExpenseKey(expense));
   const state = refundState(expense, expenses);
   if (state === 'refunded') return '<span class="pill gray">✓ Refunded</span>';
   if (state === 'requested') {
     return `<span class="pill amber">● Refund requested</span>
-      <button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="markLabelRefundArrived('${key}')" title="Record the refund once the money is back">Refund arrived</button>`;
+      <button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="markLabelRefundArrived(${jsArg(postageExpenseKey(expense))})" title="Record the refund once the money is back">Refund arrived</button>`;
   }
   if (!canRequestRefund(expense, expenses)) return '';
-  return `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3);" onclick="requestLabelRefund('${key}')" title="Cancel an unused label and get the postage back">↩ Refund label</button>`;
+  return `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3);" onclick="requestLabelRefund(${jsArg(postageExpenseKey(expense))})" title="Cancel an unused label and get the postage back">↩ Refund label</button>`;
 }
 
 // ── RATE FORM READINESS ──────────────────────────────────────────────────
@@ -8544,15 +8544,15 @@ async function calculateShippoRates() {
 
   // Save Origin default if checked
   if ($('ship-save-origin').checked) {
-    localStorage.setItem('lm-shippo-origin-name', sfName);
-    localStorage.setItem('lm-shippo-origin-company', sfCompany);
-    localStorage.setItem('lm-shippo-origin-phone', sfPhone);
-    localStorage.setItem('lm-shippo-origin-street1', sfStreet1);
-    localStorage.setItem('lm-shippo-origin-street2', sfStreet2);
-    localStorage.setItem('lm-shippo-origin-city', sfCity);
-    localStorage.setItem('lm-shippo-origin-state', sfState);
-    localStorage.setItem('lm-shippo-origin-zip', sfZip);
-    localStorage.setItem('lm-shippo-origin-country', sfCountryCode);
+    storageSet('lm-shippo-origin-name', sfName);
+    storageSet('lm-shippo-origin-company', sfCompany);
+    storageSet('lm-shippo-origin-phone', sfPhone);
+    storageSet('lm-shippo-origin-street1', sfStreet1);
+    storageSet('lm-shippo-origin-street2', sfStreet2);
+    storageSet('lm-shippo-origin-city', sfCity);
+    storageSet('lm-shippo-origin-state', sfState);
+    storageSet('lm-shippo-origin-zip', sfZip);
+    storageSet('lm-shippo-origin-country', sfCountryCode);
   }
 
   const placeholder = $('ship-results-placeholder');
@@ -8726,7 +8726,7 @@ async function calculateShippoRates() {
             <div class="rate-price-area">
               <div class="rate-price">${parseFloat(r.amount).toFixed(2)} ${escapeHtml(r.currency)}</div>
               ${rateCoverageTagHtml(parseFloat(r.amount), customerPaid, r.currency)}
-              <button class="btn gold sm rate-buy-btn" type="button" onclick="buyShippoLabel('${r.object_id}', '${escapeHtml(r.provider)}', '${escapeHtml(r.servicelevel.name)}', ${parseFloat(r.amount)}, '${escapeHtml(r.currency)}')"><span aria-hidden="true">🏷️</span><span>Buy Label</span></button>
+              <button class="btn gold sm rate-buy-btn" type="button" onclick="buyShippoLabel(${jsArg(r.object_id)}, ${jsArg(r.provider)}, ${jsArg(r.servicelevel.name)}, ${parseFloat(r.amount)}, ${jsArg(r.currency)})"><span aria-hidden="true">🏷️</span><span>Buy Label</span></button>
             </div>
           </div>
         `;
@@ -9099,7 +9099,7 @@ function openManualShippoLinkModal(orderNum) {
         <td>${date}</td>
         <td style="text-align:right; font-weight:600;">CA$${amount}</td>
         <td style="text-align:right; width:60px;">
-          <button class="manual-link-btn" onclick="doManualShippoLink('${escapeHtml(orderNum)}', '${escapeHtml(postageExpenseKey(e))}')">Link</button>
+          <button class="manual-link-btn" onclick="doManualShippoLink(${jsArg(orderNum)}, ${jsArg(postageExpenseKey(e))})">Link</button>
         </td>
       </tr>`;
   }).join('');
@@ -9294,13 +9294,13 @@ function renderPostageMatchWorklist() {
 
     const receiptTarget = receiptLinkTarget(expense.receipt);
     const receiptLink = receiptTarget.kind === 'local'
-      ? `<button type="button" class="postage-match-receipt" onclick="viewLocalReceipt('${escapeHtml(receiptTarget.path)}')">View receipt</button>`
+      ? `<button type="button" class="postage-match-receipt" onclick="viewLocalReceipt(${jsArg(receiptTarget.path)})">View receipt</button>`
       : receiptTarget.kind === 'url'
         ? `<a class="postage-match-receipt" href="${escapeHtml(receiptTarget.href)}" target="_blank" rel="noopener">View receipt</a>`
         : '<span class="postage-match-noreceipt">No receipt attached</span>';
 
     const scanBtn = (canScan && expense.receipt)
-      ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(key, 'scan')}" onclick="scanPostageReceipt('${escapeHtml(key)}')" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
+      ? `<button type="button" class="btn sm ghost" id="${postageRowDomId(key, 'scan')}" onclick="scanPostageReceipt(${jsArg(key)})" title="Read the recipient and tracking number off the receipt">✨ Read receipt</button>`
       : '';
 
     return `<div class="postage-match-row" data-key="${escapeHtml(key)}">
@@ -9317,7 +9317,7 @@ function renderPostageMatchWorklist() {
           <label for="${postageRowDomId(key, 'name')}">Recipient on receipt</label>
           <input type="text" id="${postageRowDomId(key, 'name')}" value="${escapeHtml(recipient)}"
             placeholder="e.g. Daniela Dawson" autocomplete="off" spellcheck="false"
-            oninput="onPostageRecipientInput('${escapeHtml(key)}')">
+            oninput="onPostageRecipientInput(${jsArg(key)})">
         </div>
         <div class="postage-match-field">
           <label for="${postageRowDomId(key, 'track')}">Tracking number</label>
@@ -9339,8 +9339,8 @@ function renderPostageMatchWorklist() {
 
       <div class="postage-match-actions">
         ${scanBtn}
-        <button type="button" class="btn gold sm" onclick="linkPostageExpense('${escapeHtml(key)}')">Link postage</button>
-        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense('${escapeHtml(key)}')" title="Hide this receipt from the list; it stays in your ledger" aria-label="Hide this receipt from the list; it stays in your ledger">✕</button>
+        <button type="button" class="btn gold sm" onclick="linkPostageExpense(${jsArg(key)})">Link postage</button>
+        <button type="button" class="btn sm ghost" onclick="dismissPostageExpense(${jsArg(key)})" title="Hide this receipt from the list; it stays in your ledger" aria-label="Hide this receipt from the list; it stays in your ledger">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -9806,32 +9806,32 @@ async function unlinkShippoExpense(expenseKey) {
 }
 
 function getShipRecoMode() {
-  return localStorage.getItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`) || 'blended';
+  return storageRead(`lm-ship-reco-mode-${shipAnalysisBookFilter}`) || 'blended';
 }
 
 function setShipRecoMode(val) {
-  localStorage.setItem(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val);
+  storageSet(`lm-ship-reco-mode-${shipAnalysisBookFilter}`, val);
 }
 
 function getShipRecoPercentile() {
-  const val = localStorage.getItem(`lm-ship-reco-pct-${shipAnalysisBookFilter}`);
+  const val = storageRead(`lm-ship-reco-pct-${shipAnalysisBookFilter}`);
   return val ? parseInt(val, 10) : 75;
 }
 
 function setShipRecoPercentile(val) {
-  localStorage.setItem(`lm-ship-reco-pct-${shipAnalysisBookFilter}`, val.toString());
+  storageSet(`lm-ship-reco-pct-${shipAnalysisBookFilter}`, val.toString());
 }
 
 function getShipWeightOverride() {
-  return localStorage.getItem(`lm-ship-weight-override-${shipAnalysisBookFilter}`) || 'default';
+  return storageRead(`lm-ship-weight-override-${shipAnalysisBookFilter}`) || 'default';
 }
 
 function setShipWeightOverride(val) {
-  localStorage.setItem(`lm-ship-weight-override-${shipAnalysisBookFilter}`, val);
+  storageSet(`lm-ship-weight-override-${shipAnalysisBookFilter}`, val);
 }
 
 function onShipInsightsToggle(isOpen) {
-  localStorage.setItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false');
+  storageSet(`lm-ship-insights-open-${shipAnalysisBookFilter}`, isOpen ? 'true' : 'false');
 }
 
 function onShipRecoModeChange(val) {
@@ -10449,7 +10449,7 @@ function buildShippingCarrierScorecardHtml(allOrders, relevantExpenses) {
     const isActive = (shipAnalysisCarrierFilter === provider);
     const rowClass = isActive ? 'active-insight-row' : '';
     carrierRows += `
-      <tr class="insight-clickable-row ${rowClass}" onclick="toggleShipAnalysisCarrierFilter('${escapeHtml(provider)}')" title="Click to filter ledger by ${escapeHtml(provider)}">
+      <tr class="insight-clickable-row ${rowClass}" onclick="toggleShipAnalysisCarrierFilter(${jsArg(provider)})" title="Click to filter ledger by ${escapeHtml(provider)}">
         <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
           ${isActive ? '<span class="insight-active-dot"></span>' : ''}
           ${escapeHtml(provider)}
@@ -10638,7 +10638,7 @@ function buildShippingWeightBandHtml(allOrders, shippoExpenses) {
     const isActive = (shipAnalysisWeightFilter === band);
     const rowClass = isActive ? 'active-insight-row' : '';
     weightRows += `
-      <tr class="insight-clickable-row ${rowClass}" onclick="toggleShipAnalysisWeightFilter('${band}')" title="Click to filter ledger by ${band}">
+      <tr class="insight-clickable-row ${rowClass}" onclick="toggleShipAnalysisWeightFilter(${jsArg(band)})" title="Click to filter ledger by ${band}">
         <td style="font-weight:600; color:var(--text2); display:flex; align-items:center; gap:8px;">
           ${isActive ? '<span class="insight-active-dot"></span>' : ''}
           ${band}
@@ -11023,7 +11023,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       // saved to the folder rather than to a carrier's website.
       const refTarget = receiptLinkTarget(primary.receipt);
       const refLink = refTarget.kind === 'local'
-        ? `<button type="button" class="shipping-pnl-tracking-link as-link" onclick="viewLocalReceipt('${escapeHtml(refTarget.path)}')" title="Open the receipt saved in your folder">${escapeHtml(refLabel)}</button>`
+        ? `<button type="button" class="shipping-pnl-tracking-link as-link" onclick="viewLocalReceipt(${jsArg(refTarget.path)})" title="Open the receipt saved in your folder">${escapeHtml(refLabel)}</button>`
         : refTarget.kind === 'url'
           ? `<a href="${escapeHtml(refTarget.href)}" target="_blank" rel="noopener" class="shipping-pnl-tracking-link" title="Open the label or receipt">${escapeHtml(refLabel)}</a>`
           : `<div style="font-weight:600; color:var(--text);">${escapeHtml(refLabel)}</div>`;
@@ -11042,7 +11042,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       } else {
         // Actionable rather than a dead dash: this is the one place the owner
         // can put the number in, and every other row already offers it.
-        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="promptLedgerTracking('${escapeHtml(postageExpenseKey(primary))}')">+ Add tracking</button>`;
+        trackingLinkHtml = `<button class="btn sm ghost" style="font-size:var(--text-2xs); padding:3px 8px;" onclick="promptLedgerTracking(${jsArg(postageExpenseKey(primary))})">+ Add tracking</button>`;
       }
     } else if (o.localPickup) {
       expenseRefHtml = `<span style="color:var(--text3); font-style:italic;" title="${o.autoLocalPickup ? `Recognised from the checkout option “${escapeHtml(o.shippingMethod)}”` : 'Marked as picked up'}">Picked up in person${o.autoLocalPickup ? ' · from checkout' : ''}</span>`;
@@ -11054,7 +11054,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       if (isSuggested) {
         const suggestedItem = suggested[0];
         linkBtn = `
-          <button class="btn sm" onclick="confirmSuggestedShippoLink('${escapeHtml(o.num)}', '${escapeHtml(postageExpenseKey(suggestedItem))}')" style="font-size:var(--text-2xs); padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:var(--on-accent);">
+          <button class="btn sm" onclick="confirmSuggestedShippoLink(${jsArg(o.num)}, ${jsArg(postageExpenseKey(suggestedItem))})" style="font-size:var(--text-2xs); padding:3px 8px; background:var(--shipping-pnl-success); border-color:var(--shipping-pnl-success); color:var(--on-accent);">
             Confirm Match
           </button>`;
       }
@@ -11064,22 +11064,22 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
     if (!o.excludeFromShipping && !isLinked && !isSuggested && !o.localPickup) {
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
-          <button class="btn sm" onclick="openManualShippoLinkModal('${escapeHtml(o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px;">Link</button>
-          <button class="btn sm ghost" onclick="markShippingOrderLocalPickup('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; min-width:unset;" title="The customer collected this in person — no postage to link">Pick-up</button>
-          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
+          <button class="btn sm" onclick="openManualShippoLinkModal(${jsArg(o.num)})" style="font-size:var(--text-2xs); padding:3px 8px;">Link</button>
+          <button class="btn sm ghost" onclick="markShippingOrderLocalPickup(${jsArg(o.bookId)}, ${jsArg(o.id || o.num)})" style="font-size:var(--text-2xs); padding:3px 8px; min-width:unset;" title="The customer collected this in person — no postage to link">Pick-up</button>
+          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder(${jsArg(o.bookId)}, ${jsArg(o.id || o.num)})" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     } else if (isLinked || o.manualPostagePaid) {
       const mainBtn = o.localPickup
-        ? `<button class="btn sm ghost" onclick="unmarkShippingOrderLocalPickup('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;" title="This order was shipped after all">Not pick-up</button>`
+        ? `<button class="btn sm ghost" onclick="unmarkShippingOrderLocalPickup(${jsArg(o.bookId)}, ${jsArg(o.id || o.num)})" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;" title="This order was shipped after all">Not pick-up</button>`
         : o.manualPostagePaid
-        ? `<button class="btn sm ghost" onclick="unlinkManualPostage('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
-        : `<button class="btn sm ghost" onclick="unlinkShippoExpense('${escapeHtml(postageExpenseKey(linked[0]))}')" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
+        ? `<button class="btn sm ghost" onclick="unlinkManualPostage(${jsArg(o.bookId)}, ${jsArg(o.id || o.num)})" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Clear manual</button>`
+        : `<button class="btn sm ghost" onclick="unlinkShippoExpense(${jsArg(postageExpenseKey(linked[0]))})" style="font-size:var(--text-2xs); padding:3px 8px; opacity:0.7;">Unlink</button>`;
       const refundHtml = (!o.localPickup && !o.manualPostagePaid) ? labelRefundControlHtml(linked[0]) : '';
       actionBtn = `
         <div style="margin-top:6px; display:flex; gap:4px; align-items:center; flex-wrap:wrap;">
           ${mainBtn}
           ${refundHtml}
-          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
+          <button class="btn sm ghost" onclick="dismissShippingAnalysisOrder(${jsArg(o.bookId)}, ${jsArg(o.id || o.num)})" style="font-size:var(--text-2xs); padding:3px 8px; color:var(--text3); min-width:unset;" title="Dismiss order from calculations">✕ Dismiss</button>
         </div>`;
     }
 
@@ -11104,7 +11104,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
         </td>
         <td class="shipping-pnl-money" data-label="Customer paid">
           <div style="display:flex; align-items:center; justify-content:flex-end; gap:6px;">
-            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid('${escapeHtml(o.bookId)}', '${escapeHtml(o.id || o.num)}')" title="Clear manual override" aria-label="Clear manual shipping override" style="padding:0 4px; font-size:var(--text-2xs); opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
+            ${o.manualShippingPaid ? `<button class="btn sm ghost" onclick="unlinkManualShippingPaid(${jsArg(o.bookId)}, ${jsArg(o.id || o.num)})" title="Clear manual override" aria-label="Clear manual shipping override" style="padding:0 4px; font-size:var(--text-2xs); opacity:0.6; min-width: unset; height: auto;">✕</button>` : ''}
             <input type="number" inputmode="decimal" step="0.01" min="0" 
               class="inline-postage-input" 
               value="${(Number(o.shippingPaid) || 0).toFixed(2)}" 
@@ -11211,7 +11211,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       filterBadges += `
         <span class="shipping-filter-badge">
           Carrier: ${escapeHtml(shipAnalysisCarrierFilter)}
-          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisCarrierFilter('${escapeHtml(shipAnalysisCarrierFilter)}')" title="Remove filter">✕</span>
+          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisCarrierFilter(${jsArg(shipAnalysisCarrierFilter)})" title="Remove filter">✕</span>
         </span>
       `;
     }
@@ -11219,7 +11219,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       filterBadges += `
         <span class="shipping-filter-badge">
           Region: ${REGION_LABELS[shipAnalysisRegionFilter] || shipAnalysisRegionFilter}
-          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisRegionFilter('${shipAnalysisRegionFilter}')" title="Remove filter">✕</span>
+          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisRegionFilter(${jsArg(shipAnalysisRegionFilter)})" title="Remove filter">✕</span>
         </span>
       `;
     }
@@ -11227,7 +11227,7 @@ function buildShippingLedgerHtml(allOrders, shippoExpenses) {
       filterBadges += `
         <span class="shipping-filter-badge">
           Weight: ${escapeHtml(shipAnalysisWeightFilter)}
-          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisWeightFilter('${escapeHtml(shipAnalysisWeightFilter)}')" title="Remove filter">✕</span>
+          <span class="shipping-filter-badge-close" onclick="toggleShipAnalysisWeightFilter(${jsArg(shipAnalysisWeightFilter)})" title="Remove filter">✕</span>
         </span>
       `;
     }
@@ -11351,17 +11351,17 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
             <div style="flex:1;">
               <span style="font-size:var(--text-3xs); color:var(--text2); display:block; margin-bottom:2px;">Base ($)</span>
               <input type="number" inputmode="decimal" step="0.50" min="0" value="${currentBase.toFixed(2)}" 
-                onblur="updateManualShippingRates('${meta.key}', 'base', this.value)"
+                onblur="updateManualShippingRates(${jsArg(meta.key)}, 'base', this.value)"
                 style="width:100%; padding:6px 8px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
             <div style="flex:1;">
               <span style="font-size:var(--text-3xs); color:var(--text2); display:block; margin-bottom:2px;">Add-on ($)</span>
               <input type="number" inputmode="decimal" step="0.50" min="0" value="${currentAddon.toFixed(2)}" 
-                onblur="updateManualShippingRates('${meta.key}', 'addon', this.value)"
+                onblur="updateManualShippingRates(${jsArg(meta.key)}, 'addon', this.value)"
                 style="width:100%; padding:6px 8px; font-size:var(--text-sm); border:var(--stroke-hair) solid var(--border); border-radius:var(--r); background:var(--surface-card); color:var(--text); text-align:right; font-family:var(--font-mono); outline:none;" />
             </div>
           </div>
-          <button class="btn sm ghost" onclick="applySmartShippingRates('${meta.key}', ${recoBase}, ${recoAddon})" 
+          <button class="btn sm ghost" onclick="applySmartShippingRates(${jsArg(meta.key)}, ${recoBase}, ${recoAddon})" 
             style="width:100%; font-size:var(--text-2xs); padding:4px; border-radius:var(--r); text-align:center; font-weight:600; display:flex; align-items:center; justify-content:center; gap:4px; height:28px; border:var(--stroke-hair) dashed var(--border); cursor:pointer;">
             ⚡ Apply Recommended
           </button>
@@ -11384,7 +11384,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
   const weightOverride = getShipWeightOverride();
   const recoMode = getShipRecoMode();
   const recoPercentile = getShipRecoPercentile();
-  const isInsightsOpen = localStorage.getItem(`lm-ship-insights-open-${shipAnalysisBookFilter}`) !== 'false';
+  const isInsightsOpen = storageRead(`lm-ship-insights-open-${shipAnalysisBookFilter}`) !== 'false';
 
   let pctLabel = '75th';
   if (recoPercentile === 90) pctLabel = '90th';

@@ -59,7 +59,7 @@ import {
   receiptDayHint,
   subscriptionLines,
 } from '../lib/subscription-receipts.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, jsArg } from '../lib/html.js';
 import { fmtLongDate } from '../lib/dates.js';
 import { localDayPlus } from '../lib/calendar-day.js';
 import { csvRow, toCsv } from '../lib/csv.js';
@@ -623,12 +623,12 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
     ? ''
     : change
       ? `<button type="button" class="rec-rate-chip${change.delta < 0 ? ' is-down' : ''}"
-           onclick="openRecurringEditor('${escapeHtml(s.id)}', 'rates')"
+           onclick="openRecurringEditor(${jsArg(s.id)}, 'rates')"
            title="Scheduled price change — charges before ${escapeHtml(change.effectiveFrom)} keep ${escapeHtml(fmt(change.from, cur))}">
            ${change.delta < 0 ? '↓' : '↑'} ${escapeHtml(fmt(change.to, cur))} from ${escapeHtml(change.effectiveFrom)}
          </button>`
       : `<button type="button" class="rec-charge-link"
-           onclick="openRecurringEditor('${escapeHtml(s.id)}', 'rates')"
+           onclick="openRecurringEditor(${jsArg(s.id)}, 'rates')"
            title="Record a new price from a date you choose — charges already posted keep the old one">Adjust price →</button>`;
   const priorChanges = s.rateChanges.filter(r => r.effectiveFrom <= localYmd(now)).length;
   const priceHistory = priorChanges
@@ -681,7 +681,7 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
     ? `<span class="rec-dim" title="Receipts kept with this subscription’s charges">· ${proofWords}</span>`
     : '';
   const chargeLink = charges
-    ? `<button type="button" class="rec-charge-link" onclick="tcShowRecurringCharges('${escapeHtml(s.id)}')" title="Show these ${charges} posted charges in the ledger below">${charges} charge${charges === 1 ? '' : 's'} logged →</button> ${proofNote}`
+    ? `<button type="button" class="rec-charge-link" onclick="tcShowRecurringCharges(${jsArg(s.id)})" title="Show these ${charges} posted charges in the ledger below">${charges} charge${charges === 1 ? '' : 's'} logged →</button> ${proofNote}`
     : '<span class="rec-dim">Nothing posted yet</span>';
 
   // When the vendor's receipts keep landing later in the month than the
@@ -689,8 +689,8 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
   const dayHint = receiptDayHint(s, TAX_CENTER.businessExpenses || []);
   const dayHintHtml = dayHint
     ? `<div class="rec-meta">Its last two receipts are dated ${escapeHtml(ordinalDay(dayHint.day))}.
-<button type="button" class="rec-charge-link" onclick="tcMoveRecurringDay('${escapeHtml(s.id)}', ${dayHint.day})"
-           title="From ${escapeHtml(dayHint.nextDate)} on. Charges already posted keep their dates.">Charge on ${escapeHtml(ordinalDay(dayHint.day))} →</button> · <button type="button" class="rec-charge-link" onclick="tcKeepRecurringDay('${escapeHtml(s.id)}', ${dayHint.day})">Keep as is</button>
+<button type="button" class="rec-charge-link" onclick="tcMoveRecurringDay(${jsArg(s.id)}, ${dayHint.day})"
+           title="From ${escapeHtml(dayHint.nextDate)} on. Charges already posted keep their dates.">Charge on ${escapeHtml(ordinalDay(dayHint.day))} →</button> · <button type="button" class="rec-charge-link" onclick="tcKeepRecurringDay(${jsArg(s.id)}, ${dayHint.day})">Keep as is</button>
        </div>`
     : '';
 
@@ -717,9 +717,9 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
       <td><span class="pill ${meta.cls}">${meta.glyph} ${meta.label}</span></td>
       <td class="r">
         <div class="rec-actions">
-          <button class="btn sm" onclick="openRecurringEditor('${escapeHtml(s.id)}')" title="Edit this subscription">Edit</button>
-          ${status === 'ended' ? '' : `<button class="btn sm" onclick="toggleRecurringPause('${escapeHtml(s.id)}')" title="${s.paused ? 'Resume billing from this month' : 'Stop posting charges without deleting the record'}">${s.paused ? 'Resume' : 'Pause'}</button>`}
-          <button class="btn sm danger-btn" onclick="removeRecurring('${escapeHtml(s.id)}')" title="Delete this subscription">Remove</button>
+          <button class="btn sm" onclick="openRecurringEditor(${jsArg(s.id)})" title="Edit this subscription">Edit</button>
+          ${status === 'ended' ? '' : `<button class="btn sm" onclick="toggleRecurringPause(${jsArg(s.id)})" title="${s.paused ? 'Resume billing from this month' : 'Stop posting charges without deleting the record'}">${s.paused ? 'Resume' : 'Pause'}</button>`}
+          <button class="btn sm danger-btn" onclick="removeRecurring(${jsArg(s.id)})" title="Delete this subscription">Remove</button>
         </div>
       </td>
     </tr>`;
@@ -855,7 +855,7 @@ function _tcRenderRecurringFilters(counts) {
   ].filter(([id, , n]) => id === 'all' || n > 0);
   el.innerHTML = tabs.map(([id, label, n]) => `
     <button type="button" class="rec-filter${_tcRecurringFilter === id ? ' is-on' : ''}"
-      aria-pressed="${_tcRecurringFilter === id}" onclick="tcSetRecurringFilter('${id}')">
+      aria-pressed="${_tcRecurringFilter === id}" onclick="tcSetRecurringFilter(${jsArg(id)})">
       ${label}<span class="rec-filter-count">${n}</span>
     </button>`).join('');
 }
@@ -1031,7 +1031,7 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
       const cadDisplay = `${item.isIncome ? '+' : '-'}${fmt(item.baseAmount, baseCurrency)}`;
 
       const catCell = item.sourceType === 'businessExpense'
-        ? `<select class="tc-ledger-cat-select" onchange="changeExpenseCategory('${item.itemId}', this.value)" title="Change category">
+        ? `<select class="tc-ledger-cat-select" onchange="changeExpenseCategory(${jsArg(item.itemId)}, this.value)" title="Change category">
               ${TC_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${c === item.cat ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
               ${TC_CATEGORIES.includes(item.cat) ? '' : `<option value="${escapeHtml(item.cat)}" selected>${escapeHtml(item.cat)}</option>`}
             </select>`
@@ -1040,13 +1040,13 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
       let descCell = escapeHtml(item.desc);
       if (item.sourceType === 'businessExpense') {
         const tripPill = item.trip
-          ? `<span class="tc-ledger-trip-chip is-set" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Edit trip">✈ ${escapeHtml(item.trip)}</span>`
-          : `<span class="tc-ledger-trip-chip is-unset" onclick="event.stopPropagation();openEditTrip('${item.itemId}')" title="Assign to a trip">+ trip</span>`;
+          ? `<span class="tc-ledger-trip-chip is-set" onclick="event.stopPropagation();openEditTrip(${jsArg(item.itemId)})" title="Edit trip">✈ ${escapeHtml(item.trip)}</span>`
+          : `<span class="tc-ledger-trip-chip is-unset" onclick="event.stopPropagation();openEditTrip(${jsArg(item.itemId)})" title="Assign to a trip">+ trip</span>`;
         descCell = `<div>${escapeHtml(item.desc)}</div>${tripPill}`;
       }
 
       return `
-        <tr class="tc-ledger-row" ondragover="tcExpenseRowDragOver(event, this)" ondragleave="tcExpenseRowDragLeave(event, this)" ondrop="tcExpenseRowDrop(event, this, '${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')">
+        <tr class="tc-ledger-row" ondragover="tcExpenseRowDragOver(event, this)" ondragleave="tcExpenseRowDragLeave(event, this)" ondrop="tcExpenseRowDrop(event, this, ${jsArg(item.sourceType || '')}, ${jsArg(item.sourceId || '')}, ${jsArg(item.itemId || '')})">
             <td style="font-size:var(--text-sm);">${item.date || '—'}</td>
             <td><span class="tag ${item.isIncome ? 'green' : 'amber'}">${escapeHtml(item.type)}</span></td>
             <td style="font-size:var(--text-sm);">${descCell}</td>
@@ -1056,16 +1056,16 @@ function _tcRenderLedgerTable(pageLedger, baseCurrency) {
             <td class="r tc-ledger-amt ${item.isIncome ? 'in' : 'out'}">${cadDisplay}</td>
             <td class="r">
               ${(item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense')
-          ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditExpense('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
+          ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditExpense(${jsArg(item.sourceType)}, ${jsArg(item.sourceId || '')}, ${jsArg(item.itemId)})" title="Edit entry">✎</button>`
           : (item.sourceType === 'sale'
-            ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditSale('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
+            ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditSale(${jsArg(item.sourceId || '')}, ${jsArg(item.itemId)})" title="Edit entry">✎</button>`
             : (item.sourceType === 'artistPayout' || item.sourceType === 'artistDebtRecovery'
-              ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditArtistPayout('${item.sourceId || ''}', '${item.itemId}')" title="Edit entry">✎</button>`
+              ? `<button class="edit-btn" aria-label="Edit entry" onclick="openEditArtistPayout(${jsArg(item.sourceId || '')}, ${jsArg(item.itemId)})" title="Edit entry">✎</button>`
               : ''
             )
           )
         }
-              ${item.itemId ? `<button class="edit-btn" aria-label="Delete entry" onclick="removeLedgerEntry('${item.sourceType}', '${item.sourceId || ''}', '${item.itemId}')" title="Delete entry" style="opacity:1;color:var(--red);">✕</button>` : ''}
+              ${item.itemId ? `<button class="edit-btn" aria-label="Delete entry" onclick="removeLedgerEntry(${jsArg(item.sourceType)}, ${jsArg(item.sourceId || '')}, ${jsArg(item.itemId)})" title="Delete entry" style="opacity:1;color:var(--red);">✕</button>` : ''}
             </td>
         </tr>`;
     }).join('') || `<tr><td colspan="8"><div class="empty-state" style="padding:1rem;">${(_tcLedgerSearch.trim() || _tcLedgerType !== 'all') ? 'No entries match your filter' : 'No data for selected period'}</div></td></tr>`;
@@ -1128,7 +1128,7 @@ function _tcRenderCategoryPanel(allLedger, baseCurrency) {
       // of the table semantics screen readers rely on to read the other cells.
       return `
           <tr onclick="showCategoryDetail(this.dataset.cat)" data-cat="${escapeHtml(c.name)}" style="cursor:pointer;" title="${escapeHtml(c.name)} — ${txnLabel}, ${pctLabel} of total deductible spend">
-            <td><span class="tc-cat-name"><span class="con-group-dot" style="background:${dotColor};"></span><button type="button" class="tc-cat-link" onclick="event.stopPropagation();showCategoryDetail('${escapeHtml(c.name).replace(/'/g, '&#39;')}')">${escapeHtml(c.name)}</button></span></td>
+            <td><span class="tc-cat-name"><span class="con-group-dot" style="background:${dotColor};"></span><button type="button" class="tc-cat-link" onclick="event.stopPropagation();showCategoryDetail(${jsArg(c.name)})">${escapeHtml(c.name)}</button></span></td>
             <td class="r">${c.count}</td>
             <td class="r">
               <span class="tc-cat-pct" role="img" aria-label="${pctLabel} of total">
@@ -1302,7 +1302,7 @@ function tcRenderQuickTripChips() {
   const currentVal = ($('tc-exp-trip')?.value || '').trim();
   const chipsHtml = sortedTrips.map(t => {
     const isActive = currentVal.toLowerCase() === t.name.toLowerCase();
-    return `<button type="button" class="tc-trip-chip ${isActive ? 'is-active' : ''}" onclick="tcSelectTripOption('tc-exp-trip', '${t.name.replace(/'/g, "\\'")}')">
+    return `<button type="button" class="tc-trip-chip ${isActive ? 'is-active' : ''}" onclick="tcSelectTripOption('tc-exp-trip', ${jsArg(t.name)})">
       ✈ ${escapeHtml(t.name)} <span class="count-pill">${t.count}</span>
     </button>`;
   }).join('');
@@ -1392,8 +1392,7 @@ function tcFilterTripDropdown(inputId) {
 
   let html = matched.map(name => {
     const t = summary[name];
-    const safeName = name.replace(/'/g, "\\'");
-    return `<div class="tc-trip-option" onclick="tcSelectTripOption('${inputId}', '${safeName}')">
+    return `<div class="tc-trip-option" onclick="tcSelectTripOption(${jsArg(inputId)}, ${jsArg(name)})">
       <div class="tc-trip-option-main">
         <span>✈</span>
         <span class="tc-trip-option-name">${escapeHtml(name)}</span>
@@ -1406,8 +1405,7 @@ function tcFilterTripDropdown(inputId) {
   }).join('');
 
   if (filterText && !allNames.some(name => name.toLowerCase() === filterText)) {
-    const typedEsc = input.value.trim().replace(/'/g, "\\'");
-    html += `<div class="tc-trip-create-option" onclick="tcSelectTripOption('${inputId}', '${typedEsc}')">
+    html += `<div class="tc-trip-create-option" onclick="tcSelectTripOption(${jsArg(inputId)}, ${jsArg(input.value.trim())})">
       ➕ Add new trip: "${escapeHtml(input.value.trim())}"
     </div>`;
   }
@@ -1687,7 +1685,6 @@ function _tcRenderPendingPanel() {
       withoutAmount++;
     }
 
-    const safeId = String(item.id).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     const amount = amt
       ? `<span class="tc-pending-amt">~${getSym(item.currency || 'CAD')}${amt.toFixed(2)}</span>`
       : `<span class="tc-pending-amt is-unknown">Amount unknown</span>`;
@@ -1715,10 +1712,10 @@ function _tcRenderPendingPanel() {
       <div class="tc-pending-right">
         ${amount}
         <div class="tc-pending-actions">
-          <button class="btn gold" onclick="confirmPendingExpense('${safeId}')" title="Pre-fill the expense form from this note">✓ Confirm &amp; log</button>
-          <button class="btn tag" onclick="snoozePendingExpense('${safeId}', 7)" title="Push the reminder out a week">⏰ +1w</button>
-          <button class="btn-icon" aria-label="Edit note" onclick="openPendingExpense('${safeId}')" title="Edit note">✏️</button>
-          <button class="btn-icon" aria-label="Delete note" onclick="deletePendingExpense('${safeId}')" title="Delete note">🗑️</button>
+          <button class="btn gold" onclick="confirmPendingExpense(${jsArg(item.id)})" title="Pre-fill the expense form from this note">✓ Confirm &amp; log</button>
+          <button class="btn tag" onclick="snoozePendingExpense(${jsArg(item.id)}, 7)" title="Push the reminder out a week">⏰ +1w</button>
+          <button class="btn-icon" aria-label="Edit note" onclick="openPendingExpense(${jsArg(item.id)})" title="Edit note">✏️</button>
+          <button class="btn-icon" aria-label="Delete note" onclick="deletePendingExpense(${jsArg(item.id)})" title="Delete note">🗑️</button>
         </div>
       </div>
     </div>`;
@@ -2335,9 +2332,8 @@ function _tcRenderTripsPanel(selectedYear, baseCurrency) {
           `;
         }
 
-        const safeName = t.name.replace(/'/g, "\\'");
         return `
-          <div class="tc-trip-card" onclick="showTripDetail('${safeName}')">
+          <div class="tc-trip-card" onclick="showTripDetail(${jsArg(t.name)})">
             <div>
               <div class="tc-trip-card-head">
                 <h4 class="tc-trip-card-title">✈ ${escapeHtml(t.name)}</h4>
@@ -2992,8 +2988,8 @@ function _dedGapHtml(gap, cur) {
       <p class="ded-gap-prompt">${escapeHtml(gap.prompt)}</p>
       <div class="ded-gap-actions">
         <button type="button" class="btn gold sm sys-target" onclick="switchTaxCenterSubTab('ledger')">Add the cost</button>
-        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap('${escapeHtml(gap.id)}')">Remind me later</button>
-        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap('${escapeHtml(gap.id)}')">Not a cost I have</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap(${jsArg(gap.id)})">Remind me later</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap(${jsArg(gap.id)})">Not a cost I have</button>
       </div>
     </div>`;
 }
@@ -3047,7 +3043,6 @@ function renderDeductionGaps() {
 
 /** One possible miscategorization, as a card the publisher can fix or dismiss. */
 function _catMismatchHtml(f, cur) {
-  const q = (v) => escapeHtml(String(v)).replace(/'/g, '&#39;');
   return `<div class="ded-gap card">
       <div class="ded-gap-top">
         <div class="ded-gap-head">
@@ -3060,10 +3055,10 @@ function _catMismatchHtml(f, cur) {
       <p class="ded-gap-prompt">${escapeHtml(f.prompt)}</p>
       <div class="ded-gap-actions">
         ${f.scope === 'business'
-          ? `<button type="button" class="btn gold sm sys-target" onclick="changeExpenseCategory('${q(f.expenseId)}', '${q(f.suggestedCategory)}');renderDeductionGaps()">Move to ${escapeHtml(f.suggestedCategory)}</button>`
-          : `<button type="button" class="btn gold sm sys-target" onclick="openEditExpense('bookExpense', '${q(f.bookId || '')}', '${q(f.expenseId)}')">Review — move to ${escapeHtml(f.suggestedCategory)}</button>`}
-        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap('${q(f.id)}')">Remind me later</button>
-        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap('${q(f.id)}')">Not a mistake</button>
+          ? `<button type="button" class="btn gold sm sys-target" onclick="changeExpenseCategory(${jsArg(f.expenseId)}, ${jsArg(f.suggestedCategory)});renderDeductionGaps()">Move to ${escapeHtml(f.suggestedCategory)}</button>`
+          : `<button type="button" class="btn gold sm sys-target" onclick="openEditExpense('bookExpense', ${jsArg(f.bookId || '')}, ${jsArg(f.expenseId)})">Review — move to ${escapeHtml(f.suggestedCategory)}</button>`}
+        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap(${jsArg(f.id)})">Remind me later</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap(${jsArg(f.id)})">Not a mistake</button>
       </div>
     </div>`;
 }
@@ -3921,7 +3916,7 @@ function _tcRenderSelectedCashFlowBucket() {
       class="cf-detail-filter ${activeType === type ? 'is-active' : ''}"
       type="button"
       aria-pressed="${activeType === type ? 'true' : 'false'}"
-      onclick="tcSetCashFlowDetailType('${type}')">
+      onclick="tcSetCashFlowDetailType(${jsArg(type)})">
       ${escapeHtml(label)} <span>${count}</span>
     </button>`;
   const rowHtml = (item) => `
@@ -4001,8 +3996,7 @@ function _tcBuildCashFlowChart(allLedger, selectedYear, baseCurrency) {
   // than an SVG so the year label and the printed totals are never stretched.
   const cols = buckets.map((b) => {
     const label = escapeHtml(b.label);
-    const key = escapeHtml(b.key);
-    const openKey = `onclick="tcSelectCashFlowBucket('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket('${key}')}"`;
+    const openKey = `onclick="tcSelectCashFlowBucket(${jsArg(b.key)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();tcSelectCashFlowBucket(${jsArg(b.key)})}"`;
     const bar = (kind, word, value) => {
       const text = escapeHtml(fmt(value, baseCurrency));
       return `<div class="cf-chart-bar is-${kind}" tabindex="0" role="button" aria-label="View ${label} cash flow details" ${openKey} style="--cf-v:${((value / max) * 100).toFixed(2)}%" title="${label} ${word}: ${text}"><span class="cf-chart-val">${text}</span></div>`;

@@ -39,7 +39,7 @@ import { updateDash } from './dashboard.js';
 import { TAX_CATEGORIES, TC_CATEGORIES, _editingExpense, resetCategoryAutofill } from './tax-entries.js';
 import { findExpenseRule } from '../lib/expense-rules.js';
 import { fetchSheetsCapabilities, notifyPublisherSubmission } from './sheets-bridge.js';
-import { escapeHtml } from '../lib/html.js';
+import { escapeHtml, jsArg } from '../lib/html.js';
 import { localDay } from '../lib/calendar-day.js';
 import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
@@ -150,6 +150,7 @@ import { isExpiringLabelUrl, isLabelUrlExpired, shippoTxIdFromRef } from '../lib
 import { mountReceiptFinder, startReceiptFinder, stopReceiptFinder } from './receipt-finder.js';
 import { receiptTextForAi } from '../lib/receipt-finder-client.js';
 import { RECEIPT_QUERY, RECEIPT_NOISE, receiptWorthReading } from '../lib/receipt-finder.js';
+import { storageRead, storageSet } from '../lib/safe-storage.js';
 
 function receiptFinderDependencies() {
   return {
@@ -472,7 +473,7 @@ async function useReceiptPhoto() {
         _pendingWebcamReceipt = { name: file.name, size: file.size, url: localUrl };
         if (preview) {
           const relPath = localUrl.replace('local://', '');
-          preview.innerHTML = `📷 Saved: <strong>${escapeHtml(file.name)}</strong> (${(file.size / 1024).toFixed(0)} KB) — <a href="#" onclick="event.preventDefault(); viewLocalReceipt('${escapeHtml(relPath)}')" style="color:var(--gold);text-decoration:underline;">View receipt</a>`;
+          preview.innerHTML = `📷 Saved: <strong>${escapeHtml(file.name)}</strong> (${(file.size / 1024).toFixed(0)} KB) — <a href="#" onclick="event.preventDefault(); viewLocalReceipt(${jsArg(relPath)})" style="color:var(--gold);text-decoration:underline;">View receipt</a>`;
         }
         showToast('✓ Photo saved to local receipt folder', 'ok');
         closeReceiptCameraModal();
@@ -939,7 +940,7 @@ function _localReceiptCell(item) {
       return '<span class="pill gray" style="font-size:var(--text-2xs);" title="Rent / lease payment (receipt exempt — documented via tenancy lease & bank statement)">Lease record</span>';
     }
     if (item.sourceType === 'businessExpense' || item.sourceType === 'bookExpense') {
-      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow('${item.sourceType || ''}', '${item.sourceId || ''}', '${item.itemId || ''}')" style="font-size:var(--text-2xs);padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
+      return `<button class="btn sm outline" type="button" onclick="attachReceiptToExpenseRow(${jsArg(item.sourceType || '')}, ${jsArg(item.sourceId || '')}, ${jsArg(item.itemId || '')})" style="font-size:var(--text-2xs);padding:1px 6px;color:var(--gold-text);" title="Attach receipt file">📎 Attach</button>`;
     }
     return '';
   }
@@ -964,7 +965,7 @@ function _localReceiptCell(item) {
     if (shippoTx && isExpiringLabelUrl(r)) {
       const expired = isLabelUrlExpired(r);
       const label = multi && !shippoRow ? `Label ${idx + 1}` : 'Label';
-      return `<a href="#" title="${expired ? 'This saved link has expired — opens a fresh one from Shippo' : 'Opens a fresh link from Shippo'}" onclick="event.preventDefault(); openShippoLabel('${escapeHtml(String(item.ref))}')" style="color:var(--gold3);text-decoration:underline;">${label}${expired ? ' ↻' : ''}</a>`;
+      return `<a href="#" title="${expired ? 'This saved link has expired — opens a fresh one from Shippo' : 'Opens a fresh link from Shippo'}" onclick="event.preventDefault(); openShippoLabel(${jsArg(String(item.ref))})" style="color:var(--gold3);text-decoration:underline;">${label}${expired ? ' ↻' : ''}</a>`;
     }
     const label = multi && !shippoRow ? `Receipt ${idx + 1}` : 'Receipt';
     const href = followableUrl(r);
@@ -3206,7 +3207,7 @@ function renderGmailEmailsList() {
           <label class="email-card-check" title="Select this email">
             <input type="checkbox" class="gmail-email-cb" data-msg-id="${email.id}" ${isChecked ? 'checked' : ''}
               aria-label="Select email: ${esc(subject)}"
-              onchange="toggleEmailRowSelection('${email.id}', this.checked)">
+              onchange="toggleEmailRowSelection(${jsArg(email.id)}, this.checked)">
           </label>
           <div class="email-card-body">
             <div class="email-card-meta">
@@ -3220,7 +3221,7 @@ function renderGmailEmailsList() {
           <div class="email-card-actions">
             ${attachmentBadge}
             <button type="button" class="btn sm email-preview-btn" id="email-preview-btn-${email.id}"
-              onclick="toggleEmailPreview('${email.id}')">Preview</button>
+              onclick="toggleEmailPreview(${jsArg(email.id)})">Preview</button>
           </div>
         </div>
         <div class="email-card-preview" id="email-preview-row-${email.id}" style="display:none;">
@@ -3428,14 +3429,14 @@ function renderDirectGmailEmailsList() {
     return `<li class="email-card${selected ? ' selected' : ''}" id="direct-email-row-${email.id}">
       <div class="email-card-main">
         <label class="email-card-check" title="Select this email to archive">
-          <input type="checkbox" class="direct-gmail-email-cb" data-msg-id="${email.id}" ${selected ? 'checked' : ''} aria-label="Archive email: ${escapeHtml(subject)}" onchange="toggleDirectGmailSelection('${email.id}', this.checked)">
+          <input type="checkbox" class="direct-gmail-email-cb" data-msg-id="${email.id}" ${selected ? 'checked' : ''} aria-label="Archive email: ${escapeHtml(subject)}" onchange="toggleDirectGmailSelection(${jsArg(email.id)}, this.checked)">
         </label>
         <div class="email-card-body">
           <div class="email-card-meta"><span class="email-sender" title="${escapeHtml(email.from || '')}">${escapeHtml(_directGmailVendor(email))}</span><span class="email-card-date">${escapeHtml(date)}</span>${imported.has(email.id) ? '<span class="pill green email-card-imported">✓ imported</span>' : ''}</div>
           <div class="email-subject">${escapeHtml(subject)}</div>
           ${email.snippet ? `<div class="email-snippet">${escapeHtml(email.snippet)}</div>` : ''}
         </div>
-        <div class="email-card-actions">${email.hasAttachments ? `<span class="pill gray email-card-att">📎 ${Number(email.attachmentCount) || ''}</span>` : ''}<button type="button" class="btn sm email-preview-btn" id="direct-email-preview-btn-${email.id}" onclick="toggleDirectEmailPreview('${email.id}')">Preview</button></div>
+        <div class="email-card-actions">${email.hasAttachments ? `<span class="pill gray email-card-att">📎 ${Number(email.attachmentCount) || ''}</span>` : ''}<button type="button" class="btn sm email-preview-btn" id="direct-email-preview-btn-${email.id}" onclick="toggleDirectEmailPreview(${jsArg(email.id)})">Preview</button></div>
       </div>
       <div class="email-card-preview" id="direct-email-preview-row-${email.id}" style="display:none;"><div class="email-preview-drawer" id="direct-email-preview-drawer-${email.id}"></div></div>
     </li>`;
@@ -3618,7 +3619,7 @@ function renderEmailPreviewContent(msgId, container) {
       const isChecked = !(excluded && excluded.has(idx));
       return `
         <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin:4px 0;padding:2px 0;">
-          <input type="checkbox" class="email-att-cb-${msgId}" data-idx="${idx}" ${isChecked ? 'checked' : ''} onchange="_setEmailAttExcluded('${msgId}', ${idx}, !this.checked)" style="width:14px;height:14px;">
+          <input type="checkbox" class="email-att-cb-${msgId}" data-idx="${idx}" ${isChecked ? 'checked' : ''} onchange="_setEmailAttExcluded(${jsArg(msgId)}, ${idx}, !this.checked)" style="width:14px;height:14px;">
           <span style="font-family:var(--font-mono);font-size:var(--text-xs);">${icon} ${esc(f.name)} <span style="opacity:.6;font-size:var(--text-2xs);">(${typeLabel})</span></span>
         </label>
       `;
@@ -4805,8 +4806,8 @@ function _batchExpenseNewRow(file) {
     currency: _batchExpenseDefaultCurrency(),
     // Only if it's still one of this ledger's categories — a remembered value
     // the dropdown has no option for would show blank and log as itself.
-    category: _batchExpenseCategories().includes(localStorage.getItem('lastExpenseCategory'))
-      ? localStorage.getItem('lastExpenseCategory')
+    category: _batchExpenseCategories().includes(storageRead('lastExpenseCategory'))
+      ? storageRead('lastExpenseCategory')
       : '',
     reference: ''
   };
@@ -5068,7 +5069,7 @@ function _batchExpenseStatusCell(row, ledgerIndex) {
   if (dup === 'batch') bits.push(`<span class="bx-flag bx-flag-warn">same as a row above</span>`);
   (row.scanFlags || []).forEach((f, i) => {
     const fix = f.fix
-      ? ` <button class="btn sm bx-fix" type="button" onclick="applyBatchScanFix('${row.uid}', ${i})">${escapeHtml(f.fix.label)}</button>`
+      ? ` <button class="btn sm bx-fix" type="button" onclick="applyBatchScanFix(${jsArg(row.uid)}, ${i})">${escapeHtml(f.fix.label)}</button>`
       : '';
     bits.push(`<span class="bx-flag${f.tone === 'note' ? '' : ' bx-flag-warn'}">${escapeHtml(f.text)}${fix}</span>`);
   });
@@ -5125,8 +5126,8 @@ function renderBatchExpenseRows() {
               <input type="number" inputmode="decimal" step="0.01" min="0" data-bx-uid="${r.uid}" data-bx-field="amount" value="${r.amount === '' ? '' : escapeHtml(String(r.amount))}" placeholder="0.00" aria-label="Amount">
             </td>
             <td class="bx-col-actions">
-              ${r.file ? `<button class="btn sm" type="button" title="Read this receipt again" aria-label="Read this receipt again" onclick="rescanBatchExpenseRow('${r.uid}')">✨</button>` : ''}
-              <button class="btn sm" type="button" title="Remove this row" aria-label="Remove this row" onclick="removeBatchExpenseRow('${r.uid}')">🗑️</button>
+              ${r.file ? `<button class="btn sm" type="button" title="Read this receipt again" aria-label="Read this receipt again" onclick="rescanBatchExpenseRow(${jsArg(r.uid)})">✨</button>` : ''}
+              <button class="btn sm" type="button" title="Remove this row" aria-label="Remove this row" onclick="removeBatchExpenseRow(${jsArg(r.uid)})">🗑️</button>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -7316,7 +7317,7 @@ function updateExpenseForm() {
   const curField = $('exp-cur');
   if (curField) {
     putCurrencyFirst(curField, native);
-    setSelectCurrency(curField, localStorage.getItem('lastExpenseCurrency') || native);
+    setSelectCurrency(curField, storageRead('lastExpenseCurrency') || native);
   }
   if ($('exp-fx-inline-result')) $('exp-fx-inline-result').style.display = 'none';
   _expenseFxRate = null;
@@ -7337,7 +7338,7 @@ function populateExpenseCategoryDropdown() {
   const sel = $('exp-cat');
   if (!sel || sel.options.length) return;
   sel.innerHTML = EXPENSE_CATEGORIES.map(c => `<option>${escapeHtml(c)}</option>`).join('');
-  const last = localStorage.getItem('lastExpenseCategory');
+  const last = storageRead('lastExpenseCategory');
   if (last && EXPENSE_CATEGORIES.includes(last)) sel.value = last;
 }
 
@@ -7481,8 +7482,8 @@ async function submitExpense() {
     showToast('✓ Expense logged');
   }
 
-  localStorage.setItem('lastExpenseCategory', cat);
-  localStorage.setItem('lastExpenseCurrency', cur);
+  storageSet('lastExpenseCategory', cat);
+  storageSet('lastExpenseCurrency', cur);
 
   renderExpenses();
   updateDash();
@@ -7859,7 +7860,7 @@ function renderExpenses() {
   body.innerHTML = visible.map(e => {
     if (e.pendingAuth) {
       const actionCell = window.IS_PUBLISHER
-        ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', '${e._subKey}')" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', '${e._subKey}')" title="Reject submission" aria-label="Reject submission">✕</button></div>`
+        ? `<div class="approval-actions"><button class="appr-btn approve" onclick="approveSubmission('expenses', ${jsArg(e._subKey)})" aria-label="Approve submission"><span class="ico">✓</span>Approve</button><button class="appr-btn reject" onclick="rejectSubmission('expenses', ${jsArg(e._subKey)})" title="Reject submission" aria-label="Reject submission">✕</button></div>`
         : `<span style="font-size:var(--text-2xs);color:var(--amber);">Awaiting Publisher</span>`;
       return `<tr class="is-awaiting">
         ${showSelectCol ? '<td></td>' : ''}

@@ -39,6 +39,7 @@ import { updateDash } from './dashboard.js';
 import { addSaleToState, syncHistoryVoidDeletion } from './sales-ledger.js';
 import { syncToSheets } from './sheets-bridge.js';
 import { linkablePostageExpenses, renderOrderShippingSummary, shippingPurchaseRowPayload } from './shipping.js';
+import { storageSet, storageRead } from '../lib/safe-storage.js';
 
 // The orders the last Gmail scan found, for every book. fetchOrders replaces
 // the list; everything else reads it.
@@ -50,7 +51,7 @@ function getScanMemory() {
   try { return JSON.parse(localStorage.getItem(SCAN_MEMORY_KEY) || '{}'); } catch (e) { return {}; }
 }
 function saveScanMemory(mem) {
-  localStorage.setItem(SCAN_MEMORY_KEY, JSON.stringify(mem));
+  storageSet(SCAN_MEMORY_KEY, JSON.stringify(mem));
 }
 
 /* ── WEBSITE ORDERS — the scan status strip ────────────────────────────────
@@ -723,7 +724,7 @@ async function fetchOrders() {
   const mem = getScanMemory();
   const lastScanDate = mem.lastScan ? new Date(mem.lastScan) : null;
   const appliedNums = new Set(mem.appliedNums || []);
-  const daysBack = parseInt(localStorage.getItem('lm-scan-days') || '30');
+  const daysBack = parseInt(storageRead('lm-scan-days') || '30');
   const sinceDate = fmtD(new Date(Date.now() - daysBack * 86400000));
 
   // A Gmail scan is three retries deep at worst, so it can run for the better

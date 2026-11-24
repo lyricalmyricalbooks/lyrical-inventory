@@ -49,3 +49,12 @@ const HTML_TAG = /<\/?[a-z][a-z0-9]*(\s[^<>]*)?\/?>/i;
 export function hasHtmlTag(text) {
   return HTML_TAG.test(String(text == null ? '' : text));
 }
+
+// A value written as a JavaScript string argument inside a double-quoted
+// inline handler, e.g. `onclick="openOrder(${jsArg(o.num)})"`. JSON gives a
+// valid JS string whatever the value holds (an apostrophe, a quote, a
+// backslash, a line break), and escaping it keeps the attribute intact. A bare
+// `'${value}'` broke the button as soon as the value held an apostrophe.
+export function jsArg(v) {
+  return escapeHtml(JSON.stringify(String(v)));
+}

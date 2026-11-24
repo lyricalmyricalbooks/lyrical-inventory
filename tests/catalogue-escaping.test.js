@@ -53,7 +53,7 @@ describe('all-books overview — book strip escaping', () => {
     // An id carrying an apostrophe would otherwise close the JS string inside
     // the onclick attribute.
     const tpl = bookStripTemplate();
-    expect(tpl).toContain("switchBook('${idAttr}')");
+    expect(tpl).toContain('switchBook(${jsArg(book.id)})');
     expect(tpl).not.toContain("switchBook('${book.id}')");
   });
 
