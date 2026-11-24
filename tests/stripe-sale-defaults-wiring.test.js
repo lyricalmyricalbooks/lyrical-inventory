@@ -5,11 +5,12 @@ import { roundCents } from '../src/lib/money.js';
 import { stripeSalePlan, paidUnitPrice, wholeCopies } from '../src/lib/stripe-sale-autorecord.js';
 import { DATED_RATE_SOURCES } from '../src/lib/fx-sources.js';
 import { rememberedBook, withPick } from '../src/lib/stripe-book-picks.js';
+import { withSaleFee } from '../src/lib/stripe-sale-fee.js';
 
 const payment = { id: 'ch_Test42', currency: 'EUR', amount: 40, date: '2026-10-08' };
 const BOOKS = { b1: { id: 'b1', currency: 'CAD' }, b2: { id: 'b2', currency: 'USD' } };
 const currencyDeps = {
-  BOOKS, roundCents, stripeOrderNumber,
+  BOOKS, roundCents, stripeOrderNumber, withSaleFee,
   getBookCurrencyCode: book => book.currency,
   normalizeCurrencyCode: (value, fallback) => String(value || fallback).toUpperCase(),
   _reconSaleKey: id => id,
@@ -27,6 +28,17 @@ it('writes the original money, converted total, and automatic order number to th
   expect(row[6].num).toBe('STRIPE-Test42');
   api._reconApplyPaymentToBook(payment, 'b1', 1, { rate: 1.55, num: 'OWNER-42' });
   expect(row[6].num).toBe('OWNER-42');
+});
+
+it('keeps the Stripe fee on the sale row, in the currency Stripe charged it in', () => {
+  let row;
+  const api = buildHarness({ names: ['_reconApplyPaymentToBook'], deps: {
+    ...currencyDeps, _reconApplySaleToBook: (...args) => { row = args; },
+  }, returns: '{ _reconApplyPaymentToBook }' });
+  api._reconApplyPaymentToBook({ ...payment, fee: 1.62, feeCurrency: 'CAD' }, 'b1', 1, { rate: 1.55 });
+  expect(row[3]).toMatchObject({ currency: 'EUR', amount: 40, fee: 1.62, feeCurrency: 'CAD' });
+  api._reconApplyPaymentToBook(payment, 'b1', 1, { rate: 1.55 });
+  expect(row[3]).not.toHaveProperty('fee');
 });
 
 function historical(fetchFx) {

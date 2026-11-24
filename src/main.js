@@ -277,6 +277,7 @@ import {
 } from './lib/stripe-sale-autorecord.js';
 import { STRIPE_DISMISSALS_KEY, mergeDismissedMap, withDismissals } from './lib/stripe-dismissals.js';
 import { STRIPE_BOOK_PICKS_KEY, rememberedBook, withPick } from './lib/stripe-book-picks.js';
+import { backfillSaleFees, bookFeeTotals, feeFromBalanceTransaction, splitFee, withSaleFee } from './lib/stripe-sale-fee.js';
 import {
   integrationBackoffMs,
   noteIntegrationFailure,
@@ -8778,11 +8779,24 @@ function renderHistReconciliationPanel(s, book, chanFilter, inScope, bookCode) {
       </div>
       ${warn}
       ${curWarn}
+      ${histFeeNoteHtml(s)}
     `;
   } else {
     recon.style.display = 'none';
     recon.innerHTML = '';
   }
+}
+
+// What Stripe kept on this book's card sales, for the publisher only. The fee
+// is already in the yearly Stripe fee expense, and the author's share is on
+// the full price, so this line only tells the publisher what the book really
+// brought in.
+function histFeeNoteHtml(s) {
+  if (!window.IS_PUBLISHER || isAuthor()) return '';
+  const totals = Object.entries(bookFeeTotals(s?.hist));
+  if (!totals.length) return '';
+  const list = totals.map(([cur, amt]) => fmt(amt, cur)).join(' + ');
+  return `<p class="hist-fee-note">Stripe kept <strong class="mono-num">${escapeHtml(list)}</strong> in card fees on this book's sales. It's already in your yearly Stripe fee expense, and the author's share is worked out on the full price.</p>`;
 }
 
 // Keeps a slow tick running only while a voided row is still waiting to age
@@ -8857,7 +8871,9 @@ function renderHistRowHtml(row, { cur, bookCode, book, formatChannelBadge, posta
         : `<button class="btn-hist-action ship" onclick="openLabelModal(${i})" title="Print shipping label">📦 Ship</button>`)
     : '';
 
-  const paymentInfo = paymentSummary(h.payment, book, h);
+  const feeInfo = h.payment?.feeCurrency && Number(h.payment.fee) > 0 && !h.voided && window.IS_PUBLISHER && !isAuthor()
+    ? `Stripe kept ${fmt(h.payment.fee, h.payment.feeCurrency)}` : '';
+  const paymentInfo = [paymentSummary(h.payment, book, h), feeInfo].filter(Boolean).join(' · ');
   const shippingInfo = isWebsite ? renderOrderShippingSummary(h, postage()) : '';
   const notesText = escapeHtml(h.notes) || '—';
   // The publisher can open a website sale's order on the website itself.
@@ -16184,6 +16200,8 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
   for (let page = 0; page < maxPages; page++) {
     const params = new URLSearchParams({ limit: '100' });
     params.append('expand[]', 'data.payment_intent');
+    // The balance transaction carries the fee Stripe kept on the charge.
+    params.append('expand[]', 'data.balance_transaction');
     // `since` narrows the window at Stripe's end rather than ours. The manual
     // worklist wants everything recent and passes nothing; a background poll
     // running every few minutes would otherwise drag hundreds of charges across
@@ -16204,7 +16222,9 @@ export async function fetchStripePaymentsForReconcile(maxPages = 3, { since = 0 
       const pi = (ch.payment_intent && typeof ch.payment_intent === 'object') ? ch.payment_intent : null;
       const metadata = Object.assign({}, pi?.metadata || {}, ch.metadata || {});
       const cur = (ch.currency || '').toUpperCase();
+      const fee = feeFromBalanceTransaction(ch.balance_transaction);
       out.push({
+        ...(fee || {}),
         id: ch.id,
         piId: pi?.id || (typeof ch.payment_intent === 'string' ? ch.payment_intent : ''),
         amount: _stripeMinorToMajor(ch.amount, cur),
@@ -16413,6 +16433,17 @@ function _reconApplySaleToBook(bookId, qty, price, payment, chargeId, notes, ext
   });
 }
 
+// Sales recorded from Stripe before fees were kept get their fee filled in
+// from the payments just fetched. The yearly fee filing is untouched: this
+// only says which sale each fee came from.
+async function _reconFillSaleFees(payments) {
+  if (!window.IS_PUBLISHER || isAuthor()) return;
+  try {
+    const changed = backfillSaleFees(states, payments);
+    for (const bookId of changed) await saveState(bookId);
+  } catch (e) { console.warn('Filling in Stripe fees on sales failed:', e); }
+}
+
 async function reconcileSync() {
   const btn = document.getElementById('recon-sync-btn');
   const statusEl = document.getElementById('recon-status');
@@ -16421,6 +16452,7 @@ async function reconcileSync() {
   try {
     const payments = await fetchStripePaymentsForReconcile();
     window._reconPayments = payments;
+    await _reconFillSaleFees(payments);
     const mem = getReconMemory();
     mem.lastSync = new Date().toISOString();
     saveReconMemory(mem);
@@ -16866,7 +16898,7 @@ export function renderReconcile() {
     <td class="recon-nowrap">${escapeHtml(p.date)}</td>
     <td class="r money-cell recon-nowrap">${_stripeFmtMoney(p.amount, p.currency)}</td>
     <td>${escapeHtml([p.customer, p.email].filter(Boolean).join(' · ') || p.description || '—')}</td>
-    <td><span class="pill ${tone} recon-pill">${label}</span> <span class="recon-status-note">${escapeHtml(note)}</span></td>
+    <td><span class="pill ${tone} recon-pill">${label}</span> <span class="recon-status-note">${escapeHtml(note)}</span>${c.kind === 'recorded' && p.feeCurrency && p.fee > 0 ? ` <span class="recon-fee-note">Stripe kept ${escapeHtml(fmt(p.fee, p.feeCurrency))}</span>` : ''}</td>
     <td class="r">${canUndo ? `<button class="btn tag sm" data-action="recon.undo" data-id="${idSafe}">Undo</button>` : ''}</td>
   </tr>`;
   }).join('');
@@ -16915,13 +16947,13 @@ function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe d
   // Keep the per-copy figure precise enough that a quantity greater than one
   // still adds back to the actual converted payment when the total is rounded.
   const price = convertedTotal / qty;
-  const payment = {
+  const payment = withSaleFee({
     currency: paidCurrency,
     amount: roundCents(paidAmount),
     rate: paidCurrency === bookCur ? null : fxRate,
     convertedTotal,
     ref: p.id,
-  };
+  }, p);
   if (paidCurrency !== bookCur) {
     payment.rateSource = rateSource || 'manual';
     // A looked-up rate keeps the day it is actually from (blank when unknown);
@@ -17226,6 +17258,7 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
   try {
     // A few pages behind a date filter: in the steady state this returns one tiny page.
     const payments = await fetchStripePaymentsForReconcile(10, { since: stripeInvoiceSweepSince() });
+    await _reconFillSaleFees(payments);
 
     let settled = 0;
     let attention = 0;
@@ -17923,10 +17956,11 @@ function recordReaderSplitSale(payment, lines) {
   // split sale marks the charge recorded, and the rest could never be added.
   if (plan.lines.some(line => !states[line.bookId] || !BOOKS[line.bookId])) return null;
 
+  const feeShares = splitFee(payment.fee, plan.lines.map(line => line.qty * line.price));
   try {
     plan.lines.forEach((line, i) => {
       _reconApplySaleToBook(line.bookId, line.qty, line.price,
-        { currency: payment.currency, amount: line.qty * line.price, ref: payment.id },
+        withSaleFee({ currency: payment.currency, amount: line.qty * line.price, ref: payment.id }, payment, payment.feeCurrency ? feeShares[i] : undefined),
         i === 0 ? payment.id : `${payment.id}-${i + 1}`,
         'Card reader',
         { date: payment.date, email: payment.email, chan: 'Book Fair', auto: true, num: stripeOrderNumber(payment) });

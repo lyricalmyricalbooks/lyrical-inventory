@@ -258,7 +258,7 @@ function harbourState(book) {
     directSale({ num: 'POS-410021', chan: 'Book Fair', qty: 3, price: 24, date: '2026-08-14', notes: 'Card', sheetsId: 'harbour-d-1' }),
     directSale({ num: 'POS-410034', chan: 'In Person', qty: 1, price: 24, date: '2026-08-16', notes: 'Cash', sheetsId: 'harbour-d-2' }),
     directSale({ num: '#1038', chan: 'Website', qty: 2, price: 24, date: '2026-08-23', notes: 'Big Cartel', buyer: { name: 'Margaret Fitzgerald-Whitfield', email: 'margaret.fw@buyer.example' }, sheetsId: 'harbour-d-3' }),
-    directSale({ num: 'POS-410098', chan: 'Book Fair', qty: 4, price: 24, date: '2026-08-31', notes: 'Stripe QR', sheetsId: 'harbour-d-4' }),
+    directSale({ num: 'POS-410098', chan: 'Book Fair', qty: 4, price: 24, date: '2026-08-31', notes: 'Stripe QR', payment: { currency: 'CAD', amount: 96, rate: null, convertedTotal: 96, fee: 3.08, feeCurrency: 'CAD' }, sheetsId: 'harbour-d-4' }),
     directSale({ num: '#1046', chan: 'Website', qty: 1, price: 24, date: '2026-09-08', notes: 'Big Cartel', payment: { currency: 'USD', amount: 17.52, rate: 1.37, convertedTotal: 24 }, buyer: { name: 'Owen Sato', email: 'owen.sato@buyer.example' }, sheetsId: 'harbour-d-5' }),
     directSale({ num: 'POS-410177', chan: 'In Person', qty: 2, price: 24, date: '2026-09-19', notes: 'Bank Transfer', sheetsId: 'harbour-d-6' }),
     directSale({ num: 'DIR-0931', chan: 'Direct', qty: 2, price: 24, date: '2026-09-26', notes: 'Bank Transfer', sheetsId: 'harbour-d-7' }),
