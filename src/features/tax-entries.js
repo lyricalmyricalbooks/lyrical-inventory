@@ -1266,13 +1266,16 @@ function downloadFullTaxSeasonExport() {
 
   // Section 2: All Expenses & Payouts
   csv += '\n--- ALL EXPENSES & PAYOUTS ---\n';
-  csv += 'Date,Book/Entity,Category,Description,Amount (CAD),Receipt Link\n';
+  // The last column marks a book expense an author settlement already paid
+  // back, so an accountant doesn't count the cost and the repayment twice.
+  csv += 'Date,Book/Entity,Category,Description,Amount (CAD),Receipt Link,Paid back in author settlement\n';
 
   // 2a. Book-level expenses & payouts
   BOOK_LIST.forEach(book => {
     if (isTestBook(book) || isTestBookId(book.id)) return;
     const s = states[book.id] || defaultState(book);
     const cur = getBookCurrencyCode(book);
+    const repaid = expensesRepaidBySettlement(s.artistPayouts);
 
     // Book Expenses
     (s.expenses || []).filter(e => {
@@ -1280,7 +1283,8 @@ function downloadFullTaxSeasonExport() {
       if (isAllTime) return true;
       return e.date && e.date.startsWith(year);
     }).forEach(e => {
-      csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)}\n`;
+      const repaidOn = repaid.get(String(e.id))?.date || '';
+      csv += `${e.date},${esc(book.title)},${esc(e.cat)},${esc(e.desc)},${getAmt(e).toFixed(2)},${esc(e.receipt)},${esc(repaidOn)}\n`;
     });
 
     // Artist Payouts — the payments actually recorded against the book.
@@ -1302,7 +1306,7 @@ function downloadFullTaxSeasonExport() {
       flagRateIfMissing(book, cur, pFx.missing, payoutRaw > 0);
       const payoutCAD = roundCents(payoutRaw * hRate);
       if (p.settlement) {
-        csv += `${p.date},${esc(book.title)},"Earnings settled",${esc('Royalty credit including earnings retained from held sales; see settlement cash section for the actual payment')},${payoutCAD.toFixed(2)},""\n`;
+        csv += `${p.date},${esc(book.title)},"Earnings settled",${esc('Royalty credit including earnings retained from held sales; see settlement cash section for the actual payment')},${payoutCAD.toFixed(2)},"",""\n`;
         return;
       }
       // Only the cash is a cash outflow; a netted slice is noted so the row
@@ -1310,7 +1314,7 @@ function downloadFullTaxSeasonExport() {
       const netted = payoutNetted(p);
       const desc = [p.method || 'Payment to artist',
         netted > 0.005 ? `plus ${(netted * hRate).toFixed(2)} netted against money the artist owed` : ''].filter(Boolean).join(' — ');
-      csv += `${p.date},${esc(book.title)},"Artist Payout",${esc(desc)},${payoutCAD.toFixed(2)},""\n`;
+      csv += `${p.date},${esc(book.title)},"Artist Payout",${esc(desc)},${payoutCAD.toFixed(2)},"",""\n`;
     });
   });
 
@@ -1321,7 +1325,7 @@ function downloadFullTaxSeasonExport() {
     if (isAllTime) return true;
     return l.date && l.date.startsWith(year);
   }).forEach(l => {
-    csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)}\n`;
+    csv += `${l.date},"Publisher (General)",${esc(l.cat)},${esc(l.desc)},${getAmt(l).toFixed(2)},${esc(l.receipt)},""\n`;
   });
 
   // Actual settlement transfers are separate from royalty credits and sales.

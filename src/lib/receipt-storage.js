@@ -401,3 +401,20 @@ export async function uniqueFileName(filename, exists) {
   }
   return `${stem}-${Date.now()}${ext}`;
 }
+
+/**
+ * For the accountant export: a lookup from a ledger row to the date an author
+ * settlement paid that book expense back ('' when none did). Only book
+ * expenses can be repaid this way; the map per book is built once.
+ * @param {Record<string, {artistPayouts?: object[]}>} statesById
+ * @returns {(row: {sourceType?: string, sourceId?: string, itemId?: unknown}) => string}
+ */
+export function settlementRepaidLookup(statesById) {
+  const byBook = new Map();
+  return (row) => {
+    if (!row || row.sourceType !== 'bookExpense' || row.sourceId == null || row.itemId == null) return '';
+    const bid = String(row.sourceId);
+    if (!byBook.has(bid)) byBook.set(bid, expensesRepaidBySettlement(statesById?.[bid]?.artistPayouts));
+    return byBook.get(bid).get(String(row.itemId))?.date || '';
+  };
+}
