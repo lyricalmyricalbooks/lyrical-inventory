@@ -471,6 +471,8 @@ import {
 import {
   reconcileApplyBigCartel,
   autoCheckBigCartelLedgerGaps,
+  refreshBigCartelVisibility,
+  stopUsingBigCartel,
   startBigCartelOrderWatch,
   refreshBigCartelOrdersIfDue,
   dismissNewOrderAlert,
@@ -15092,7 +15094,9 @@ function settingsHomeRows() {
     { title: 'Google Sheet', sub: 'A copy of every sale and expense',
       status: sheetOn ? 'Connected' : 'Not connected', tone: sheetOn ? 'ok' : 'plain', part: 'sync' },
     { title: 'Letterhead', sub: 'Letters on your own stationery', status: 'Open', tone: 'plain', part: 'letterhead' },
-    { title: 'Big Cartel', sub: 'Shop orders and stock, on the Big Cartel screen', status: 'Open', tone: 'plain', screen: 'bigcartel' },
+    document.body.classList.contains('bc-off')
+      ? { title: 'Big Cartel', sub: 'Switched off. Open it to connect a store again', status: 'Off', tone: 'plain', screen: 'bigcartel' }
+      : { title: 'Big Cartel', sub: 'Shop orders and stock, on the Big Cartel screen', status: 'Open', tone: 'plain', screen: 'bigcartel' },
     { title: 'Payments', sub: 'Stripe and the card reader, on the Payments screen', status: 'Open', tone: 'plain', screen: 'reconcile' },
     { title: 'Notifications', sub: 'What the app tells you about, on this device', status: 'Open', tone: 'plain', screen: 'notifications' },
     { title: 'Backups', sub: 'Download or restore everything', status: 'Open', tone: 'plain', screen: 'backups' },
@@ -15130,6 +15134,7 @@ registerActions({
     else if (screen) switchTab(screen);
   },
   'settings.open': (el) => openSettingsSection(el.dataset.part || 'home'),
+  'bigcartel.stop': () => stopUsingBigCartel(),
 });
 
 function switchSettingsSubTab(subTabName) {
@@ -15896,6 +15901,8 @@ async function boot(forcedBook) {
         // is comparing against), silent by design, and served from a recent
         // cache when there is one. A website order that never reached the app
         // is invisible everywhere until something goes looking for it.
+        // A shop that no longer sells on Big Cartel doesn't see it in the menus.
+        refreshBigCartelVisibility().catch(() => { /* offline: leave it as it is */ });
         autoCheckBigCartelLedgerGaps()
           // Then keep asking. The boot check alone leaves an app that stays
           // open all day blind to every sale after the first minute of it.

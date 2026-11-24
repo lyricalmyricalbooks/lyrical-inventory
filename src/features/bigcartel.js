@@ -312,6 +312,45 @@ async function renderBigCartelTab() {
   }
 }
 
+// When no Big Cartel store is saved, its menu entries, the Orders-screen
+// strip and the Shipping shortcuts are hidden (the \`bc-off\` class on body).
+// Past Big Cartel orders stay in the history either way. Only a settings read
+// that worked decides this, so a failed read never hides it from a shop that
+// still sells there.
+async function refreshBigCartelVisibility() {
+  const config = await loadBigCartelConfig();
+  if (!bigCartelConfig) return;
+  document.body.classList.toggle('bc-off', !bigCartelConfigured(config));
+}
+
+// For a shop that has left Big Cartel: forget the saved store and what the
+// app had cached from it, and hide it. Typing the details in again brings
+// it all back (Settings › All settings › Big Cartel).
+async function stopUsingBigCartel() {
+  const ok = await confirmDialog(
+    'The saved store details are removed and Big Cartel is hidden from the menus. Your past Big Cartel orders stay in your history and totals. You can connect it again from Settings at any time.',
+    { title: 'Stop using Big Cartel?', okLabel: 'Stop using it' },
+  );
+  if (!ok) return;
+  try {
+    const empty = { subdomain: '', username: '', password: '' };
+    await window._fbSaveSettings('bigCartelConfig', empty);
+    bigCartelConfig = empty;
+  } catch (e) {
+    showToast('Couldn’t save that just now: ' + e.message, 'err');
+    return;
+  }
+  [BC_GAP_CACHE_KEY, BC_SEEN_ORDERS_KEY, 'lm-bigcartel-orders-cache'].forEach(k => {
+    try { localStorage.removeItem(k); } catch (_) { /* storage blocked */ }
+  });
+  bigCartelData = { store: null, products: [], orders: [] };
+  _bcGapResult = null;
+  renderBigCartelGapBadge();
+  document.body.classList.add('bc-off');
+  renderBigCartelTab();
+  showToast('Big Cartel is switched off. Your past orders are still in your history.', 'ok', 5000);
+}
+
 function updateBigCartelConnectionUI(isConnected, statusText = '') {
   const dot = $('bc-status-dot');
   const txt = $('bc-status-text');
@@ -480,6 +519,7 @@ async function saveBigCartelSettings() {
     const config = { subdomain, username, password };
     await window._fbSaveSettings('bigCartelConfig', config);
     bigCartelConfig = config;
+    document.body.classList.remove('bc-off');
     showToast('✓ Big Cartel credentials saved & synced', 'ok');
 
     $('bc-dashboard-content').style.display = 'block';
@@ -2816,6 +2856,8 @@ export {
   extractBigCartelAddress,
   loadBigCartelConfig,
   renderBigCartelTab,
+  refreshBigCartelVisibility,
+  stopUsingBigCartel,
   updateBigCartelConnectionUI,
   fetchBigCartel,
   testBigCartelConnection,
