@@ -42,7 +42,7 @@ test('the phone sheet keeps its keyboard-aware height on phones', () => {
 test('one token sets the bottom nav height, and every bar above it is built from that token', () => {
   const tokenAt = style.indexOf('--mnav-h: 74px;');
   expect(tokenAt).toBeGreaterThan(style.indexOf(':root {'));
-  expect(tokenAt).toBeLessThan(style.indexOf('--ink:#100F0D; --ink2'));
+  expect(tokenAt).toBeLessThan(style.indexOf('--ink:#17140F; --ink2'));
   expect(style).toMatch(/\.pub-shell \.mnav\{[^}]*height:calc\(var\(--mnav-h\) \+ env\(safe-area-inset-bottom\)\)/);
   expect(style).not.toMatch(literalNavOffset);
   expect(phone).not.toMatch(literalNavOffset);

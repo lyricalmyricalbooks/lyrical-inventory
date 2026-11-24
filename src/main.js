@@ -10,6 +10,8 @@ import './styles/theme-dark.css';
 import './styles/phone.css';
 // The Riso phone redesign sits on top of the phone layer above.
 import './styles/phone-riso.css';
+// Folio, the visual layer, goes on top of everything (src/styles/folio.css).
+import './styles/folio.css';
 import { plural } from './lib/plural.js';
 import { moreIconFor, moreIconHtml } from './lib/more-icons.js';
 import { phoneBooksHtml, nextPhoneBooksSort } from './lib/phone-books.js';

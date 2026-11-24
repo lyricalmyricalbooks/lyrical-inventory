@@ -17,8 +17,8 @@
      above and below, and the 2px ink rule on its top edge. Anything that sits
      above the nav is positioned from this, so a nav change moves them together. */
   --mnav-h: 74px;
-  --ink:#100F0D; --ink2:#1C1A17; --ink3:#2B2823; --ink4:#3E3A33;
-  --cream:#FAF6EC; --cream2:#F0E9DA; --cream3:#E4DAC5; --cream4:#D3C6AB;
+  --ink:#17140F; --ink2:#221E18; --ink3:#2E2A23; --ink4:#3E3A33;
+  --cream:#F5F1E8; --cream2:#EFEADD; --cream3:#E7E1D3; --cream4:#D8D0BF;
   --surface-card:#FFFFFF;
   /* Flare — the primary accent. --gold is the FILL (ink text sits on it at
      4.74:1, which is the tightest pairing in the app: never lighten it).
@@ -28,26 +28,26 @@
      TEXT on the app's permanently-dark chrome (the tab bar, KPI banners)
      where a darker flare would vanish. --gold-text is the only one that goes
      the other way — it is the ink for flare text on paper. */
-  --gold:#E8402A; --gold2:#FF6B55; --gold3:#FFB3A6; --gold-text:#B4271A;
-  --gold-bg:rgba(232,64,42,.1); --gold-line:rgba(232,64,42,.45);
+  --gold:#E8402A; --gold2:#FF6B55; --gold3:#FFB3A6; --gold-text:#A52B17;
+  --gold-bg:rgba(232,64,42,.1); --gold-line:rgba(217,58,34,.35);
   /* Progress-bar trough on a surface that FLIPS with the theme. The base
      .bar-track tint is a white wash built for the permanently-dark
      .stock-block; on a themed card it needs its own value per theme, or the
      trough vanishes and the bar loses the length you read it against. */
-  --track-bg:rgba(16,15,13,.12);
-  --text:#100F0D; --text2:#3E3A34; --text3:#5F5950; --text4:#9B9386;
-  --green:#0A6B47; --green-light:#12A06A; --green-bg:rgba(18,160,106,.12);
-  --red:#B4271A; --red-light:#E8402A; --red-bg:rgba(232,64,42,.1);
+  --track-bg:#EFEADD;
+  --text:#17140F; --text2:#55504A; --text3:#625D56; --text4:#8F887C;
+  --green:#1B6F4B; --green-light:#12A06A; --green-bg:#E4F2EA;
+  --red:#A52B17; --red-light:#D93A22; --red-bg:#FCEBE7;
   /* Yellow is the loudest thing in the palette and the least legible: 1.4:1
      on paper. It is a FILL ONLY (--amber-bg). --amber is its ink. */
-  --amber:#6B4600; --amber-bg:rgba(255,201,60,.3);
-  --blue:#1B3FE0; --blue-bg:#DEE4FD;
+  --amber:#8A5A00; --amber-bg:#FBF0D4;
+  --blue:#2F4FD0; --blue-bg:#E6EAFB;
   /* The CALM rule — table rows, form fields, dividers. Bold chrome uses
      --rule-ink below instead. Keeping these two apart is what stops a
      200-row ledger turning into a grid of black boxes. */
-  --border:rgba(16,15,13,.26); --border2:rgba(16,15,13,.12);
+  --border:rgba(23,20,15,.2); --border2:rgba(23,20,15,.09);
   /* The BOLD rule — the 2px outline on cards, buttons, KPI tiles, modals. */
-  --rule-ink:#100F0D;
+  --rule-ink:rgba(23,20,15,.12);
 
   /* ── THEME-STABLE CONTENT ───────────────────────────────────────────────
      --cream/--ink are SURFACES, and src/styles/theme-dark.css flips them.
@@ -56,7 +56,7 @@
      instead — they are identical in both themes. Never write
      `color:var(--cream)`: it reads correctly today and inverts to
      dark-on-dark the moment the theme switches. */
-  --on-inverse:#FAF6EC;
+  --on-inverse:#F5F1E8;
   --on-inverse-2:rgba(250,246,236,.74);
   /* .58, not .45: this tier is used for 9-11px uppercase micro-labels on ink,
      and AA judges those as normal text. .45 measured 3.6:1. */
@@ -90,19 +90,19 @@
      they don't read as unfinished; everything else is a hard corner.
      --r-pill is the one deliberate exception: status pills stay lozenges,
      because their shape is how you tell them from a button at a glance. */
-  --r:0; --r2:0; --r3:4px; --r-pill:999px;
+  --r:8px; --r2:8px; --r3:12px; --r-pill:999px;
   /* Border WIDTH had no token before this — 479 rules said `1px solid` by
      hand, which is why the old design could never change its weight. Bold
      chrome takes --stroke, calm data takes --stroke-hair. */
-  --stroke:2px; --stroke-hair:1px;
+  --stroke:1px; --stroke-hair:1px;
 
   /* ── TYPE ───────────────────────────────────────────────────────────────
      Anton for display (condensed, uppercase, loud), Archivo for interface,
      DM Mono for every figure. All three were already being loaded; Playfair
      and Syne are dropped, so the font request gets smaller. */
-  --font-display:'Anton',Impact,'Archivo',sans-serif;
-  --font-ui:'Archivo','Helvetica Neue',system-ui,sans-serif;
-  --font-mono:'DM Mono',ui-monospace,monospace;
+  --font-display:'Geist',system-ui,sans-serif;
+  --font-ui:'Geist',system-ui,-apple-system,'Helvetica Neue',sans-serif;
+  --font-mono:'Geist Mono',ui-monospace,monospace;
   --font-marker:'Permanent Marker',cursive;
   /* Spacing scale — use these instead of ad-hoc px so padding/margins stay
      consistent as new screens are added. Roughly a 1.5x step from 4px. */
@@ -138,8 +138,8 @@
      tests/theme.test.js both read only the FIRST :root — anything defined in
      a second block is silently exempt from every contrast and
      dark-completeness check. Keep all palette tokens in this block. */
-  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235F5950' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23E8402A' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236F6A63' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  --select-arrow-gold: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23D93A22' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 html{background:var(--cream);overflow-wrap:break-word;-webkit-text-size-adjust:100%;text-size-adjust:100%;}
