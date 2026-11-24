@@ -306,7 +306,7 @@ async function renderBigCartelTab() {
     // does the storefront say?", so a stale answer now beats a blank panel.
     renderBigCartelLedgerGaps();
     renderBigCartelGapBadge();
-    autoCheckBigCartelLedgerGaps();
+    autoCheckBigCartelLedgerGaps({ opened: true });
   } else {
     $('bc-dashboard-content').style.display = 'none';
   }
@@ -1714,7 +1714,14 @@ async function checkBigCartelLedgerGaps({ silent = false } = {}) {
  * round trip, and always silent — its whole job is to put a number on the tab
  * badge before anyone thinks to look.
  */
-async function autoCheckBigCartelLedgerGaps() {
+// Big Cartel is retired (the shop stopped selling there in November 2026) and
+// stays hidden, so nothing asks the storefront on its own any more: no
+// missing-order check at start-up and no order watch. The screen, reached from
+// Settings, still works when opened by hand.
+const BIG_CARTEL_BACKGROUND_CHECKS = false;
+
+async function autoCheckBigCartelLedgerGaps({ opened = false } = {}) {
+  if (!BIG_CARTEL_BACKGROUND_CHECKS && !opened) return;
   const cached = readBcGapCache();
   if (cached?.result && (Date.now() - cached.checkedAt) < BC_GAP_MAX_AGE_MS) {
     // Restored whole, counts included, so the summary line still reports what
@@ -2153,6 +2160,7 @@ async function refreshBigCartelOrdersIfDue({ force = false } = {}) {
  * and picked up again after the signal came back (online).
  */
 function startBigCartelOrderWatch() {
+  if (!BIG_CARTEL_BACKGROUND_CHECKS) return;
   if (_bcWatchStarted || typeof window === 'undefined') return;
   _bcWatchStarted = true;
   // Seeded from when the storefront was actually last asked, not from now: the
