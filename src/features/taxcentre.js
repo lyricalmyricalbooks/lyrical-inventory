@@ -1302,7 +1302,7 @@ function tcRenderQuickTripChips() {
   const currentVal = ($('tc-exp-trip')?.value || '').trim();
   const chipsHtml = sortedTrips.map(t => {
     const isActive = currentVal.toLowerCase() === t.name.toLowerCase();
-    return `<button type="button" class="tc-trip-chip ${isActive ? 'is-active' : ''}" onclick="tcSelectTripOption('tc-exp-trip', ${jsArg(t.name.replace(/'/g, "\\'"))})">
+    return `<button type="button" class="tc-trip-chip ${isActive ? 'is-active' : ''}" onclick="tcSelectTripOption('tc-exp-trip', ${jsArg(t.name)})">
       ✈ ${escapeHtml(t.name)} <span class="count-pill">${t.count}</span>
     </button>`;
   }).join('');
@@ -3043,7 +3043,6 @@ function renderDeductionGaps() {
 
 /** One possible miscategorization, as a card the publisher can fix or dismiss. */
 function _catMismatchHtml(f, cur) {
-  const q = (v) => escapeHtml(String(v)).replace(/'/g, '&#39;');
   return `<div class="ded-gap card">
       <div class="ded-gap-top">
         <div class="ded-gap-head">
@@ -3056,10 +3055,10 @@ function _catMismatchHtml(f, cur) {
       <p class="ded-gap-prompt">${escapeHtml(f.prompt)}</p>
       <div class="ded-gap-actions">
         ${f.scope === 'business'
-          ? `<button type="button" class="btn gold sm sys-target" onclick="changeExpenseCategory(${jsArg(q(f.expenseId))}, ${jsArg(q(f.suggestedCategory))});renderDeductionGaps()">Move to ${escapeHtml(f.suggestedCategory)}</button>`
-          : `<button type="button" class="btn gold sm sys-target" onclick="openEditExpense('bookExpense', ${jsArg(q(f.bookId || ''))}, ${jsArg(q(f.expenseId))})">Review — move to ${escapeHtml(f.suggestedCategory)}</button>`}
-        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap(${jsArg(q(f.id))})">Remind me later</button>
-        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap(${jsArg(q(f.id))})">Not a mistake</button>
+          ? `<button type="button" class="btn gold sm sys-target" onclick="changeExpenseCategory(${jsArg(f.expenseId)}, ${jsArg(f.suggestedCategory)});renderDeductionGaps()">Move to ${escapeHtml(f.suggestedCategory)}</button>`
+          : `<button type="button" class="btn gold sm sys-target" onclick="openEditExpense('bookExpense', ${jsArg(f.bookId || '')}, ${jsArg(f.expenseId)})">Review — move to ${escapeHtml(f.suggestedCategory)}</button>`}
+        <button type="button" class="btn ghost sm sys-target" onclick="snoozeDeductionGap(${jsArg(f.id)})">Remind me later</button>
+        <button type="button" class="btn ghost sm sys-target" onclick="dismissDeductionGap(${jsArg(f.id)})">Not a mistake</button>
       </div>
     </div>`;
 }
