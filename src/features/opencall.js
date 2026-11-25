@@ -49,6 +49,7 @@ import {
   ocNextEmailKey, ocFieldWords, ocTrimQuotedReply,
 } from '../lib/opencall.js';
 import { storageRead, storageSet } from '../lib/safe-storage.js';
+import { mergeOpenCallData } from '../lib/unread-settings.js';
 
 let ocImportOpen = false;
 let ocSortBy = 'dateDesc';
@@ -2607,10 +2608,22 @@ let OPENCALL_DATA = {
 let ocSearchQuery = '';
 let ocFilterStage = '';
 
+// Whether the cloud copy was read this session. Until it has been, a save reads
+// it first and merges, so a blank start on a bad connection can't wipe every
+// project and contributor saved from another device.
+let _ocCloudRead = false;
+// True while the data is the blank "General Open Call" made when nothing could
+// be read, so an untouched blank project isn't added to the cloud's projects.
+let _ocBlankStart = false;
+
 async function loadOpenCalls() {
   let data = null;
-  data = await window._fbLoadSettings('openCalls');
+  try {
+    data = await window._fbLoadSettings('openCalls', { strict: true });
+    _ocCloudRead = true;
+  } catch (_) { _ocCloudRead = false; }
   if (!data) { try { data = JSON.parse(localStorage.getItem(OPENCALL_KEY)); } catch (_) { } }
+  _ocBlankStart = !(data && typeof data === 'object' && data.projects);
   if (data && typeof data === 'object' && data.projects) {
     OPENCALL_DATA = data;
     Object.values(OPENCALL_DATA.projects).forEach(proj => {
@@ -2655,6 +2668,27 @@ async function _persistOpenCalls() {
     proj.inbox = pruned.inbox;
     proj.outbox = pruned.outbox;
   });
+  if (!_ocCloudRead) {
+    try {
+      const cloud = await window._fbLoadSettings('openCalls', { strict: true });
+      _ocCloudRead = true;
+      if (cloud && typeof cloud === 'object' && cloud.projects) {
+        const blank = _ocBlankStart && OPENCALL_DATA.projects.default;
+        if (blank && !(blank.contributors || []).length) {
+          delete OPENCALL_DATA.projects.default;
+          OPENCALL_DATA.activeProjectId = '';
+        }
+        OPENCALL_DATA = mergeOpenCallData(cloud, OPENCALL_DATA);
+        renderOpenCall(); // show the projects and contributors the cloud had
+      }
+      _ocBlankStart = false;
+    } catch (_) {
+      try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) { }
+      showToast('Saved on this device only. Your open calls could not be reached; try again when online.', 'warn', 6000);
+      updateOpenCallBadges();
+      return;
+    }
+  }
   await window._fbSaveSettings('openCalls', OPENCALL_DATA);
   try { localStorage.setItem(OPENCALL_KEY, JSON.stringify(OPENCALL_DATA)); } catch (_) { }
   updateOpenCallBadges();

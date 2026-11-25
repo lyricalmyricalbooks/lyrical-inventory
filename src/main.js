@@ -1154,7 +1154,7 @@ import {
 } from './features/sheets-bridge.js';
 import { sheetTabKey } from './lib/sheet-sync.js';
 import { IN_PERSON_CHANNELS, channelStats, hasOwnChannel } from './lib/channel-mix.js';
-import { mapImportRow } from './lib/import-columns.js';
+import { mapImportRow, planImportRefunds } from './lib/import-columns.js';
 import { csvToObjects, toCsv } from './lib/csv.js';
 import { plainChanges, kindLabel, parseBuildDate, relativeWhen, dayHeading } from './lib/whats-new.js';
 import { downloadText, downloadCsv } from './lib/download.js';
@@ -9413,6 +9413,9 @@ let _importRows = [];
 // how a date like 03/04 is read — the preview re-reads the dates when the owner
 // says their file is day-first.
 let _importParsed = [];
+// Order numbers of sales already in the book that a refund row in the file
+// undoes (src/lib/import-columns.js planImportRefunds).
+let _importRefundNums = [];
 let _importFileName = '';
 // How dates like 03/04 are written: remembered on this device, since a shop's
 // spreadsheets tend to come from the same place each time.
@@ -9480,14 +9483,21 @@ async function handleImportFile(event) {
         return d ? `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` : null;
       } : null;
       const mapped = rows.map(colMap);
-      // A quantity of 0 or less is a cancelled line or a refund: never a sale.
-      const skippedNonSales = mapped.filter(r => !(r.qty > 0)).length;
-      _importParsed = mapped.filter(r => r.qty > 0).map(r => ({ ...r, excelSerial }));
-      if (skippedNonSales) showToast(`${skippedNonSales} row${skippedNonSales === 1 ? '' : 's'} with a quantity of 0 or less (cancelled or refunded) left out`, 'warn', 6000);
+      // A cancelled line is never a sale, and a refund row undoes the sale it
+      // refunds instead of being left out (or, written at a minus price,
+      // going in as a sale).
+      const plan = planImportRefunds(mapped, getState().hist);
+      _importParsed = plan.sales.map(r => ({ ...r, excelSerial }));
+      _importRefundNums = plan.voidNums;
+      const leftOut = [];
+      if (plan.cancelled) leftOut.push(`${plan.cancelled} cancelled line${plan.cancelled === 1 ? '' : 's'}`);
+      if (plan.unmatched) leftOut.push(`${plan.unmatched} refund${plan.unmatched === 1 ? '' : 's'} with no matching sale, or for only part of one`);
+      if (plan.locked) leftOut.push(`${plan.locked} refund${plan.locked === 1 ? '' : 's'} of a sale already paid out to an author or matched to a website order`);
+      if (leftOut.length) showToast(`Left out: ${leftOut.join('; ')}.${plan.unmatched || plan.locked ? ' Void those refunded sales in History by hand.' : ''}`, 'warn', 8000);
       _importFileName = String(file.name || sheetName || '');
       readImportDates();
 
-      if (!_importRows.length) { showToast('Could not parse any valid rows', 'warn'); return; }
+      if (!_importRows.length && !_importRefundNums.length) { showToast('Could not parse any valid rows', 'warn'); return; }
 
       // Reset modal layout for spreadsheet import
       const modalTitle = $('import-modal-title');
@@ -9583,10 +9593,14 @@ function renderImportPreview() {
       ? ` ${skipParts.join(' and ')}, so ${skipped === 1 ? 'it' : 'they'} will be left out and <strong>${kinds.fresh} new</strong> will be added.`
       : ` All of them are already in this book, so there is nothing new to add.`)
     : '';
-  $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource}.${skipLine} Review below then confirm.`
+  const refunds = _importRefundNums.length;
+  const refundLine = refunds
+    ? ` <strong>${refunds} refund${refunds === 1 ? '' : 's'}</strong> in the file will void ${refunds === 1 ? 'its sale' : 'their sales'} already in this book (order${refunds === 1 ? '' : 's'} ${escapeHtml(_importRefundNums.join(', '))}).`
+    : '';
+  $('import-summary').innerHTML = `Found <strong>${_importRows.length} orders</strong> in ${_importSource}.${skipLine}${refundLine} Review below then confirm.`
     + (notes.length ? `<div class="stock-alert warn import-date-notes">${notes.map(n => `<p>${n}</p>`).join('')}</div>` : '');
   $('import-count').textContent = kinds.fresh;
-  setImportReady(kinds.fresh > 0);
+  setImportReady(kinds.fresh > 0 || refunds > 0);
   $('import-preview-body').innerHTML = _importRows.map(r => `
         <tr${r.status !== 'new' ? ' class="import-row-skip"' : ''}>
           <td class="mono">${escapeHtml(r.num)}</td>
@@ -9607,7 +9621,7 @@ function renderImportPreview() {
 }
 
 function confirmImport() {
-  if (!_importRows.length) return;
+  if (!_importRows.length && !_importRefundNums.length) return;
   const s = getState(), book = getBook();
   // Every row of this import carries its id, so the whole import can be undone
   // in one step from History (undoImport).
@@ -9615,8 +9629,21 @@ function confirmImport() {
   // A voided row doesn't count: after "Undo this import", the corrected file
   // has to be able to come back in.
   const existingNums = new Set(s.hist.filter(h => !h.voided).map(h => h.num));
-  let imported = 0, skipped = 0;
+  let imported = 0, skipped = 0, refunded = 0;
   const added = [];
+
+  // Refunds first: each voids its sale the way the Void button does, marked
+  // with this import so undoing the import brings the sale back.
+  _importRefundNums.forEach(num => {
+    const rows = s.hist.filter(h => !h.voided && String(h.num) === num);
+    if (rows.some(h => h.artistSettlementId || h.webOrderId)) return;
+    rows.forEach(h => {
+      voidHistEntry(s, book, h, { recompute: false });
+      h.voidedReason = 'Refunded (spreadsheet import)';
+      h.refundedByImport = importExtra.importId;
+      refunded++;
+    });
+  });
 
   // Add in reverse so newest ends up at top after unshift
   [..._importRows].reverse().forEach(r => {
@@ -9640,10 +9667,12 @@ function confirmImport() {
   updateDash();
   closeM('import');
   _importRows = [];
+  _importRefundNums = [];
   setImportReady(false);
+  const refundNote = refunded ? `, ${refunded} refunded sale${refunded === 1 ? '' : 's'} voided` : '';
   const msg = skipped > 0
-    ? `✓ Imported ${imported} orders (${skipped} duplicates skipped)`
-    : `✓ Imported ${imported} orders`;
+    ? `✓ Imported ${imported} orders (${skipped} duplicates skipped${refundNote})`
+    : `✓ Imported ${imported} orders${refundNote}`;
   showToast(imported ? `${msg}. You can undo the whole import from the top of History.` : msg, 'ok', 5000);
 }
 
@@ -9670,6 +9699,11 @@ async function undoImport(importId) {
   undoable.forEach(h => {
     voidHistEntry(s, book, h, { recompute: false });
     h.voidedReason = 'Import undone';
+  });
+  // Sales this import voided as refunded count again.
+  (s.hist || []).filter(h => h.voided && h.refundedByImport === importId).forEach(h => {
+    unvoidHistEntry(s, book, h);
+    delete h.refundedByImport;
   });
   recomputeAfters(s, book);
   saveState(activeBook);

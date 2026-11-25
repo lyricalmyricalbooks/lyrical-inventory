@@ -2,6 +2,8 @@
 // Kept dependency-free so they can be imported anywhere and unit-tested
 // without a DOM or Firestore stub.
 
+import { halfUpCents } from './cents.js';
+
 /** @typedef {import('../types/ledger').NumberLike} NumberLike */
 /** @typedef {import('../types/ledger').Payment} Payment */
 /** @typedef {import('../types/ledger').Book} Book */
@@ -85,8 +87,12 @@ export const fmtNum = (n) => Number(n).toFixed(2);
 // Round a currency amount to whole cents, killing binary floating-point drift
 // (e.g. 0.1 + 0.2 = 0.30000000000000004). Use this around any running total of
 // money so accumulated error can't grow as the number of transactions grows.
+// A half cent rounds away from zero (src/lib/cents.js).
 /** @param {NumberLike} n @returns {number} */
-export const roundCents = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+export const roundCents = (n) => {
+  const x = Number(n);
+  return Number.isFinite(x) ? halfUpCents(x) / 100 : x;
+};
 
 // The table date ("4 Mar 2025") now lives with the other date helpers; it is
 // re-exported here because most screens import it alongside fmt().
