@@ -434,3 +434,75 @@ svg.ic { stroke-width:1.75; }
   .pub-shell :is(.more-sheet-body, .more-sheet-foot, .mnav) :is(.nav-badge, .bc-gap-badge) { border-radius:999px !important; }
   .pub-shell .more-sheet-close { border-radius:999px !important; }
 }
+
+/* ───────── Folio round three (2026-11-25) ─────────
+   Same layout and order; only the look changes. Section tabs become a soft
+   strip, the Tax Centre money cards lose their thick side bars, small capital
+   labels go sentence case, and decorative emoji become line icons
+   (src/lib/folio-icons.js swaps them for sprite icons). */
+
+/* Line icons that replaced emoji */
+.lead-emoji.lead-ic { display:inline-flex !important; align-items:center; margin-right:6px; vertical-align:-3px; }
+.lead-emoji.lead-ic .ic { width:16px; height:16px; }
+.fo-icon-box { font-size:0 !important; line-height:0; color:var(--text3); }
+.fo-icon-box .ic { width:22px; height:22px; }
+.e-icon.fo-icon-box .ic, .dz-icon.fo-icon-box .ic { width:30px; height:30px; }
+.hist-kpi-icon.fo-icon-box { color:var(--text2); }
+
+/* Section tabs: a soft strip; the open tab is a white card with an accent icon */
+.settings-sub-nav {
+  display:inline-flex !important; flex-wrap:wrap; gap:2px !important; max-width:100%;
+  background:var(--cream2); border:0 !important; border-radius:var(--r3); padding:4px !important;
+}
+.settings-sub-tab {
+  border:0 !important; border-radius:9px !important; margin:0 !important;
+  background:transparent !important; color:var(--text2) !important;
+  text-transform:none !important; letter-spacing:0 !important;
+  font-family:var(--font-ui) !important; font-weight:600 !important; font-size:13.5px !important;
+  padding:8px 14px !important; min-height:38px !important;
+}
+.settings-sub-tab:hover { background:var(--surface-card) !important; color:var(--text) !important; }
+.settings-sub-tab.active, .settings-sub-tab[aria-selected="true"] {
+  background:var(--surface-card) !important; color:var(--text) !important;
+  box-shadow:0 1px 2px rgba(23,20,15,.10), 0 0 0 1px var(--border2) !important;
+}
+.settings-sub-tab.active .lead-ic { color:var(--folio-accent); }
+
+/* Tax Centre cash-flow summary */
+#tab-taxcenter .cf-card { border:1px solid var(--border2) !important; border-radius:16px !important; box-shadow:var(--folio-shadow-card) !important; }
+.cf-cad-badge {
+  background:var(--cream2) !important; color:var(--text2) !important; border:0 !important;
+  text-transform:none !important; letter-spacing:0 !important;
+  font-family:var(--font-ui) !important; font-weight:600 !important; font-size:12px !important;
+  padding:5px 12px !important; border-radius:var(--r-pill) !important;
+}
+.cf-stat {
+  background:var(--surface-card) !important; border:1px solid var(--border2) !important;
+  border-radius:14px !important; box-shadow:var(--folio-shadow-card) !important; padding:16px 18px !important;
+}
+.cf-stat .cf-ic { width:34px !important; height:34px !important; border-radius:10px !important; display:inline-flex; align-items:center; justify-content:center; }
+.cf-stat .cf-ic svg { stroke-width:1.75; }
+.cf-stat.cf-income .cf-ic { background:var(--green-bg) !important; color:var(--green) !important; }
+.cf-stat.cf-expense .cf-ic { background:var(--red-bg) !important; color:var(--red) !important; }
+#tc-net-card .cf-ic { background:var(--cream2) !important; color:var(--text2) !important; border-color:transparent !important; }
+.cf-stat-label { text-transform:none !important; letter-spacing:0 !important; font-family:var(--font-ui) !important; font-weight:500 !important; font-size:13px !important; color:var(--text2) !important; }
+.cf-stat-sub { font-family:var(--font-ui) !important; font-size:12px !important; color:var(--text3) !important; }
+.cf-kpi { background:var(--cream2) !important; border:0 !important; border-radius:var(--r3) !important; }
+.cf-kpi-label { text-transform:none !important; letter-spacing:0 !important; font-family:var(--font-ui) !important; font-weight:500 !important; font-size:12px !important; color:var(--text3) !important; }
+
+/* Form labels: quiet sentence case */
+.form-group > label { text-transform:none !important; letter-spacing:0 !important; font-family:var(--font-ui) !important; font-weight:600 !important; font-size:13px !important; color:var(--text2) !important; }
+
+/* Softer button corners */
+.btn { border-radius:10px !important; }
+
+/* History tiles: no coloured underline */
+.hist-kpi-card { border-bottom:1px solid var(--border2) !important; box-shadow:var(--folio-shadow-card) !important; border-radius:14px !important; }
+.hist-kpi-card::before, .hist-kpi-card::after { display:none !important; }
+
+@media (max-width: 768px) {
+  /* Phone keeps its section drop-down; icons show beside button words. */
+  .lead-emoji.lead-ic, .book-strip-meta .lead-emoji.lead-ic { display:inline-flex !important; }
+  .settings-sub-nav { display:flex !important; flex-wrap:nowrap; }
+  .tab-panel .settings-sub-nav.has-phone-picker { display:none !important; }
+}
