@@ -26,7 +26,26 @@
 export function toCents(amount) {
   const n = Number(amount);
   if (!Number.isFinite(n)) return 0;
-  return Math.round((n + Number.EPSILON) * 100);
+  return halfUpCents(n);
+}
+
+/**
+ * Whole cents in a finite number, a half cent rounded away from zero, the way
+ * a till or a tax form rounds. A decimal like 2.135 (5% GST on 42.70) is held
+ * by the computer as 2.13499999…, and nudging it by a tiny constant only
+ * helped amounts under about 8, so tax on a bigger sale lost its half cent.
+ * Reading the amount at 12 significant digits first gives back the figure as
+ * written. Refunds and other negative amounts round the same way as positive
+ * ones (−2.675 is −2.68, not −2.67).
+ * @param {number} n
+ * @returns {number}
+ */
+export function halfUpCents(n) {
+  const a = Math.abs(n);
+  if (a < 1e-9) return 0;
+  if (a >= 1e13) return Math.round(n * 100);
+  const cents = Math.round(Number(`${Number(a.toPrecision(12))}e2`));
+  return n < 0 && cents ? -cents : cents;
 }
 
 /** @param {number} cents @returns {number} */

@@ -41,6 +41,7 @@ import { downloadCsv } from '../lib/download.js';
 import { fmtD, getBookCurrencyCode, normalizeCurrencyCode } from '../lib/money.js';
 import { describeCustomerFilters, joinFilterLabels } from '../lib/customer-segment.js';
 import { storageRead } from '../lib/safe-storage.js';
+import { unionById } from '../lib/unread-settings.js';
 
 // ── CUSTOMERS / MAILING LIST ────────────────────────────────────────────────
 // Aggregates every buyer we can identify into one de-duplicated contact list
@@ -71,7 +72,7 @@ function _isCustomerSuppressed(email) { return _customerSuppress.has(_custEmailK
 // unsubscribe list or the mailing list, so until the cloud copy has been read,
 // a save first reads it and merges this device's changes into it, and if it
 // still can't be read, the change stays on this device only.
-const _cloudRead = { customerSuppress: false, mailingList: false };
+const _cloudRead = { customerSuppress: false, mailingList: false, campaigns: false };
 async function _readCloudList(key) {
   const data = await window._fbLoadSettings(key, { strict: true });
   _cloudRead[key] = true;
@@ -717,7 +718,7 @@ let activeCustomersSubTab = 'audience';
 
 async function loadCampaigns() {
   let data = null;
-  data = await window._fbLoadSettings('campaigns');
+  try { data = await _readCloudList('campaigns'); } catch (_) { _cloudRead.campaigns = false; }
   if (!data) { try { data = JSON.parse(localStorage.getItem(CAMPAIGNS_KEY) || '[]'); } catch (_) { } }
   if (Array.isArray(data)) {
     CAMPAIGNS = data;
@@ -726,7 +727,19 @@ async function loadCampaigns() {
   }
 }
 
+// As the mailing list: until the saved newsletters have been read from the
+// cloud, a save reads them first and keeps the ones only the cloud has.
 async function _persistCampaigns() {
+  if (!_cloudRead.campaigns) {
+    try {
+      const cloud = await _readCloudList('campaigns');
+      if (Array.isArray(cloud)) CAMPAIGNS = unionById(cloud, CAMPAIGNS);
+    } catch (_) {
+      try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) { }
+      showToast('Saved on this device only. Your saved newsletters could not be reached; try again when online.', 'warn', 6000);
+      return;
+    }
+  }
   await window._fbSaveSettings('campaigns', CAMPAIGNS);
   try { localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(CAMPAIGNS)); } catch (_) { }
 }

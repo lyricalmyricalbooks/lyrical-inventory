@@ -376,6 +376,18 @@ async function submitInventoryWriteOff() {
     : `✓ ${quantity} ${quantity === 1 ? 'copy' : 'copies'} disposed and removed from stock`, 'ok', 5000);
 }
 
+// Titles in a currency with no rate to CAD are left out of the CAD totals.
+// Their CAD cells say so instead of showing $0.00, and every total says which
+// titles it leaves out, so a printed or exported balance sheet isn't quietly short.
+function unconvertedTitles(items) {
+  return items.filter(item => item.fxMissing && item.totalUnsold > 0).map(item => item.title);
+}
+function leftOutNote(items) {
+  const titles = unconvertedTitles(items);
+  return titles.length ? `Not in the CAD totals (no exchange rate yet): ${titles.join(', ')}` : '';
+}
+const cadMoney = (item, value, suffix = '') => (item.fxMissing ? 'no rate yet' : `$${value.toFixed(2)}${suffix}`);
+
 function downloadInventoryValuationCSV() {
   const { items, totals } = calculateInventoryValuationData();
   const esc = csvCell;
@@ -388,10 +400,13 @@ function downloadInventoryValuationCSV() {
   csv += 'Book ID,Title,ISBN,Binding / Format,Print Run,Stock On-Hand (Warehouse),Stock Consigned (Stores),Total Unsold Inventory,Lifetime Sold Units,Currency,Unit Print Cost (Native),Unit Retail Price (Native),Unit Margin (Native),Unit Margin %,FX Rate (CAD),On-Hand Asset Value Cost (CAD),Consigned Asset Value Cost (CAD),TOTAL ASSET VALUE COST (CAD),TOTAL RETAIL VALUE (CAD),POTENTIAL GROSS PROFIT (CAD)\n';
 
   items.forEach(item => {
-    csv += `${esc(item.id)},${esc(item.title)},${esc(item.isbn)},${esc(item.format)},${item.printRun},${item.stockOnHand},${item.stockConsigned},${item.totalUnsold},${item.totalSold},${esc(item.currency)},${item.unitCost.toFixed(2)},${item.listPrice.toFixed(2)},${item.unitMargin.toFixed(2)},${item.unitMarginPct.toFixed(1)}%,${item.fxRate.toFixed(4)},${item.onHandCostCAD.toFixed(2)},${item.consignedCostCAD.toFixed(2)},${item.totalCostCAD.toFixed(2)},${item.totalRetailCAD.toFixed(2)},${item.potentialGrossProfitCAD.toFixed(2)}\n`;
+    csv += `${esc(item.id)},${esc(item.title)},${esc(item.isbn)},${esc(item.format)},${item.printRun},${item.stockOnHand},${item.stockConsigned},${item.totalUnsold},${item.totalSold},${esc(item.currency)},${item.unitCost.toFixed(2)},${item.listPrice.toFixed(2)},${item.unitMargin.toFixed(2)},${item.unitMarginPct.toFixed(1)}%,${item.fxMissing ? 'no rate yet,,,,,' : `${item.fxRate.toFixed(4)},${item.onHandCostCAD.toFixed(2)},${item.consignedCostCAD.toFixed(2)},${item.totalCostCAD.toFixed(2)},${item.totalRetailCAD.toFixed(2)},${item.potentialGrossProfitCAD.toFixed(2)}`}\n`;
   });
 
   csv += `TOTALS,"Total Active Titles: ${totals.totalTitles}",,,${totals.totalPrintRun},${totals.totalStockOnHand},${totals.totalStockConsigned},${totals.totalUnsoldUnits},${totals.totalSoldUnits},CAD,,,,,,${totals.totalOnHandCostCAD.toFixed(2)},${totals.totalConsignedCostCAD.toFixed(2)},${totals.totalAssetValueCostCAD.toFixed(2)},${totals.totalAssetValueRetailCAD.toFixed(2)},${totals.totalPotentialGrossProfitCAD.toFixed(2)}\n`;
+
+  const csvNote = leftOutNote(items);
+  if (csvNote) csv += `${csvCell(csvNote)}\n`;
 
   const adjustmentRows = inventoryAdjustmentCsvRows(TAX_CENTER.businessExpenses);
   if (adjustmentRows.length > 1) {
@@ -424,9 +439,9 @@ function openInventoryValuationModal() {
   if (marginEl) marginEl.textContent = `${totals.weightedAvgMarginPct.toFixed(1)}%`;
   if (subMarginEl) subMarginEl.textContent = `$${totals.totalPotentialGrossProfitCAD.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CAD Total Profit`;
   // A title in a currency with no rate to CAD is left out of those totals; say so.
-  const unconverted = items.filter(item => item.fxMissing && item.totalUnsold > 0);
+  const unconverted = unconvertedTitles(items);
   if (subUnitsEl && unconverted.length) {
-    subUnitsEl.textContent += ` · ${unconverted.map(item => item.title).join(', ')} not in the CAD totals (no exchange rate yet)`;
+    subUnitsEl.textContent += ` · ${unconverted.join(', ')} not in the CAD totals (no exchange rate yet)`;
   }
 
   if (historyEl) {
@@ -469,8 +484,8 @@ function openInventoryValuationModal() {
           <td class="r" style="font-weight:700; color:var(--gold);">${item.totalUnsold}</td>
           <td class="r" style="font-family:var(--font-mono);">${curSym}${item.unitCost.toFixed(2)}</td>
           <td class="r" style="font-family:var(--font-mono);">${curSym}${item.listPrice.toFixed(2)}</td>
-          <td class="r" style="font-family:var(--font-mono); font-weight:600; color:var(--gold);">$${item.totalCostCAD.toFixed(2)}</td>
-          <td class="r" style="font-family:var(--font-mono); font-weight:600; color:var(--green);">$${item.totalRetailCAD.toFixed(2)}</td>
+          <td class="r" style="font-family:var(--font-mono); font-weight:600; color:var(--gold);">${cadMoney(item, item.totalCostCAD)}</td>
+          <td class="r" style="font-family:var(--font-mono); font-weight:600; color:var(--green);">${cadMoney(item, item.totalRetailCAD)}</td>
         </tr>
       `;
     }).join('');
@@ -501,6 +516,7 @@ function printInventoryValuationReport() {
     return;
   }
 
+  const printNote = leftOutNote(items);
   const rows = items.map(item => {
     const curSym = getSym(item.currency);
     return `
@@ -511,8 +527,8 @@ function printInventoryValuationReport() {
       <td style="text-align:right;font-weight:bold;">${item.totalUnsold}</td>
       <td style="text-align:right;">${curSym}${item.unitCost.toFixed(2)}</td>
       <td style="text-align:right;">${curSym}${item.listPrice.toFixed(2)}</td>
-      <td style="text-align:right;font-weight:bold;">$${item.totalCostCAD.toFixed(2)} CAD</td>
-      <td style="text-align:right;font-weight:bold;color:var(--green);">$${item.totalRetailCAD.toFixed(2)} CAD</td>
+      <td style="text-align:right;font-weight:bold;">${cadMoney(item, item.totalCostCAD, ' CAD')}</td>
+      <td style="text-align:right;font-weight:bold;color:var(--green);">${cadMoney(item, item.totalRetailCAD, ' CAD')}</td>
     </tr>
   `;
   }).join('');
@@ -572,6 +588,7 @@ function printInventoryValuationReport() {
           </tr>
         </tfoot>
       </table>
+      ${printNote ? `<p class="meta" style="margin-top:12px;">${escapeHtml(printNote)}</p>` : ''}
     </body>
     </html>
   `);

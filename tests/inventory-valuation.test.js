@@ -93,6 +93,11 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
     const csvMatch = mainContent.match(/function downloadInventoryValuationCSV\(\)\s*\{([\s\S]+?)\n\}/);
     expect(csvMatch).not.toBeNull();
 
+    // The CSV names any title it leaves out for want of an exchange rate.
+    const helperMatch = mainContent.match(/function unconvertedTitles[\s\S]+?\nconst cadMoney[^\n]+/);
+    expect(helperMatch).not.toBeNull();
+    const leftOutHelpers = helperMatch[0];
+
     // csvCell is injected as the real implementation, not a stand-in: the
     // column assertions below are exactly what it is responsible for getting
     // right, so stubbing it would test nothing.
@@ -101,6 +106,7 @@ describe('Robust Inventory Valuation Suite & CSV Export', () => {
       `
         function isTestBook() { return false; }
         function calculateInventoryValuationData() { ${calcMatch[1]} }
+        ${leftOutHelpers}
         return function() { ${csvMatch[1]} }
       `
     );

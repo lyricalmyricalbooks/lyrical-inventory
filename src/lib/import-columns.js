@@ -71,3 +71,44 @@ export function mapImportRow(row) {
     notes: String(cell('notes') || ''),
   };
 }
+
+/**
+ * Sorting the rows of an import into sales to add and refunds to apply.
+ *
+ * A row is a refund when its quantity is below 0, or its price is (an export
+ * that writes a refund as one copy at −30.00). A quantity of 0 is a cancelled
+ * line: never a sale, nothing to undo. A refund undoes a sale with the same
+ * order number when it gives back at least as many copies:
+ *  - the sale's row in this file is left out, and
+ *  - the same sale already in the book (from an earlier import or typed in)
+ *    is voided, unless it was paid out to an author or matched to a website
+ *    order, which stays for a person to check.
+ * A refund for fewer copies, with no order number, or with no matching sale is
+ * left out and counted, so the person can deal with it by hand.
+ *
+ * @param {Array<{ num: string, qty: number, price: number }>} rows  mapImportRow output
+ * @param {Array<any>} hist  the book's history
+ * @returns {{ sales: any[], voidNums: string[], cancelled: number, unmatched: number, locked: number }}
+ */
+export function planImportRefunds(rows, hist) {
+  const isRefund = (r) => r.qty < 0 || (r.qty > 0 && r.price < 0);
+  const refunds = rows.filter(isRefund);
+  const cancelled = rows.filter(r => r.qty === 0).length;
+  let sales = rows.filter(r => r.qty > 0 && !isRefund(r));
+  const live = (hist || []).filter(h => h && !h.voided);
+  const voidNums = [];
+  let unmatched = 0, locked = 0;
+  refunds.forEach(r => {
+    const copies = Math.abs(r.qty);
+    const num = String(r.num || '').trim();
+    const inFile = num ? sales.filter(x => x.num === num) : [];
+    const inBook = num ? live.filter(h => String(h.num) === num) : [];
+    const sold = (list) => list.reduce((n, x) => n + (Number(x.qty) || 0), 0);
+    if (!inFile.length && !inBook.length) { unmatched++; return; }
+    if (copies < Math.max(sold(inFile), sold(inBook))) { unmatched++; return; }
+    if (inFile.length) sales = sales.filter(x => x.num !== num);
+    if (inBook.some(h => h.artistSettlementId || h.webOrderId)) { locked++; return; }
+    if (inBook.length && !voidNums.includes(num)) voidNums.push(num);
+  });
+  return { sales, voidNums, cancelled, unmatched, locked };
+}

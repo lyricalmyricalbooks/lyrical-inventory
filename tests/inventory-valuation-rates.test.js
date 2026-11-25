@@ -35,4 +35,16 @@ describe('inventory valuation before a live rate is fetched', () => {
       app.main.BOOKS.euro.currency = '€';
     }
   });
+
+  it('marks a title with no rate as "no rate yet" in the table, not $0.00', () => {
+    app.main.BOOKS.euro.currency = 'XYZ';
+    try {
+      valuation.openInventoryValuationModal();
+      const row = [...document.querySelectorAll('#iv-modal-table-body tr')].find(tr => tr.textContent.includes('Euro Book'));
+      expect(row.textContent).toContain('no rate yet');
+      expect(row.textContent).not.toContain('$0.00');
+    } finally {
+      app.main.BOOKS.euro.currency = '€';
+    }
+  });
 });
