@@ -16,11 +16,13 @@ import { plural } from './lib/plural.js';
 import { moreIconFor, moreIconHtml } from './lib/more-icons.js';
 import { phoneBooksHtml, nextPhoneBooksSort } from './lib/phone-books.js';
 import { foldFooterActions, initPhoneLayouts } from './lib/phone-layout.js';
+import { initFolioIcons } from './lib/folio-icons.js';
 import { createPhonePageMemory, initPhoneWorkspace, observeSidebarBadges } from './lib/phone-workspace.js';
 const phonePages = createPhonePageMemory(window);
 initPhoneWorkspace(document.getElementById('pw-app'));
 // Body, not #pw-app: the pop-up windows are siblings of the app shell.
 initPhoneLayouts(document.body);
+initFolioIcons(document.body);
 import './firebase.js';
 import { applyReceiptAddition, isReceiptAddition, receiptAdditionApplied } from './lib/expense-receipts.js';
 import { TEST_PROFILE_FLAG, SAMPLE_BOOK_ID, clearTestStorage, isSampleDataSeeded, markSampleDataSeeded } from './lib/test-profile.js';
