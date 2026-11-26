@@ -24,8 +24,8 @@ export function importColumn(row, field) {
     }
     case 'date': return keys.find(k => has(k, 'date')) || '';
     case 'chan': return keys.find(k => has(k, 'channel')) || keys.find(k => has(k, 'chan')) || '';
-    case 'qty': return keys.find(k => has(k, 'qty')) || keys.find(k => has(k, 'quantity')) || '';
-    case 'price': return keys.find(k => has(k, 'unit')) || keys.find(k => has(k, 'price')) || '';
+    case 'qty': return keys.find(k => has(k, 'qty')) || keys.find(k => has(k, 'quantity')) || keys.find(k => squash(k) === 'units') || '';
+    case 'price': return keys.find(k => has(k, 'unit') && squash(k) !== 'units') || keys.find(k => has(k, 'price')) || '';
     case 'notes': return keys.find(k => has(k, 'note')) || '';
     default: return '';
   }

@@ -239,11 +239,11 @@ export function ocMergeTemplate(str, contributor = {}, context = {}) {
   const c = contributor || {};
   const ctx = context || {};
   return String(str == null ? '' : str)
-    .replace(/\{\{name\}\}/g, c.name || 'Artist')
-    .replace(/\{\{photo\}\}/g, ocChosenPhoto(c))
-    .replace(/\{\{creditName\}\}/g, c.creditName || c.name || 'Artist')
-    .replace(/\{\{project\}\}/g, ctx.project || '')
-    .replace(/\{\{date\}\}/g, ctx.date || '');
+    .replace(/\{\{name\}\}/g, () => String(c.name || 'Artist'))
+    .replace(/\{\{photo\}\}/g, () => String(ocChosenPhoto(c)))
+    .replace(/\{\{creditName\}\}/g, () => String(c.creditName || c.name || 'Artist'))
+    .replace(/\{\{project\}\}/g, () => String(ctx.project || ''))
+    .replace(/\{\{date\}\}/g, () => String(ctx.date || ''));
 }
 
 // Which merge fields in `template` would resolve to an empty string for this
@@ -448,7 +448,7 @@ export function ocTrimQuotedReply(text) {
     if (/^\s*>/.test(line)) break;
     // The "On … wrote:" header can wrap onto a second line.
     const joined = (line + ' ' + (lines[i + 1] || '')).trim();
-    if (/^On\b.{4,240}\bwrote:\s*$/.test(line.trim()) || (/^On\b/.test(line.trim()) && /\bwrote:\s*$/.test(joined) && joined.length < 260)) break;
+    if (/^On\b.{4,240}\bwrote:\s*$/.test(line.trim()) || (/^On\b/.test(line.trim()) && !/^On\b.{4,240}\bwrote:\s*$/.test((lines[i + 1] || '').trim()) && /\bwrote:\s*$/.test(joined) && joined.length < 260)) break;
     if (/^-{2,}\s*Original Message\s*-{2,}/i.test(line.trim())) break;
     out.push(line);
   }

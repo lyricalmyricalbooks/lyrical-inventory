@@ -179,7 +179,7 @@ export function isCosmeticCorrection(correction = {}) {
   const from = comparable(correction.from);
   const to = comparable(correction.to);
   if (from === to) return true;
-  return correction.field === 'zip' && !!from && to.startsWith(from);
+  return correction.field === 'zip' && /^\d{5}$/.test(from) && /^\d{9}$/.test(to) && to.startsWith(from);
 }
 
 /**
@@ -197,7 +197,7 @@ export function addressVerdictBlocker(result) {
   if (real.length) {
     return `Shippo suggests fixing the ${real.map(c => String(c.label || c.field).toLowerCase()).join(', ')} — review it in the form.`;
   }
-  if (status !== 'valid' && !(status === 'partially_valid' && !real.length)) return 'Shippo couldn’t fully confirm this address — check it in the form.';
+  if (status !== 'valid' && !(status === 'partially_valid' && (result.corrections || []).length && !real.length)) return 'Shippo couldn’t fully confirm this address — check it in the form.';
   return '';
 }
 

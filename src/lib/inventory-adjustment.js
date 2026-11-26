@@ -6,8 +6,10 @@ function positiveWhole(value) {
 }
 
 function validIsoDate(value) {
-  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) &&
-    !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
+  const text = String(value || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return false;
+  const d = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === text;
 }
 
 function commonRecord(input, type, endingValueNative) {
@@ -74,7 +76,9 @@ function commonRecord(input, type, endingValueNative) {
 }
 
 export function createSection10Adjustment(input) {
-  const nrvPerUnitNative = Number(input.nrvPerUnitNative);
+  const rawNrv = input.nrvPerUnitNative;
+  if (rawNrv === '' || rawNrv == null) throw new Error('NRV must be zero or greater');
+  const nrvPerUnitNative = Number(rawNrv);
   if (!(nrvPerUnitNative >= 0)) throw new Error('NRV must be zero or greater');
   if (nrvPerUnitNative > Number(input.unitCostNative)) {
     throw new Error('NRV cannot exceed original unit cost');

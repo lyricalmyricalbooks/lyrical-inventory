@@ -55,7 +55,7 @@ const OWNER_FIXABLE_FIELDS = [
  * sits somewhere it did not expect — which is exactly what a wrong field map
  * produces, and never what a mistyped address produces.
  */
-const SHAPE_MISMATCH = /\b(unknown|unexpected|unrecognis|unrecogniz|not\s+(a\s+)?valid\s+(field|element|property)|invalid\s+(request|schema|structure|format|element)|schema|malformed|cannot\s+be\s+parsed|no\s+such\s+(field|element))\b/i;
+const SHAPE_MISMATCH = /\b(unknown|unexpected|unrecogni[sz]\w*|not\s+(a\s+)?valid\s+(field|element|property)|invalid\s+(request|schema|structure|element)|schema|malformed|cannot\s+be\s+parsed|no\s+such\s+(field|element))\b/i;
 
 /** Find the first owner-fixable field a description names. */
 function matchOwnerField(description) {

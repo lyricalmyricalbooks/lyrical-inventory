@@ -92,8 +92,10 @@ function chooseParcelBook(lines, books) {
 function customsUnitValue(line, book) {
   const paid = Number.parseFloat(line?.unitPrice);
   if (Number.isFinite(paid) && paid > 0) return Math.round(paid * 100) / 100;
-  const listed = Number.parseFloat(book?.shipCustomsVal ?? book?.listPrice ?? book?.price);
-  if (Number.isFinite(listed) && listed > 0) return Math.round(listed * 100) / 100;
+  for (const v of [book?.shipCustomsVal, book?.listPrice, book?.price]) {
+    const listed = Number.parseFloat(v);
+    if (Number.isFinite(listed) && listed > 0) return Math.round(listed * 100) / 100;
+  }
   return GENERIC_CUSTOMS_VALUE;
 }
 

@@ -433,14 +433,15 @@ export function transferAuthorStock(s, book, delta, note = '', isoDate = '') {
 
   s.authorStock = Math.max(0, Math.min(currentBreakdown.totalOnHand, newAuthorStock));
   const newBreakdown = deriveStockBreakdown(s, book);
+  const moved = newBreakdown.authorHeld - currentBreakdown.authorHeld;
 
   /** @type {StockTransfer} */
   const transfer = {
     id: 'st_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     date: (isoDate && isoDate.slice(0, 10)) || localDay(),
-    delta: d,
+    delta: moved,
     direction: d > 0 ? 'to_author' : 'from_author',
-    qty: Math.abs(d),
+    qty: Math.abs(moved),
     note: (note || '').trim(),
     publisherOnHand: newBreakdown.publisherOnHand,
     authorHeld: newBreakdown.authorHeld,

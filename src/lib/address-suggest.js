@@ -55,7 +55,7 @@ export function cleanSuggestQuery(text) {
     // "200-731 Market St" / "200 - 731 Market St": unit-dash-number at the start.
     .replace(/^\s*[a-z]?\d+[a-z]?\s*-\s*(?=\d)/i, '')
     // "… #200", "… Apt 3", "… Suite 4B", "… Unit 12" anywhere after the street.
-    .replace(/[\s,]+(#|apt\.?|apartment|suite|ste\.?|unit)\s*[\w-]+/gi, '')
+    .replace(/[\s,]+(?:#\s*|(?:apt\.?|apartment|suite|ste\.?|unit)(?![a-z])\s*)[\w-]+/gi, '')
     .split(/\s+/)
     .filter(Boolean);
   let typeAt = words.length - 1;

@@ -66,7 +66,7 @@ export function readDate(value) {
   const iso = text.match(/^(\d{4}-\d{2}-\d{2})/);
   if (iso) return iso[1];
   const parsed = new Date(text);
-  return Number.isNaN(parsed.getTime()) ? '' : parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? '' : `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`;
 }
 
 function candidate(fields) {

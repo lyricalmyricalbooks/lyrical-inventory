@@ -31,7 +31,8 @@ function isbnForms(isbn) {
 export function bookForCode(code, books) {
   const c = bareIsbn(code);
   if (c.length < 8) return null;
-  const hits = Object.values(books || {}).filter(b => b && isbnForms(b.isbn).includes(c));
+  const codes = isbnForms(c);
+  const hits = Object.values(books || {}).filter(b => b && isbnForms(b.isbn).some(f => codes.includes(f)));
   return hits.length === 1 ? hits[0] : null;
 }
 

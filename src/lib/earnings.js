@@ -152,7 +152,7 @@ export function calcArtistEarnings(book, state) {
   if (!book) return null;
   const s = state || {};
   const tiers = book.profitTiers && book.profitTiers.length > 0
-    ? [...book.profitTiers].sort((a, b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity))
+    ? [...book.profitTiers].sort((a, b) => (tierEffectiveCap(a, book.productionCost) ?? Infinity) - (tierEffectiveCap(b, book.productionCost) ?? Infinity))
     : [];
 
   if (tiers.length === 0) return null;
@@ -388,7 +388,7 @@ export function describePayout(amountRaw, owed) {
 export function unpaidSalesSummary(book, state, owed) {
   let left = roundCents(Number(owed) || 0);
   if (!book || left <= 0.01) return null;
-  const tiers = [...(book.profitTiers || [])].sort((a, b) => (a.revenueUpTo || Infinity) - (b.revenueUpTo || Infinity));
+  const tiers = [...(book.profitTiers || [])].sort((a, b) => (tierEffectiveCap(a, book.productionCost) ?? Infinity) - (tierEffectiveCap(b, book.productionCost) ?? Infinity));
   if (tiers.length === 0) return null;
   const capOf = (t) => tierEffectiveCap(t, book.productionCost);
 

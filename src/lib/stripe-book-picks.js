@@ -24,7 +24,7 @@ export const STRIPE_BOOK_PICKS_KEY = 'stripeBookPicks';
 /** Picks older than this are dropped. */
 export const PICK_KEEP_MS = 400 * 86400000;
 
-const ENTRY = /^p\|([^|]{1,200})\|([A-Za-z0-9_-]{1,120})\|(\d{1,16})$/;
+const ENTRY = /^p\|([^|]{1,800})\|([A-Za-z0-9_-]{1,120})\|(\d{1,16})$/;
 
 function parse(entry) {
   const match = ENTRY.exec(String(entry || ''));

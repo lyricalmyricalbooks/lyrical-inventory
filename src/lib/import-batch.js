@@ -121,12 +121,12 @@ export function latestImport(hist) {
  * repeated rows is the one that goes in; this marks them the same way.
  */
 export function classifyImportRows(rows, hist) {
-  const existing = new Set((hist || []).filter(h => h && !h.voided).map(h => h.num));
+  const existing = new Set((hist || []).filter(h => h && !h.voided).map(h => String(h.num)));
   const seen = new Set();
   const out = { fresh: 0, inBook: 0, repeat: 0 };
   for (let i = (rows || []).length - 1; i >= 0; i--) {
     const r = rows[i];
-    if (existing.has(r.num)) { r.status = 'inBook'; out.inBook++; }
+    if (existing.has(String(r.num))) { r.status = 'inBook'; out.inBook++; }
     else if (seen.has(r.num)) { r.status = 'repeat'; out.repeat++; }
     else { r.status = 'new'; out.fresh++; }
     seen.add(r.num);

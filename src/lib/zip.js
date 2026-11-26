@@ -92,7 +92,8 @@ export function zipEntryName(name) {
 export function uniqueZipPath(name, seen) {
   let out = name;
   if (seen.has(out.toLowerCase())) {
-    const dot = out.lastIndexOf('.');
+    const slash = out.lastIndexOf('/');
+    const dot = out.lastIndexOf('.') > slash + 1 ? out.lastIndexOf('.') : -1;
     const stem = dot > 0 ? out.slice(0, dot) : out;
     const ext = dot > 0 ? out.slice(dot) : '';
     let i = 2;

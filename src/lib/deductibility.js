@@ -31,5 +31,5 @@ export function deductibleRate(cat) {
 export function deductibleAmount(cat, amount) {
   const n = Number(amount) || 0;
   const rate = deductibleRate(cat);
-  return rate === 1 ? n : Math.round(n * rate * 100) / 100;
+  return rate === 1 ? n : (Math.sign(n) * Math.round(Math.abs(n) * rate * 100 + 1e-9)) / 100;
 }

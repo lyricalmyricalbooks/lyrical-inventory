@@ -42,8 +42,7 @@ const DATE_PATTERNS = [
 export function dateFromName(name) {
   const s = String(name || '');
   for (const { re, order } of DATE_PATTERNS) {
-    const m = s.match(re);
-    if (!m) continue;
+    for (const m of s.matchAll(new RegExp(re.source, 'g'))) {
     const [y, mo, d] = order === 'ymd'
       ? [m[1], m[2], m[3]]
       : [m[3], m[2], m[1]];
@@ -54,8 +53,9 @@ export function dateFromName(name) {
     // Reject dates a receipt cannot plausibly carry — a UUID full of digits can
     // otherwise produce something that parses but means nothing.
     const t = new Date(`${iso}T00:00:00Z`);
-    if (isNaN(t.getTime())) continue;
+    if (isNaN(t.getTime()) || t.toISOString().slice(0, 10) !== iso) continue;
     return iso;
+    }
   }
   return '';
 }
@@ -75,16 +75,16 @@ export function amountFromName(name) {
   // Scan every currency-code-shaped run rather than only the first: a name like
   // "Invoice-FKJTGVYE-0001" contains uppercase triples that are not currencies,
   // and stopping at the first one would miss a real "CAD-13.93" later on.
-  const re = new RegExp(`${NOT_ALNUM}([A-Z]{3})[\\s_-]*\\$?\\s*(\\d{1,7})(?:[.,](\\d{2}))?(?!\\d)`, 'g');
+  const re = new RegExp(`${NOT_ALNUM}([A-Z]{3})[\\s_-]*\\$?\\s*(\\d{1,3}(?:[.,]\\d{3})+(?=[.,]\\d{2}(?!\\d))|\\d{1,7})(?:[.,](\\d{2}))?(?!\\d)`, 'g');
   let m;
   while ((m = re.exec(s)) !== null) {
     if (CURRENCY_CODES.test(m[1])) {
-      return { amount: Number(`${m[2]}.${m[3] || '00'}`), currency: m[1] };
+      return { amount: Number(`${m[2].replace(/[.,]/g, '')}.${m[3] || '00'}`), currency: m[1] };
     }
   }
 
-  const dollar = s.match(/\$\s*(\d{1,7})(?:[.,](\d{2}))?/);
-  if (dollar) return { amount: Number(`${dollar[1]}.${dollar[2] || '00'}`), currency: '' };
+  const dollar = s.match(/\$\s*(\d{1,3}(?:[.,]\d{3})+(?=[.,]\d{2}(?!\d))|\d{1,7})(?:[.,](\d{2}))?/);
+  if (dollar) return { amount: Number(`${dollar[1].replace(/[.,]/g, '')}.${dollar[2] || '00'}`), currency: '' };
   return null;
 }
 
