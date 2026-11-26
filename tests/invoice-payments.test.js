@@ -8,7 +8,9 @@ import {
   partPaymentAlreadyNoted,
   describeInvoicePaymentReversal,
   describeInvoicePaymentSweep,
+  invoiceAmountOwed,
   invoiceCurrencyCode,
+  invoicePaidSoFarMinor,
   invoicePaymentRef,
   invoiceTotalMinor,
   isZeroDecimalCurrency,
@@ -288,5 +290,63 @@ describe('what the publisher is told', () => {
     const said = describeInvoicePaymentReversal({});
     expect(said.title).toBe('Payment for an invoice was reversed');
     expect(said.detail).not.toContain('undefined');
+  });
+});
+
+describe('part-paid invoices', () => {
+  // A $200 invoice the store has already paid $100 of by card.
+  const partPaid = (over = {}) => invoice({
+    total: 200,
+    stripePartPayments: [{ chargeId: 'ch_1', verdict: 'short', amountMinor: 10000, expectedMinor: 20000, currency: 'CAD', at: 1 }],
+    ...over,
+  });
+
+  it('adds up what earlier part payments already covered', () => {
+    expect(invoicePaidSoFarMinor(partPaid())).toBe(10000);
+    expect(invoiceAmountOwed(partPaid())).toBe(100);
+    expect(invoiceAmountOwed(invoice({ total: 200 }))).toBe(200);
+  });
+
+  it('stops counting a part payment that was refunded', () => {
+    const refunded = partPaid({ stripePartPayments: [{ chargeId: 'ch_1', verdict: 'short', amountMinor: 10000, currency: 'CAD', refunded: true }] });
+    expect(invoicePaidSoFarMinor(refunded)).toBe(0);
+    expect(invoiceAmountOwed(refunded)).toBe(200);
+  });
+
+  it('counts a charge once, and leaves out the charge being judged', () => {
+    const dup = partPaid({ stripePartPayments: [
+      { chargeId: 'ch_1', verdict: 'short', amountMinor: 10000, currency: 'CAD' },
+      { chargeId: 'ch_1', verdict: 'short', amountMinor: 10000, currency: 'CAD' },
+    ] });
+    expect(invoicePaidSoFarMinor(dup)).toBe(10000);
+    expect(invoicePaidSoFarMinor(dup, { excludeChargeId: 'ch_1' })).toBe(0);
+  });
+
+  it('ignores notes whose amount is not money in the invoice currency', () => {
+    const inv = partPaid({ stripePartPayments: [
+      { chargeId: 'ch_eur', verdict: 'currency-mismatch', amountMinor: 9000, currency: 'CAD' },
+      { chargeId: 'ch_x', verdict: 'unreadable', amountMinor: null, currency: 'CAD' },
+      { chargeId: 'ch_usd', verdict: 'short', amountMinor: 5000, currency: 'USD' },
+    ] });
+    expect(invoicePaidSoFarMinor(inv)).toBe(0);
+  });
+
+  it('settles the invoice when the balancing instalment arrives', () => {
+    const judged = judgeInvoicePayment({ payment: payment({ id: 'ch_2', amount: 100 }), invoice: partPaid() });
+    expect(judged.verdict).toBe('settles');
+    expect(judged.expectedMinor).toBe(10000);
+    expect(judged.shortfallMinor).toBe(0);
+  });
+
+  it('still reports a second instalment that leaves money owing as short', () => {
+    const judged = judgeInvoicePayment({ payment: payment({ id: 'ch_2', amount: 60 }), invoice: partPaid() });
+    expect(judged.verdict).toBe('short');
+    expect(judged.shortfallMinor).toBe(4000);
+  });
+
+  it('judges an already-noted charge the same way again, not against itself', () => {
+    const judged = judgeInvoicePayment({ payment: payment({ id: 'ch_1', amount: 100 }), invoice: partPaid() });
+    expect(judged.verdict).toBe('short');
+    expect(judged.expectedMinor).toBe(20000);
   });
 });

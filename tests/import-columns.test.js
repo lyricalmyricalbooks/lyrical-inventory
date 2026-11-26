@@ -39,6 +39,10 @@ describe('amounts as a spreadsheet writes them', () => {
     ['€ 40', 40],
     ['12.5', 12.5],
     [7, 7],
+    // Excel's accounting format writes a minus amount in brackets.
+    ['(30.00)', -30],
+    ['$(1,250.50)', -1250.5],
+    ['Signed (2)', 2],
   ])('%s → %s', (cell, value) => {
     expect(importAmount(cell)).toBe(value);
   });

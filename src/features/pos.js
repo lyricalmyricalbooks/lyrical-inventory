@@ -45,7 +45,7 @@ import { recordOrder, voidHistEntry } from './sales-ledger.js';
 import { updateDash } from './dashboard.js';
 import { escapeHtml, jsArg } from '../lib/html.js';
 import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
-import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode } from '../lib/money.js';
+import { buildPaymentMeta, getBookCurrencyCode, getSym, normalizeCurrencyCode, roundCents } from '../lib/money.js';
 import { posOversellSummary, posStockView } from '../lib/pos-stock.js';
 import { FAIR_SEARCH_OVER, FAIR_UNDO_MS, appendRegisterLog, compExpense, registerLogAsHist, removeRegisterSale, countLabel, isCompMethod, fairDaySummary, fairSyncPill, fairTileHtml, keepScreenAwake, readCurrentFair, readLastMethod, registerSalesForDay, rememberMethod, saveCurrentFair, soldLabel, undoOpen } from '../lib/fair-mode.js';
 import { storageSet, storageRead } from '../lib/safe-storage.js';
@@ -186,7 +186,11 @@ function buildPOSCartRows() {
     const listUnit = book.listPrice || 0;
     const hasOverride = Object.prototype.hasOwnProperty.call(posPriceOverrides, bookId);
     const unit = hasOverride ? posPriceOverrides[bookId] : listUnit;
-    const convertedUnit = convertCurrency(unit, sourceCode, posTransactionCurrency);
+    // Whole cents per copy and per line, so each copy costs what the screen
+    // shows, the lines add up to the total charged, and the ledger stores
+    // what the customer actually paid.
+    const rawConverted = convertCurrency(unit, sourceCode, posTransactionCurrency);
+    const convertedUnit = rawConverted === null ? null : roundCents(rawConverted);
     items.push({
       book,
       qty,
@@ -196,7 +200,7 @@ function buildPOSCartRows() {
       overridden: hasOverride && unit !== listUnit,
       sourceLine: unit * qty,
       convertedUnit,
-      convertedLine: convertedUnit === null ? null : convertedUnit * qty
+      convertedLine: convertedUnit === null ? null : roundCents(convertedUnit * qty)
     });
   }
   return items;
@@ -813,7 +817,12 @@ async function fairCharge(method, { printedQr = false } = {}) {
     if (paid) paid.hidden = true;
     const printed = $('fm-qr-offline');
     if (printed) printed.hidden = true;
+    // posConfirmSale takes the pending sale, clears the cart and frees its own
+    // guard before its first await, so the next customer can be charged now.
+    // Holding this guard over the guest-title cloud save (which can hang on a
+    // dropped connection) left the payment buttons dead.
     const recorded = window.posConfirmSale();
+    _fairSaving = false;
     fairShowUndo(soldLabel(count, totalText));
     await recorded;
   } finally {
@@ -1225,8 +1234,9 @@ function _posItemToManualPayload(book, qty, paymentMethod, basePrice, txnCurCode
   const nativeCurCode = getBookCurrencyCode(book);
   const isFx = txnCurCode !== nativeCurCode;
 
-  // Amount actually paid in the transaction currency (what the customer handed over)
-  const foreignTotal = qty * convertedUnitInTxnCur;
+  // Amount actually paid in the transaction currency (what the customer handed over),
+  // in whole cents to match the line shown at the register.
+  const foreignTotal = roundCents(qty * convertedUnitInTxnCur);
 
   const payment = buildPaymentMeta({
     book,
@@ -1276,6 +1286,7 @@ function posPreparePendingSale() {
     }
     convertedSum += rows[i].convertedLine || 0;
   }
+  convertedSum = roundCents(convertedSum);
 
   // A comp is a giveaway: the customer is charged nothing, and the sale is
   // recorded as a gratuity (copies out, no takings) in posConfirmSale.
@@ -1383,10 +1394,12 @@ async function posConfirmSale() {
           } else {
             // Derive from CAD-pivot posExchangeRates as fallback:
             // (txnCur → CAD) / (nativeCur → CAD)  = txnCur → nativeCur
+            // Used for this sale only: it is an estimate (possibly the offline
+            // seed rates), so it must not go into the app-wide cache that
+            // fetchLiveRate and the Tax Centre trust as a live rate.
             const txnToCAD = posExchangeRates[txnCurCode] || 1;
             const nativeToCAD = posExchangeRates[nativeCurCode] || 1;
             nativePerTxnRate = txnToCAD / nativeToCAD;
-            _fxRateCache[cacheKey] = nativePerTxnRate;
           }
         }
 
@@ -1494,8 +1507,10 @@ async function posConfirmSale() {
       });
     }
     lastSale.tallied = true;
-    try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); }
+    // The tally is on this device now, which is all Undo needs; the cloud
+    // save below may hang on a dropped connection and must not hold Undo.
     doneTail();
+    try { await saveCatalogWithDeletions(); } catch (e) { console.warn('POS-only tally save failed', e); }
     renderPOS();
   }
   return recorded;

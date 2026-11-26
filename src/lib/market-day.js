@@ -16,6 +16,13 @@ export const IN_PERSON_CHANNELS = new Set(['Book Fair', ...FACE_TO_FACE_CHANNELS
 /** How far back a day can be and still be worth summarising. */
 export const MARKET_DAY_LOOKBACK_DAYS = 4;
 
+// A comp (copies given away) is a gratuity, not a sale: it keeps the Book Fair
+// channel so the register can still void it, but no copies were sold.
+function countsAsSold(entry) {
+  return !!entry && !entry.voided && !entry.gratuity && entry.chan !== 'Gratuity'
+    && IN_PERSON_CHANNELS.has(entry.chan);
+}
+
 function paidBy(entry) {
   const note = String(entry?.notes || '').toLowerCase();
   if (/card reader|\bcard\b|stripe/.test(note)) return 'card';
@@ -31,7 +38,7 @@ export function latestMarketDay(rows = [], { today = '', shownFor = '', lookback
   const todayMs = Date.parse(today);
   let best = '';
   (Array.isArray(rows) ? rows : []).forEach(({ entry }) => {
-    if (!entry || entry.voided || !IN_PERSON_CHANNELS.has(entry.chan)) return;
+    if (!countsAsSold(entry)) return;
     const day = String(entry.date || '').slice(0, 10);
     if (!day || day >= today || (shownFor && day <= shownFor)) return;
     if (Number.isFinite(todayMs) && todayMs - Date.parse(day) > lookbackDays * 86400000) return;
@@ -46,7 +53,7 @@ export function summariseMarketDay(rows = [], day = '', { books = {}, stockOf = 
   const pay = { card: 0, cash: 0, other: 0 };
   let copies = 0;
   (Array.isArray(rows) ? rows : []).forEach(({ bookId, entry }) => {
-    if (!entry || entry.voided || !IN_PERSON_CHANNELS.has(entry.chan)) return;
+    if (!countsAsSold(entry)) return;
     if (String(entry.date || '').slice(0, 10) !== day) return;
     const qty = Number(entry.qty) || 0;
     copies += qty;

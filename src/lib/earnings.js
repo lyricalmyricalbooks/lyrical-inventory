@@ -11,8 +11,11 @@ export function tierEffectiveCap(tier, productionCost = 0) {
   // "Post Break-even" is the stage after the cost is recovered: it keeps its own
   // ceiling (none), instead of being capped at production cost like "Pre".
   const isBreakEvenTier = label.includes('break') && !/^\s*post\b/.test(label);
-  if (isBreakEvenTier && productionCost > 0) return productionCost;
-  return Number.isFinite(tier.revenueUpTo) && tier.revenueUpTo > 0 ? tier.revenueUpTo : null;
+  // Whole cents: the tier walks round every step to cents, so a cap with a
+  // fraction of a cent (a typed 100.004) left a gap no step could fill and the
+  // walk spun forever, freezing the dashboard.
+  if (isBreakEvenTier && productionCost > 0) return roundCents(productionCost);
+  return Number.isFinite(tier.revenueUpTo) && tier.revenueUpTo > 0 ? roundCents(tier.revenueUpTo) : null;
 }
 
 // How much of each receivable (money the artist owes the shop) has been netted
@@ -233,6 +236,18 @@ export function calcArtistEarnings(book, state) {
     publisherCutHeldByArtist,
     payouts
   };
+}
+
+// The artist's own share of one held sale, at its place in the tiers: the
+// same figure the Settle up panel tells them to keep. (Taking the sale out of
+// the history instead pulled every later sale into lower tiers and gave a
+// different, larger number.) Half the total when no tiers are set.
+export function heldSaleShare(book, state, held, total) {
+  const s = state || {};
+  const withHeld = calcArtistEarnings(book, s);
+  const released = calcArtistEarnings(book, { ...s, hist: (s.hist || []).map(x => (x === held ? { ...x, artistPending: false } : x)) });
+  if (!withHeld || !released) return roundCents((Number(total) || 0) / 2);
+  return Math.max(0, roundCents(withHeld.heldByArtistShare - released.heldByArtistShare));
 }
 
 // Preview one transfer across BOTH sides of the account, without recording a

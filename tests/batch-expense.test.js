@@ -45,7 +45,8 @@ function harness({
   uploadCloud = async () => 'https://cloud/r.jpg',
   confirmAnswer = true,
   trip = '',
-  habits = []
+  habits = [],
+  resolveRate = null
 } = {}) {
   const toasts = [];
   const logs = [];
@@ -111,7 +112,8 @@ function harness({
       notifyPublisherSubmission: async (kind, data, summary) => notified.push({ kind, data, summary }),
       // The date-specific lookup resolves from the warmed cache here; the
       // dated fetch itself is covered by receipts-fault-fixes.test.js.
-      resolveExpenseRate: async (from, _date, to = 'CAD') => (from === to ? 1 : (rates[`${from}_${to}`] || 0)),
+      resolveExpenseRate: resolveRate
+        || (async (from, _date, to = 'CAD') => (from === to ? 1 : (rates[`${from}_${to}`] || 0))),
       fetchLiveRate: async (from, to) => {
         fxFetches.push(`${from}_${to}`);
         return { rate: rates[`${from}_${to}`] || 0 };
@@ -332,6 +334,19 @@ describe('batch expense — applying a reading to a row', () => {
     h.applyScan(r, { vendor: 'Air Canada', date: '2026-03-04', amount: 340, currency: 'CAD', category: 'Flights' });
     expect(r.category).toBe('Travel & Meals');
   });
+
+  it('never overwrites a category the owner picked by hand', () => {
+    const r = row({ category: 'Office Supplies', categoryPicked: true });
+    h.applyScan(r, { vendor: 'Staples', date: '2026-03-04', amount: 20, currency: 'CAD', category: 'Other' });
+    expect(r.category).toBe('Office Supplies');
+    expect(r.amount).toBe('20.00');
+  });
+
+  it('still fills in a category nobody picked by hand', () => {
+    const r = row({ category: 'Office Supplies' });
+    h.applyScan(r, { vendor: 'Air Canada', date: '2026-03-04', amount: 340, currency: 'CAD', category: 'Travel & Meals' });
+    expect(r.category).toBe('Travel & Meals');
+  });
 });
 
 describe('batch expense — checking what the reader found', () => {
@@ -538,6 +553,40 @@ describe('batch expense — posting to a book ledger', () => {
     expect(e.desc).not.toContain('Paid');
   });
 
+  it("values a foreign book's expense in CAD at the receipt's own date's rate", async () => {
+    // Today's cached rate is 1.40; the January receipt's own date had 1.35.
+    const state = { expenses: [] };
+    const h = harness({
+      taxCenter: emptyTaxCenter(),
+      bookState: state,
+      book: { title: 'Bramble & Bee', currency: 'USD' },
+      rates: { USD_CAD: 1.4 },
+      resolveRate: async (from, date, to = 'CAD') =>
+        (from === to ? 1 : from === 'USD' && to === 'CAD' && date === '2026-01-15' ? 1.35 : 0),
+    });
+    await h.postProject([row({ currency: 'USD', amount: '100', date: '2026-01-15' })]);
+
+    const e = state.expenses[0];
+    expect(e.baseAmount).toBe(135);
+    expect(e.fxMissing).toBeUndefined();
+  });
+
+  it('flags a foreign book expense with no CAD rate instead of guessing one', async () => {
+    const state = { expenses: [] };
+    const h = harness({
+      taxCenter: emptyTaxCenter(),
+      bookState: state,
+      book: { title: 'Bramble & Bee', currency: 'USD' },
+      rates: { USD_CAD: 1.4 },
+      resolveRate: async (from, _date, to = 'CAD') => (from === to ? 1 : 0),
+    });
+    await h.postProject([row({ currency: 'USD', amount: '500', date: '2026-01-15' })]);
+
+    const e = state.expenses[0];
+    expect(e.baseAmount).toBeNull();
+    expect(e.fxMissing).toBe(true);
+  });
+
   it('saves the book ledger once for the whole batch', async () => {
     const h = harness({ taxCenter: emptyTaxCenter(), bookState: { expenses: [] } });
     await h.postProject([row(), row(), row()]);
@@ -721,6 +770,16 @@ describe('batch expense — the sheet against index.html', () => {
 
     expect(a.getRows()[0].category).toBe('Travel & Meals');
     expect(document.querySelector('[data-bx-field="category"]').value).toBe('Travel & Meals');
+    expect(a.getRows()[0].categoryPicked).toBe(true);
+  });
+
+  it('remembers a category picked by hand on a row', () => {
+    a.addBlank();
+    const cat = document.querySelector('[data-bx-field="category"]');
+    cat.value = 'Travel & Meals';
+    cat.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(a.getRows()[0].category).toBe('Travel & Meals');
+    expect(a.getRows()[0].categoryPicked).toBe(true);
   });
 
   it('cannot be submitted with nothing ticked', () => {

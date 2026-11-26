@@ -4608,13 +4608,23 @@ async function _runReceiptScan(cfg) {
     // and make a scan that read nothing at all report partial success.
     const haveSubject = vendor || description || EXPENSE_CATEGORIES.includes(parsed.category);
     let chosenCategory = '';
-    if (haveSubject && _applyScanCategory(catEl, rule?.category || habit?.category || parsed.category, vendor, description)) {
+    // A category the owner picked by hand always wins over the scan.
+    const handPicked = catEl?.dataset?.handPicked === '1';
+    if (haveSubject && !handPicked && _applyScanCategory(catEl, rule?.category || habit?.category || parsed.category, vendor, description)) {
       applied.push('category');
       chosenCategory = catEl.value;
     }
 
     const refEl = cfg.refId && $(cfg.refId);
     if (refEl && parsed.reference) { refEl.value = String(parsed.reference).trim(); applied.push('ref'); }
+
+    // Mark the scan's choice as the picker's own value (so the change event
+    // below is not mistaken for a hand-pick) and keep description typing from
+    // re-sorting it until the form is reset.
+    if (chosenCategory && catEl) {
+      catEl.dataset.autoValue = chosenCategory;
+      catEl.dataset.scanPicked = '1';
+    }
 
     // Writing `.value` fires nothing, so both forms' FX preview kept showing
     // the previous receipt's conversion until the user touched a field.
@@ -4658,8 +4668,8 @@ async function _runReceiptScan(cfg) {
       date,
       duplicate: _scanLedgerDuplicate(cfg.dest, { date, amount, currency }),
       rule: rule && chosenCategory === rule.category ? rule.rule : null,
-      habit,
-      habitOverrode: !!habit && habit.category !== aiCategory,
+      habit: habit && chosenCategory === habit.category ? habit : null,
+      habitOverrode: !!habit && chosenCategory === habit.category && habit.category !== aiCategory,
       vendor,
       currency,
       home: _receiptScanHome(cfg.dest),
@@ -5043,7 +5053,8 @@ function applyBatchExpenseBulk(field) {
   let n = 0;
   _batchExpenseRows.forEach(r => {
     if (r.include === false) return;
-    if (field === 'date') r.date = value; else r.category = value;
+    if (field === 'date') r.date = value;
+    else { r.category = value; r.categoryPicked = true; }
     n++;
   });
   renderBatchExpenseRows();
@@ -5143,6 +5154,8 @@ function renderBatchExpenseRows() {
       if (field === 'currency') v = String(v).toUpperCase();
       if (field === 'date') v = normalizeReceiptDate(v) || v;
       row[field] = v;
+      // A category picked by hand always wins over a later AI read.
+      if (field === 'category') row.categoryPicked = true;
       // Editing a row is how a wrongly-flagged duplicate gets cleared, and how
       // a mistyped amount creates a new one — so the flags follow every edit.
       row.error = '';
@@ -5282,7 +5295,8 @@ function _applyBatchScanResult(row, parsed, habits = null) {
   const habit = !rule && vendor && habits ? vendorFilingHabit(vendor, habits, { allowed: cats }) : null;
   const cat = rule ? rule.category : habit ? habit.category
     : (cats.includes(parsed.category) ? parsed.category : inferReceiptCategory(vendor, description));
-  if (cat && cats.includes(cat)) row.category = cat;
+  // A category the owner picked by hand always wins over rules, habit or AI.
+  if (cat && cats.includes(cat) && !row.categoryPicked) row.category = cat;
 
   if (parsed.reference) row.reference = String(parsed.reference).trim();
 
@@ -5325,7 +5339,7 @@ function _applyBatchScanResult(row, parsed, habits = null) {
     row.scanFlags.push({ field: 'date', text: 'date is over two years ago' });
   }
   if (rule && row.category === rule.category) row.scanFlags.push({ field: 'category', tone: 'note', text: `sorted by your rule for "${rule.rule.match}"` });
-  if (habit) row.scanFlags.push({ field: 'category', tone: 'note', text: `filed like your other ${vendor} receipts` });
+  if (habit && row.category === habit.category) row.scanFlags.push({ field: 'category', tone: 'note', text: `filed like your other ${vendor} receipts` });
   row.error = warn.length ? `check ${warn.join(', ')}` : '';
 }
 
@@ -5647,7 +5661,9 @@ async function _postBatchToProjectLedger(rows) {
       if (!receipt) receiptsLost++;
     }
 
-    const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
+    // The CAD rate for the receipt's own date, never today's cached one.
+    const cadRate = currency === 'CAD' ? 1
+      : ((await resolveExpenseRate(currency, row.date || today(), 'CAD').catch(() => 0)) || null);
     const entry = {
       id: idBase + logged,
       desc, cat, amount, currency, origAmount, origCurrency,
@@ -5657,7 +5673,8 @@ async function _postBatchToProjectLedger(rows) {
       fxRate,
       // No CAD rate known: leave the CAD value empty so the Tax Centre converts
       // it at the expense's date's rate, rather than booking it 1:1.
-      baseAmount: cadRate ? roundCents(amount * cadRate) : null
+      baseAmount: cadRate ? roundCents(amount * cadRate) : null,
+      ...(cadRate ? {} : { fxMissing: true })
     };
     if (row._cloud || (author && receipt)) entry.receiptCloudAt = new Date().toISOString();
 
@@ -7342,7 +7359,16 @@ function populateExpenseCategoryDropdown() {
   if (last && EXPENSE_CATEGORIES.includes(last)) sel.value = last;
 }
 
+// Logging now waits for the expense date's exchange rate, so a second tap
+// during that wait would log the same expense twice.
+let _expenseSubmitting = false;
 async function submitExpense() {
+  if (_expenseSubmitting) return;
+  _expenseSubmitting = true;
+  try { return await _submitExpenseNow(); } finally { _expenseSubmitting = false; }
+}
+
+async function _submitExpenseNow() {
   if (!activeBook) { showToast('⚠ Error: No active book selected', 'err'); return; }
   const desc = ($('exp-desc').value || '').trim();
   const cat = $('exp-cat').value;
@@ -7451,11 +7477,17 @@ async function submitExpense() {
   const origCurrency = cur;
 
   // Calculate CAD equivalence for publisher reporting (only once, at submission time)
-  const cadRate = currency !== 'CAD' ? (_fxRateCache[`${currency}_CAD`] || null) : 1;
-  // No CAD rate known: leave the CAD value empty (like the batch path) so the
-  // Tax Centre fills it in at the expense's date's rate — never book it 1:1.
+  // The CAD rate for the expense's own date — today's cached rate would value
+  // a back-dated expense wrongly for good.
+  let cadRate = 1;
+  if (currency !== 'CAD') {
+    try { cadRate = (await resolveExpenseRate(currency, date, 'CAD')) || null; } catch (_) { cadRate = null; }
+  }
+  // No CAD rate known: leave the CAD value empty (like the batch path) and flag
+  // it so the Tax Centre fills it in at the expense's date's rate — never 1:1.
   const baseAmount = cadRate ? roundCents(amount * cadRate) : null;
   const newExpense = { id: Date.now(), desc: finalDesc, cat, amount, currency, origAmount, origCurrency, date, ref, fxRate: cur !== native ? expenseFxRate : null, baseAmount };
+  if (!cadRate) newExpense.fxMissing = true;
   writeReceiptRefs(newExpense, receiptRefs);
   // Starts the clock the Tax Centre reads when it counts what's waiting.
   if (receiptRefs.some(isOurCloudReceipt)) newExpense.receiptCloudAt = new Date().toISOString();

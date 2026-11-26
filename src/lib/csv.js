@@ -64,8 +64,15 @@ export function splitDelimitedRecords(raw) {
   let inQuotes = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (ch === '"') { inQuotes = !inQuotes; cur += ch; }
-    else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+    if (ch === '"') {
+      // Mirror pass 2: a quote opens a quoted cell only at the start of a
+      // field, so an inch mark mid-cell (Signed 8" print) is plain text and
+      // can't swallow the rows after it. Inside quotes, "" is a literal quote.
+      if (inQuotes && text[i + 1] === '"') { cur += '""'; i++; continue; }
+      if (inQuotes) inQuotes = false;
+      else if (/(^|[,\t])[ ]*$/.test(cur)) inQuotes = true;
+      cur += ch;
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
       if (ch === '\r' && text[i + 1] === '\n') i++;
       records.push(cur);
       cur = '';

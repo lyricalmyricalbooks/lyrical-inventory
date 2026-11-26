@@ -145,6 +145,35 @@ describe('register-only books', () => {
     expect(document.getElementById('fm-today-list').textContent).toContain('Today Zine');
   });
 
+  it('Fair Mode keeps charging and Undo still works while a guest-title save hangs', async () => {
+    const id = await addZine('Hang Zine');
+    // The guest title's tally save never answers — a connection that drops
+    // mid-save. Every other catalogue save goes through.
+    const never = new Promise(() => {});
+    const original = win._fbSaveCatalog;
+    win._fbSaveCatalog = (cat) => ((cat?._posExtra?.[id]?.sold || 0) > 0 ? never : original(cat));
+    try {
+      win.posSetCurrency('CAD');
+      win.posUpdateQty(id, 1);
+      win.fairCharge('Card'); // deliberately not awaited: its cloud save hangs
+      await app.settle();
+      expect(app.main.posExtraBooks[id]).toMatchObject({ sold: 1, revenue: 10 });
+
+      // Undo does not wait on the stuck save.
+      await win.fairUndoLastSale();
+      expect(app.main.posExtraBooks[id]).toMatchObject({ sold: 0, revenue: 0 });
+
+      // The next customer can still be charged.
+      win.posUpdateQty(HARBOUR, 1);
+      await win.fairCharge('Cash');
+      await app.settle();
+      expect(state(HARBOUR).hist).toHaveLength(1);
+      expect(state(HARBOUR).hist[0]).toMatchObject({ qty: 1, chan: 'Book Fair' });
+    } finally {
+      win._fbSaveCatalog = original;
+    }
+  });
+
   it('voids from the Today list, taking the guest title back out', async () => {
     const id = await addZine('Void Zine');
     fillCart({ [id]: 1 });

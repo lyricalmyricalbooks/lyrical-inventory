@@ -73,6 +73,23 @@ describe('the morning after a market day', () => {
   });
 });
 
+describe('comps on the morning-after card', () => {
+  const sale = { bookId: 'altrove', entry: { chan: 'Book Fair', date: '2026-09-20', qty: 1, notes: 'Card reader' } };
+  const comp = { bookId: 'hound', entry: { chan: 'Book Fair', date: '2026-09-20', qty: 5, notes: 'Comp', gratuity: true } };
+
+  it('counts copies sold, not copies given away', () => {
+    const summary = summariseMarketDay([sale, comp], '2026-09-20', { books: BOOKS });
+    expect(summary.copies).toBe(1);
+    expect(summary.lines).toEqual([expect.objectContaining({ bookId: 'altrove', qty: 1 })]);
+    expect(describeMarketDay(summary).detail).toMatch(/^1 copy sold: Altrove 1\./);
+  });
+
+  it('shows no card for a day of comps only', () => {
+    expect(latestMarketDay([comp], { today: '2026-09-22' })).toBe('');
+    expect(describeMarketDay(summariseMarketDay([comp], '2026-09-20', { books: BOOKS })).title).toBe('');
+  });
+});
+
 describe('store orders reversed after being recorded', () => {
   const order = (id, attributes) => ({ id, attributes });
 
@@ -120,6 +137,30 @@ describe('refunding a card payment that covered several books', () => {
     const out = refundsToRaise([{ chargeId: 'ch_1', amount: 65 }], sales);
     expect(out.map(o => [o.sheetsId, o.full])).toEqual([['stripe-ch_1', true], ['stripe-ch_1-2', true]]);
     expect(refundsToRaise([{ chargeId: 'ch_1', amount: 25 }], sales).every(o => !o.full)).toBe(true);
+  });
+});
+
+describe('a partial card refund seen on two sweeps', () => {
+  const sale = { chargeId: 'ch_1', sheetsId: 'stripe-ch_1', qty: 1, paidAmount: 20 };
+  it('does not add the same refund twice and offer a full reversal', () => {
+    // Sweep 1 noted $10 back from the charge flag; sweep 2 sees that refund by id.
+    const noted = { ...sale, refundNoted: 'refunded', refundPartial: true, refundedSoFar: 10 };
+    expect(refundsToRaise([{ id: 'rf_1', chargeId: 'ch_1', amount: 10 }], [noted])).toEqual([]);
+    expect(refundsToRaise([{ chargeId: 'ch_1', amount: 10, chargeRefundedTotal: 10 }], [noted])).toEqual([]);
+  });
+  it('still raises a second refund that completes it', () => {
+    const noted = { ...sale, refundNoted: 'rf_1', refundPartial: true, refundedSoFar: 10 };
+    const out = refundsToRaise([{ id: 'rf_2', chargeId: 'ch_1', amount: 10 }], [noted]);
+    expect(out.map(o => o.full)).toEqual([true]);
+    const byFlag = { ...sale, refundNoted: 'refunded', refundPartial: true, refundedSoFar: 10 };
+    expect(refundsToRaise([{ chargeId: 'ch_1', amount: 20, chargeRefundedTotal: 20 }], [byFlag]).map(o => o.full)).toEqual([true]);
+  });
+  it('raises a later refund on an older charge from its running total', () => {
+    // Noted half-refunded from the charge flag; weeks later the rest comes back
+    // and only the refund list sees it, with the charge's total attached.
+    const byFlag = { ...sale, refundNoted: 'refunded', refundPartial: true, refundedSoFar: 10 };
+    expect(refundsToRaise([{ id: 'rf_2', chargeId: 'ch_1', amount: 10, chargeRefundedTotal: 20 }], [byFlag]).map(o => o.full)).toEqual([true]);
+    expect(refundsToRaise([{ id: 'rf_1', chargeId: 'ch_1', amount: 10, chargeRefundedTotal: 10 }], [byFlag])).toEqual([]);
   });
 });
 

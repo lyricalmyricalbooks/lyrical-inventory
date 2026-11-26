@@ -1518,7 +1518,8 @@ function keepDetail(id) {
   if (typeof window._fbSaveSettings !== 'function' || isTestProfileActive()) return;
   // Merged with what the other devices saved, so no device's choice is lost.
   Promise.resolve()
-    .then(() => (typeof window._fbLoadSettings === 'function' ? window._fbLoadSettings(KEPT_DETAILS_SETTING) : null))
+    // Strict: when the other devices' choices can't be read, don't save over them.
+    .then(() => (typeof window._fbLoadSettings === 'function' ? window._fbLoadSettings(KEPT_DETAILS_SETTING, { strict: true }) : null))
     .then((stored) => {
       const merged = { ...(stored && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) };
       delete merged[id];

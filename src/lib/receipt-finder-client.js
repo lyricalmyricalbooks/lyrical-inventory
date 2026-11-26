@@ -2,6 +2,7 @@
 // directly. The AI half talks to the publisher's Apps Script deployment; the
 // Gmail half talks to Google with a read-only token held by the browser.
 import { receiptFileForAi } from './receipt-finder.js';
+import { readScriptJson } from './script-reply.js';
 
 // Exactly what the Apps Script accepts. Sending anything else makes the script
 // reject the whole email ("Unsupported attachment"), so an email carrying one
@@ -352,7 +353,7 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   }
   const res = await fetchImpl(endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body, signal, redirect: 'follow' });
   if (!res.ok) throw new Error(`Receipt AI request failed (${res.status})`);
-  const data = await res.json();
+  const data = await readScriptJson(res);
   if (!data.ok) {
     // Keep the script's own wording on the error so a refusal that will repeat
     // on every email can still be recognised after it is made friendly.
@@ -374,7 +375,7 @@ export async function receiptDailySchedule({ endpoint, op = 'status', enabled, h
     signal, redirect: 'follow',
   });
   if (!res.ok) throw new Error(`The script did not answer (${res.status}).`);
-  const data = await res.json();
+  const data = await readScriptJson(res);
   if (!data.ok) throw new Error(data.error || 'Could not change the daily scan.');
   return data;
 }

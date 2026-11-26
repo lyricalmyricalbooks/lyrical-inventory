@@ -87,7 +87,8 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       // `amount` is denominated in the book's own currency (a payout made in
       // another currency stores the foreign cash under `payment`).
       const hRate = datedCadRate(cur, p.date, fxRateCache).rate;
-      artistPayouts = roundCents(artistPayouts + (Number(p.amount) || 0) * hRate);
+      // A forgiven cut ("artist keeps all") left with the artist's share.
+      artistPayouts = roundCents(artistPayouts + ((Number(p.amount) || 0) + (Number(p.forgivenCut) || 0)) * hRate);
       artistDebtRecovered = roundCents(artistDebtRecovered + payoutDebtCollected(p) * hRate);
       if (p.settlement) {
         const receipt = p.settlement;
