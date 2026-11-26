@@ -57,6 +57,7 @@ import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt }
 import { openReviewInbox } from './review-inbox.js';
 import { commitRecoveredWebsiteOrder, orders, renderOrders } from './website-orders.js';
 import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/carriers/label-duplicate-guard.js';
+import { toShippoParcel, shippoQuoteProblem } from '../lib/carriers/shippo-rules.js';
 import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
 import { websiteShipmentNote } from './website-link.js';
 import {
@@ -7600,6 +7601,29 @@ async function confirmNoExistingLabel(orderNumber) {
 
 let _shippoPurchaseInFlight = false;
 
+// The form as it was when the Shippo rates on screen were quoted, and when.
+let _shippoRatesQuote = null;
+
+/**
+ * True when the Shippo rates on screen can still be bought. A rate is Shippo's
+ * price for the exact addresses and parcel it was asked about, so once the form
+ * changes (or a week passes and Shippo expires it) the shown prices are cleared
+ * and the publisher is asked for a fresh quote instead of buying the old one.
+ */
+function shippoQuoteStillGood() {
+  const problem = shippoQuoteProblem(_shippoRatesQuote, { fingerprint: shippingFormFingerprint() });
+  if (!problem) return true;
+  _shippoRatesQuote = null;
+  const list = $('ship-results-list');
+  if (list) { list.innerHTML = ''; list.style.display = 'none'; }
+  const placeholder = $('ship-results-placeholder');
+  if (placeholder) placeholder.style.display = 'flex';
+  showToast(problem === 'expired'
+    ? '⚠ Those Shippo prices have expired. Get fresh rates before buying.'
+    : '⚠ The address or parcel changed since these prices. Get fresh Shippo rates before buying.', 'warn', 6000);
+  return false;
+}
+
 async function buyShippoLabel(rateId, provider, serviceName, amount, currency) {
   if (_shippoPurchaseInFlight) {
     showToast('A label purchase is already running — give it a moment', 'warn');
@@ -7619,6 +7643,7 @@ async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currenc
     showToast('⚠️ Please configure your Shippo API Key first', 'warn');
     return;
   }
+  if (!shippoQuoteStillGood()) return;
 
   // A label bought for an address Shippo calls undeliverable is money spent on
   // a parcel that comes back. If nothing has checked this exact address yet, it
@@ -7651,6 +7676,9 @@ async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currenc
     cancelLabel: 'Cancel'
   });
   if (!confirmed) return;
+  // Checked again: the address check above, or an edit while a dialog was
+  // open, can change the form after the first check.
+  if (!shippoQuoteStillGood()) return;
 
   showToast('⚡ Purchasing label from Shippo...');
 
@@ -7964,7 +7992,7 @@ async function fetchBatchRates(shippoKey, origin, row, address) {
       ...address,
       phone: getFallbackShippingPhone(row.entry.shipPhone || row.entry.phone || ''),
     },
-    parcels: [parcel],
+    parcels: [toShippoParcel(parcel)],
     metadata: `order_number:${row.orderNumber.slice(0, 100)}`,
     async: false,
   };
@@ -8577,6 +8605,7 @@ async function calculateShippoRates() {
   if (placeholder) placeholder.style.display = 'none';
   if (loading) loading.style.display = 'flex';
   if (list) list.style.display = 'none';
+  _shippoRatesQuote = null;
   renderShippingChargePrediction([]);
 
   try {
@@ -8603,14 +8632,14 @@ async function calculateShippoRates() {
         zip: stZip,
         country: stCountryCode
       },
-      parcels: [{
+      parcels: [toShippoParcel({
         length: spLength,
         width: spWidth,
         height: spHeight,
         distance_unit: spDimUnit,
         weight: spWeight,
         mass_unit: spWeightUnit
-      }],
+      })],
       async: false
     };
 
@@ -8747,6 +8776,7 @@ async function calculateShippoRates() {
         `;
       }).join('');
       list.style.display = 'flex';
+      _shippoRatesQuote = { fingerprint: quotedFor, at: Date.now() };
     }
 
   } catch (err) {
