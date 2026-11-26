@@ -83,6 +83,7 @@ import { deductibleAmount, deductibleRate } from '../lib/deductibility.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels, settlementRepaidLookup } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
+import { checkClaude, claudeMeterLine, claudeStatus, friendlyClaudeError } from '../lib/claude-chat.js';
 import { _geminiClearRest } from '../lib/gemini-quota.js';
 import { testCanadaPostConnection, validateCanadaPostAccount, isValidCustomerNumber, getSavedSheetsUrl, diagnoseCanadaPostConnection, inspectCanadaPostCredentials, resolveCanadaPostCredentials, migrateCanadaPostCredentials, readCanadaPostCredentialSet, credentialSetIsConfigured, CANADAPOST_CREDENTIAL_FIELDS } from '../lib/carriers/canadapost.js';
 import {
@@ -2667,6 +2668,9 @@ function _tcRenderStatusHeaders() {
   if ($('tc-api-key') && TAX_CENTER.settings?.geminiKey) $('tc-api-key').value = TAX_CENTER.settings.geminiKey;
   hydrateCredentialField('tc-backup-key', TAX_CENTER.settings?.openRouterKey);
   if ($('tc-backup-model') && TAX_CENTER.settings?.openRouterModel) $('tc-backup-model').value = TAX_CENTER.settings.openRouterModel;
+  if ($('tc-claude-on')) $('tc-claude-on').checked = TAX_CENTER.settings?.claudeOn === true;
+  if ($('tc-claude-first')) $('tc-claude-first').checked = TAX_CENTER.settings?.claudeFirst === true;
+  refreshClaudeSettings();
   if ($('stripe-fees-key') && TAX_CENTER.settings?.stripeKey) $('stripe-fees-key').value = TAX_CENTER.settings.stripeKey;
   const _stripeStatusEl = $('stripe-fees-status');
   if (_stripeStatusEl && !_stripeStatusEl.textContent && TAX_CENTER.settings?.stripeFeesLastImportAt) {
@@ -4215,6 +4219,66 @@ async function testOpenRouterConnectionFromSettings() {
   }
 }
 
+/**
+ * Claude's row in Settings › AI and receipts. "Ask Claude first" only means
+ * something while Claude is on, and the status line shows this month's spend
+ * (from the website, which keeps the one shared meter). Asking for the meter
+ * sends nothing to Anthropic and costs nothing.
+ */
+let claudeStatusAsked = 0;
+async function refreshClaudeSettings() {
+  const on = !!$('tc-claude-on')?.checked;
+  const first = $('tc-claude-first');
+  if (first) first.disabled = !on;
+  const btn = $('tc-claude-check-btn');
+  if (btn) btn.disabled = !on;
+  const status = $('tc-claude-status');
+  if (!status) return;
+  if (!on) { status.textContent = 'Off. Gemini and OpenRouter work as before.'; status.classList.remove('tc-status-warn'); return; }
+  if (Date.now() - claudeStatusAsked < 60_000 && !/^Off\./.test(status.textContent)) return;
+  claudeStatusAsked = Date.now();
+  status.textContent = 'Checking Claude on your website…';
+  try {
+    const meter = await claudeStatus();
+    status.textContent = claudeMeterLine(meter);
+    status.classList.toggle('tc-status-warn', !!meter?.rest || !meter?.configured);
+    if (btn) btn.textContent = meter?.rest === 'credits' || meter?.rest === 'limit' ? 'Try again' : 'Check Claude';
+  } catch (error) {
+    status.textContent = `Could not check Claude: ${friendlyClaudeError(error)}.`;
+  }
+}
+
+/** Check Claude / Try again: clears a pause on the website, then one tiny request. */
+async function checkClaudeFromSettings() {
+  const btn = $('tc-claude-check-btn');
+  const status = $('tc-claude-status');
+  const oldText = btn?.textContent || 'Check Claude';
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  if (status) status.textContent = 'Asking Claude through your website…';
+  try {
+    const meter = await checkClaude();
+    if (status) { status.textContent = `Claude answered. ${claudeMeterLine(meter)}`; status.classList.remove('tc-status-warn'); }
+    if (btn) btn.textContent = 'Check Claude';
+    showToast('✓ Claude is ready', 'ok');
+    return true;
+  } catch (error) {
+    const message = friendlyClaudeError(error);
+    if (status) status.textContent = `Claude could not answer: ${message}.`;
+    if (btn) btn.textContent = oldText;
+    showToast(`Claude: ${message}`, 'err', 6000);
+    return false;
+  } finally {
+    if (btn) btn.disabled = !$('tc-claude-on')?.checked;
+  }
+}
+
+// Claude's two controls in Settings › AI and receipts, by name (see lib/actions.js;
+// main.js registers them).
+const claudeSettingsActions = {
+  'tc.claudeOn': () => refreshClaudeSettings(),
+  'tc.claudeCheck': () => checkClaudeFromSettings(),
+};
+
 async function saveTaxCenterSettings() {
   if (isAuthor()) return;
   // Shipping and AI each have their own Save; show progress on the one pressed.
@@ -4260,6 +4324,8 @@ async function saveTaxCenterSettings() {
     put('shippoKey', readCredentialField('tc-shippo-key'));
     put('openRouterKey', openRouterKey);
     put('openRouterModel', openRouterModel);
+    if ($('tc-claude-on')) TAX_CENTER.settings.claudeOn = $('tc-claude-on').checked;
+    if ($('tc-claude-first')) TAX_CENTER.settings.claudeFirst = $('tc-claude-first').checked;
     put('zonosApiKey', zonosApiKey);
     put('zonosAccountKey', zonosAccountKey);
     put('ccClientId', ccClientId);
@@ -5159,6 +5225,7 @@ export {
   saveTaxCenter,
   saveTaxCenterSettings,
   testOpenRouterConnectionFromSettings,
+  claudeSettingsActions,
   snoozeDeductionGap,
   testZonosConnectionHandler,
   testChitChatsConnectionHandler,

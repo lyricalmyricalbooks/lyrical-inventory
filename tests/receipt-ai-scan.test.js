@@ -7,6 +7,7 @@ import * as scanChecks from '../src/lib/receipt-scan-checks.js';
 import { setSelectCurrency } from '../src/lib/money.js';
 import { allCanonicalExpenses } from '../src/lib/expense-categories.js';
 import { findExpenseRule } from '../src/lib/expense-rules.js';
+import { anyAiReady, claudeOn } from '../src/lib/claude-chat.js';
 
 // Covers the "✨ AI Scan" rework: the upload downscale that dominated scan
 // latency, the response schema that replaced prose-only JSON instructions, and
@@ -66,6 +67,7 @@ function scanHarness({ reply, prepare, apiKey = 'k-test', businessExpenses = [],
         '_applyReceiptScanFix', '_renderReceiptScanReview', '_duplicateExpenseKey', '_findDuplicateExpense'
       ],
       deps: {
+        claudeOn, anyAiReady,
         $: id => document.getElementById(id),
         showToast: (msg, type) => toasts.push({ msg, type }),
         TAX_CENTER: { settings: { geminiKey: apiKey }, businessExpenses, expenseRules },

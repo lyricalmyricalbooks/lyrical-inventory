@@ -4888,7 +4888,7 @@
               <div class="tc-service-badge badge-gemini" aria-hidden="true">♊</div>
               <div class="tc-service-meta">
                 <strong class="tc-service-title">AI Assistant</strong>
-                <div class="tc-service-desc">Gemini first, with OpenRouter backup for chat, receipts, invoices and email.</div>
+                <div class="tc-service-desc">Gemini, OpenRouter and Claude for chat, receipts, invoices and email.</div>
               </div>
             </div>
             <div class="tc-service-header-right">
@@ -4916,6 +4916,18 @@
                 <label class="tc-form-label" for="tc-backup-model">Backup Model</label>
                 <input type="text" id="tc-backup-model" class="tc-form-input" placeholder="openrouter/free (automatic default)" autocomplete="off" spellcheck="false">
                 <div class="tc-form-hint">Optional. Leave blank to select an available free model automatically. A custom OpenRouter model uses that model’s pricing and must support tools for chat, and images and structured output for scans. Keep Intelligence on Auto for automatic fallback.</div>
+              </div>
+              <div class="tc-form-group" id="tc-claude-group">
+                <span class="tc-form-label">Claude <span class="tc-form-optional">(optional, set up on your website)</span></span>
+                <div class="tc-toggle-row">
+                  <label class="tc-toggle-wrap"><input type="checkbox" id="tc-claude-on" data-on-change="tc.claudeOn"><span>Use Claude</span></label>
+                  <label class="tc-toggle-wrap"><input type="checkbox" id="tc-claude-first"><span>Ask Claude first</span></label>
+                </div>
+                <div class="tc-form-hint">Claude uses the key, monthly limit and credits from your website (Settings › General › AI writing assistant), so it only spends credits you bought. If they run out, Claude pauses until you press Try again.</div>
+                <div class="tc-form-actions-row">
+                  <button type="button" id="tc-claude-check-btn" class="btn sm" data-action="tc.claudeCheck">Check Claude</button>
+                </div>
+                <div id="tc-claude-status" class="tc-form-hint" role="status" aria-live="polite"></div>
               </div>
               <div class="tc-form-group">
                 <label class="tc-form-label" for="tc-base-cur">Base Currency</label>

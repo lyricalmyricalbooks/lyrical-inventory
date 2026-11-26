@@ -4,6 +4,7 @@ import * as quota from '../src/lib/gemini-quota.js';
 import { runIntelTurn } from '../src/lib/gemini-chat.js';
 import { geminiUsesThinkingLevel } from '../src/lib/gemini-models.js';
 import { buildHarness } from './helpers/extract-decl.js';
+import { claudeOn, withClaude } from '../src/lib/claude-chat.js';
 
 const good = () => ({ ok: true, status: 200, json: async () => ({ model: 'selected/model', choices: [{ message: { content: '{"total":12}' }, finish_reason: 'stop' }] }) });
 
@@ -197,8 +198,9 @@ describe('receipt scanning and the assistant share one Gemini reader', () => {
   function assistant(settings) {
     const setIntelStatus = vi.fn();
     const ask = buildHarness({
-      names: ['backupProvider', 'askWithFallback'],
+      names: ['backupProvider', 'askWithFallback', 'askOthers'],
       deps: {
+        claudeOn, withClaude, runClaudeTurn: vi.fn(),
         TAX_CENTER: { settings }, INTEL_HISTORY: [], INTEL_TOOL_SCHEMAS: [],
         intelContext: () => ({}), systemInstruction: () => 'sys', intelAbort: { signal: undefined },
         setIntelStatus, console: { warn: () => {} },

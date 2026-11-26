@@ -7,6 +7,7 @@ import { buildHarness } from './helpers/extract-decl.js';
 import { findExpenseRule } from '../src/lib/expense-rules.js';
 import { PICKER_CURRENCIES, roundCents, setSelectCurrency } from '../src/lib/money.js';
 import * as scanChecks from '../src/lib/receipt-scan-checks.js';
+import { anyAiReady } from '../src/lib/claude-chat.js';
 
 const INDEX_HTML = fs.readFileSync(
   path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../index.html'), 'utf8'
@@ -690,7 +691,7 @@ function domHarness() {
       'applyBatchExpenseBulk'
     ],
     deps: {
-      PICKER_CURRENCIES,
+      PICKER_CURRENCIES, anyAiReady,
       $: (id) => document.getElementById(id),
       document,
       escapeHtml: (s) => String(s ?? '').replace(/[&<>"']/g,

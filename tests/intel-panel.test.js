@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { buildHarness, appSource } from './helpers/extract-decl.js';
 import { escapeHtml } from '../src/lib/html.js';
 import { PUBLISHER_ONLY_TABS } from '../src/lib/help-guide.js';
+import { claudeOn, withClaude } from '../src/lib/claude-chat.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const INDEX_HTML = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
@@ -170,7 +171,7 @@ describe('when a question cannot be asked', () => {
   const blocker = (TAX_CENTER, onLine = true) => buildHarness({
     // intelBlocker now consults backupProvider(), so it has to come across too.
     names: ['backupProvider', 'intelBlocker'],
-    deps: { TAX_CENTER, navigator: { onLine } },
+    deps: { TAX_CENTER, navigator: { onLine }, claudeOn },
     returns: 'intelBlocker',
   })();
 
@@ -365,7 +366,7 @@ describe('when Google will not answer', () => {
       console: { warn: vi.fn() },
     };
     const ask = buildHarness({
-      names: ['backupProvider', 'askWithFallback', 'askGeminiOrBackup'], deps, returns: 'askWithFallback',
+      names: ['backupProvider', 'askWithFallback', 'askOthers', 'askGeminiOrBackup'], deps: { claudeOn, withClaude, runClaudeTurn: vi.fn(), ...deps }, returns: 'askWithFallback',
     });
     return { ask, ...deps };
   }
@@ -486,7 +487,7 @@ describe('when the publisher picks a model themselves', () => {
       console: { warn: vi.fn() },
     };
     const ask = buildHarness({
-      names: ['backupProvider', 'askWithFallback', 'askGeminiOrBackup'], deps, returns: 'askWithFallback',
+      names: ['backupProvider', 'askWithFallback', 'askOthers', 'askGeminiOrBackup'], deps: { claudeOn, withClaude, runClaudeTurn: vi.fn(), ...deps }, returns: 'askWithFallback',
     });
     return { ask, ...deps };
   }
@@ -531,7 +532,7 @@ describe('when the publisher picks a model themselves', () => {
 describe('the composer with only a backup key', () => {
   const blocker = (settings, onLine = true) => buildHarness({
     names: ['backupProvider', 'intelBlocker'],
-    deps: { TAX_CENTER: { settings }, navigator: { onLine } },
+    deps: { TAX_CENTER: { settings }, navigator: { onLine }, claudeOn },
     returns: 'intelBlocker',
   })();
 

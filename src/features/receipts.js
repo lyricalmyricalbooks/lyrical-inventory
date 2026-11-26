@@ -43,6 +43,7 @@ import { escapeHtml, jsArg } from '../lib/html.js';
 import { localDay } from '../lib/calendar-day.js';
 import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { runOpenRouterRead, friendlyOpenRouterError } from '../lib/openrouter-chat.js';
+import { anyAiReady, claudeOn, runClaudeRead, withClaude } from '../lib/claude-chat.js';
 import {
   _friendlyScanError,
   _warmGeminiModelCache,
@@ -161,7 +162,7 @@ function receiptFinderDependencies() {
     // deploy, paste and keep up to date.
     service: () => sheetsUrl,
     expenses: () => TAX_CENTER.businessExpenses || [],
-    hasAppAi: () => !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()),
+    hasAppAi: () => anyAiReady(TAX_CENTER.settings),
     readAi: (parts, opts) => _callAiForReceipts(TAX_CENTER.settings?.geminiKey, parts, opts),
     categories: EXPENSE_CATEGORIES, inferCategory: inferReceiptCategory,
     ruleCategory: (vendor, description) => findExpenseRule(TAX_CENTER.expenseRules, { vendor, description }, { allowed: EXPENSE_CATEGORIES })?.category || '',
@@ -1892,7 +1893,7 @@ async function chooseOrganizerSource() {
  */
 async function organizerReadUnclear() {
   const apiKey = TAX_CENTER.settings?.geminiKey || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) { showToast('⚠ Add a Gemini or OpenRouter key in Config first', 'err', 5000); return; }
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim() && !claudeOn(TAX_CENTER.settings)) { showToast('⚠ Add a Gemini or OpenRouter key in Config first', 'err', 5000); return; }
 
   const todo = _organizerPlans.filter(p => p.needsOcr);
   if (!todo.length) { showToast('✓ Nothing needs reading — every file was understood from its name', 'ok'); return; }
@@ -3705,6 +3706,7 @@ function _geminiThinkingPatch(mode, budget) {
 // receipt in a batch. What stays here is how a receipt failure is worded.
 async function _callAiForReceipts(apiKey, parts, opts = {}) {
   if (opts.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  if (TAX_CENTER.settings?.claudeOn === true && !opts.withoutClaude) return _callAiWithClaude(apiKey, parts, opts);
   const key = TAX_CENTER.settings?.openRouterKey?.trim();
   if (!apiKey && !key) throw new Error('Add a Gemini or OpenRouter key in Settings › AI and receipts');
   return askGeminiOrBackup({
@@ -3731,6 +3733,19 @@ async function _callAiForReceipts(apiKey, parts, opts = {}) {
         // counts as fatal.
         { __alreadyFriendly: true, status: error?.status, classifyAs: backupWhy });
     },
+  });
+}
+
+// Claude switched on (Settings › AI and receipts; it runs through the website,
+// on prepaid credits only): it reads first when the publisher chose that,
+// otherwise only when Gemini and OpenRouter can't. The Gemini-then-OpenRouter
+// path above runs unchanged as "the others".
+function _callAiWithClaude(apiKey, parts, opts) {
+  const hasOthers = !!(apiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+  return withClaude({
+    claude: () => runClaudeRead({ ...opts, parts }),
+    others: hasOthers ? () => _callAiForReceipts(apiKey, parts, { ...opts, withoutClaude: true }) : null,
+    claudeFirst: TAX_CENTER.settings?.claudeFirst === true,
   });
 }
 
@@ -4063,7 +4078,7 @@ function _receiptScanRemember(fingerprint, parsed) {
 // work anyway.
 function warmReceiptScan(file) {
   if (!file) return;
-  const hasKey = TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim();
+  const hasKey = anyAiReady(TAX_CENTER.settings);
   if (!hasKey) return;
   _receiptScanFingerprint(file).then(fp => {
     if (!_receiptScanRecall(fp)) _prepareReceiptUploadOnce(file).catch(() => {});
@@ -4281,7 +4296,7 @@ async function loadReceiptFileForScan(receiptRef) {
  */
 async function readShippingFieldsFromReceipt(receiptRef, { signal } = {}) {
   const apiKey = TAX_CENTER.settings?.geminiKey || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) throw new Error('add your Gemini or OpenRouter key in Settings › AI and receipts first');
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim() && !claudeOn(TAX_CENTER.settings)) throw new Error('add your Gemini or OpenRouter key in Settings › AI and receipts first');
   const file = await loadReceiptFileForScan(receiptRef);
   if (!file) throw new Error('the receipt file could not be opened from your folder');
   const parsed = await _extractReceiptFromFile(apiKey, file, {
@@ -4534,7 +4549,7 @@ async function _runReceiptScan(cfg) {
   const apiKey = TAX_CENTER.settings?.geminiKey
     || (cfg.keyId && $(cfg.keyId)?.value.trim())
     || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim() && !claudeOn(TAX_CENTER.settings)) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
 
   // The Expenses tab reads every receipt picked for the expense together;
   // the other forms hold one file.
@@ -4963,7 +4978,7 @@ function renderBatchExpenseModal() {
   }
 
   // Scanning needs a key, and an author has no Tax Centre to keep one in.
-  const canScan = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()) && !isAuthor();
+  const canScan = anyAiReady(TAX_CENTER.settings) && !isAuthor();
   const scanBtn = $('bx-scan-btn');
   if (scanBtn) scanBtn.style.display = canScan ? '' : 'none';
   const scanHint = $('bx-scan-hint');
@@ -5369,7 +5384,7 @@ async function scanAllBatchExpenses(force) {
   if (!targets.length) { showToast('⚠ No receipts left to read', 'warn'); return; }
 
   const apiKey = TAX_CENTER.settings?.geminiKey || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim() && !claudeOn(TAX_CENTER.settings)) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
 
   const btn = $('bx-scan-btn');
   const ac = new AbortController();
@@ -5439,7 +5454,7 @@ async function rescanBatchExpenseRow(uid) {
   if (!row || !row.file) return;
   if (_batchScanAbort) { showToast('⚠ A scan is already running', 'warn'); return; }
   const apiKey = TAX_CENTER.settings?.geminiKey || '';
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim() && !claudeOn(TAX_CENTER.settings)) { showToast('⚠ Gemini or OpenRouter API key required in Config', 'err'); return; }
 
   const ac = new AbortController();
   _batchScanAbort = ac;
@@ -6018,7 +6033,7 @@ function retryFailedEmailExtractions() {
 
 async function extractReceiptsFromEmailText() {
   const apiKey = TAX_CENTER.settings?.geminiKey;
-  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) { showToast('Gemini or OpenRouter API key required in Config', 'err'); return; }
+  if (!apiKey && !TAX_CENTER.settings?.openRouterKey?.trim() && !claudeOn(TAX_CENTER.settings)) { showToast('Gemini or OpenRouter API key required in Config', 'err'); return; }
   if (!navigator.onLine) {
     showToast('Offline — reconnect to extract receipts', 'warn');
     return;
@@ -7179,7 +7194,7 @@ function fileReadyReceiptsFromAlert(event) {
  */
 async function sweepReceiptEmails({ force = false } = {}) {
   const apiKey = TAX_CENTER.settings?.geminiKey;
-  const configured = !!(sheetsUrl && (apiKey || TAX_CENTER.settings?.openRouterKey?.trim()));
+  const configured = !!(sheetsUrl && (apiKey || TAX_CENTER.settings?.openRouterKey?.trim() || claudeOn(TAX_CENTER.settings)));
   const { online, visible } = browserWatchState();
   const due = force
     ? configured && online && !_receiptSweeping

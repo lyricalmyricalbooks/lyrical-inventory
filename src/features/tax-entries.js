@@ -74,6 +74,7 @@ import {
   switchTaxCenterSubTab,
   tcCloseTripDropdown,
 } from './taxcentre.js';
+import { anyAiReady } from '../lib/claude-chat.js';
 
 // ── TAX CENTER LOGIC
 const TC_CATEGORIES = [
@@ -769,7 +770,7 @@ function _snapReadWhenOnline(file) {
     _snapPendingFile = null;
     const attached = $('tc-exp-file')?.files?.[0];
     const untouched = !($('tc-exp-desc')?.value || '').trim() && !($('tc-exp-amount')?.value || '').trim();
-    const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+    const hasKey = anyAiReady(TAX_CENTER.settings);
     if (!pending || attached !== pending || !untouched || !hasKey) return;
     showToast('📶 Back online — reading your receipt…', 'ok');
     await scanReceiptWithAI();
@@ -801,7 +802,7 @@ async function snapReceiptChosen(input) {
     _snapReadWhenOnline(file);
     return;
   }
-  const hasKey = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+  const hasKey = anyAiReady(TAX_CENTER.settings);
   if (!hasKey) {
     showToast('📷 Photo attached. To have it read automatically, add an AI key in Settings › AI and receipts.', 'warn', 6000);
     return;

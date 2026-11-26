@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
 import { buildHarness } from './helpers/extract-decl.js';
+import { anyAiReady, claudeOn } from '../src/lib/claude-chat.js';
 
 // Covers the scanner reading less: a receipt already read confidently is
 // answered from memory (no upload, no AI allowance, works offline), the photo
@@ -30,6 +31,7 @@ function memoryHarness({ reply, prepare } = {}) {
       'warmReceiptScan', '_buildReceiptScanPrompt', 'RECEIPT_SCAN_SCHEMA'
     ],
     deps: {
+      claudeOn, anyAiReady,
       EXPENSE_CATEGORIES: CATS,
       TAX_CENTER: { settings: { geminiKey: 'k' } },
       localStorage: globalThis.localStorage,
