@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  isBatchCandidate, scaledParcel, pickCheapestRate, preflightBlocker, addressVerdictBlocker,
+  isBatchCandidate, scaledParcel, shippoParcel, pickCheapestRate, preflightBlocker, addressVerdictBlocker,
   isCosmeticCorrection, originBlocker, describeBatchTotal, batchCustomsDeclaration,
 } from '../src/lib/batch-shipping.js';
 
@@ -27,6 +27,17 @@ describe('scaledParcel', () => {
   it('stacks height and weight per copy', () => {
     const p = scaledParcel({ length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' }, 3);
     expect(p).toMatchObject({ length: 10, width: 8, height: 2.4, weight: 3.3, distance_unit: 'in', mass_unit: 'lb' });
+  });
+});
+
+describe('shippoParcel', () => {
+  it('sends sizes and weight as text, keeping the units', () => {
+    const p = shippoParcel({ length: 10, width: 8, height: 2.4, distance_unit: 'cm', weight: 3.3, mass_unit: 'kg' });
+    expect(p).toEqual({ length: '10', width: '8', height: '2.4', distance_unit: 'cm', weight: '3.3', mass_unit: 'kg' });
+  });
+  it('leaves an unreadable value blank instead of sending "NaN"', () => {
+    const p = shippoParcel({ length: NaN, width: undefined, height: '', weight: '1.20' });
+    expect(p).toMatchObject({ length: '', width: '', height: '', weight: '1.2' });
   });
 });
 

@@ -120,6 +120,26 @@ export function pickCheapestRate(rates = []) {
 }
 
 /**
+ * A parcel in the shape Shippo's API documents: sizes and weight as text
+ * ("10", not 10). Shippo accepts numbers today, but its schema types these as
+ * strings, so the request follows the schema rather than its leniency. A
+ * blank or unreadable value stays blank so Shippo's own error names the field.
+ */
+export function shippoParcel(parcel = {}) {
+  const asText = (value) => {
+    const n = Number(value);
+    return value === '' || value == null || !Number.isFinite(n) ? '' : String(n);
+  };
+  return {
+    ...parcel,
+    length: asText(parcel.length),
+    width: asText(parcel.width),
+    height: asText(parcel.height),
+    weight: asText(parcel.weight),
+  };
+}
+
+/**
  * Whether the origin address is complete enough to put on a label. A blank
  * sender field would otherwise be filled from placeholders downstream.
  */

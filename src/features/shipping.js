@@ -64,7 +64,7 @@ import {
   unshipOrderForRefund, describeRefundRefusal,
 } from '../lib/carriers/label-refunds.js';
 import {
-  BATCH_LOOKBACK_DAYS, isBatchCandidate, scaledParcel, batchCustomsDeclaration, pickCheapestRate,
+  BATCH_LOOKBACK_DAYS, isBatchCandidate, scaledParcel, shippoParcel, batchCustomsDeclaration, pickCheapestRate,
   originBlocker, preflightBlocker, addressVerdictBlocker, describeBatchTotal, buildLabelPrintPage,
 } from '../lib/batch-shipping.js';
 import { openM, closeM, confirmDialog, promptDialog, validateFields, clearFieldErrors, fieldError, _prefersReducedMotion } from '../lib/modal.js';
@@ -7964,7 +7964,7 @@ async function fetchBatchRates(shippoKey, origin, row, address) {
       ...address,
       phone: getFallbackShippingPhone(row.entry.shipPhone || row.entry.phone || ''),
     },
-    parcels: [parcel],
+    parcels: [shippoParcel(parcel)],
     metadata: `order_number:${row.orderNumber.slice(0, 100)}`,
     async: false,
   };
@@ -8603,14 +8603,14 @@ async function calculateShippoRates() {
         zip: stZip,
         country: stCountryCode
       },
-      parcels: [{
+      parcels: [shippoParcel({
         length: spLength,
         width: spWidth,
         height: spHeight,
         distance_unit: spDimUnit,
         weight: spWeight,
         mass_unit: spWeightUnit
-      }],
+      })],
       async: false
     };
 
