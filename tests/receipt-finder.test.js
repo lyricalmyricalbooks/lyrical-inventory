@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { receiptQuery, receiptMoney, receiptDate, normalizeFoundReceipt, receiptProblems, receiptDuplicate, receiptReviewStatus, receiptExpense, mergeFinderSnapshot } from '../src/lib/receipt-finder.js';
+import { receiptQuery, receiptMoney, receiptDate, normalizeFoundReceipt, receiptProblems, receiptDuplicate, receiptReviewStatus, receiptExpense, mergeFinderSnapshot, receiptSkipReason, emailSenderName, emailDay } from '../src/lib/receipt-finder.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, gmailMessage } from '../src/lib/receipt-finder-client.js';
 import { flushReceiptOutbox } from '../src/lib/receipt-finder-outbox.js';
 
@@ -107,6 +107,35 @@ describe('read-only Gmail and protected extraction', () => {
   });
   it('decodes Gmail base64url correctly', () => {
     expect([...decodeGmailBase64('-_8')]).toEqual([251, 255]);
+  });
+  it('reads the subject, sender and date whatever case Gmail writes the header names in', () => {
+    // Gmail sends "Subject"; matching only "subject" left every email blank,
+    // so every set-aside row read "(no subject)".
+    const parsed = gmailMessage({ id: 'm', payload: { headers: [
+      { name: 'Subject', value: 'Your receipt for $12.00' }, { name: 'FROM', value: 'Kobo <no-reply@kobo.com>' }, { name: 'date', value: 'Tue, 22 Sep 2026 12:00:00 -0400' },
+    ], mimeType: 'text/plain', body: { data: '' } } }, 'p@example.com');
+    expect(parsed).toMatchObject({ subject: 'Your receipt for $12.00', from: 'Kobo <no-reply@kobo.com>', date: 'Tue, 22 Sep 2026 12:00:00 -0400' });
+    // A price only in the subject now keeps the email in for an AI read.
+    expect(receiptSkipReason(parsed)).toBe('');
+  });
+  it('fills a missing vendor and date from the email, and holds the receipt for a check', () => {
+    const email = { id: 'e', account: 'p@example.com', from: '"Staples" <orders@staples.ca>', date: 'Tue, 22 Sep 2026 12:00:00 -0400', fileParts: [] };
+    const draft = normalizeFoundReceipt({ vendor: '', date: '', amount: 20, currency: 'CAD', confidence: 0.95 }, email);
+    expect(draft).toMatchObject({ vendor: 'Staples', date: '2026-09-22', filledFromEmail: ['vendor', 'date'], selected: false });
+    expect(receiptReviewStatus(draft)).toBe('review');
+    expect(receiptReviewStatus({ ...draft, reviewed: true })).toBe('ready');
+    // What the AI found always wins over the email.
+    const found = normalizeFoundReceipt({ vendor: 'Staples Business', date: '2026-09-01', amount: 20, currency: 'CAD', confidence: 0.95 }, email);
+    expect(found.filledFromEmail).toBeUndefined();
+    expect(found).toMatchObject({ vendor: 'Staples Business', date: '2026-09-01' });
+  });
+  it('names the shop from the sender, never a robot name or a mail service', () => {
+    expect(emailSenderName('"Amazon.ca" <auto-confirm@amazon.ca>')).toBe('Amazon.ca');
+    expect(emailSenderName('billing@shopify.com')).toBe('Shopify');
+    expect(emailSenderName('noreply <no-reply@mail.squareup.com>')).toBe('Squareup');
+    expect(emailSenderName('orders@amazon.co.uk')).toBe('Amazon');
+    expect(emailSenderName('someone@gmail.com')).toBe('');
+    expect(emailDay('not a date')).toBe('');
   });
   it('keeps an inline PDF invoice but drops an inline signature logo', () => {
     // Several suppliers send the invoice as `Content-Disposition: inline`.

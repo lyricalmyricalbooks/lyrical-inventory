@@ -411,8 +411,7 @@
 .finder-failures-hint {
   color: var(--content-muted);
   font-size: var(--text-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-caps);
+  text-align: end;
 }
 .finder-failures-list { list-style: none; margin: 0; padding: 0; }
 .finder-failure {
@@ -434,6 +433,31 @@
 .finder-failure .btn { min-height: 44px; flex: none; }
 .finder-setaside { margin-block-start: var(--space-3); }
 .finder-setaside-why { color: var(--content-muted); font-size: var(--text-xs); }
+.finder-setaside-nosubject { color: var(--content-muted); font-weight: 600; }
+.finder-setaside-open { min-height: 44px; flex: none; text-decoration: none; display: inline-flex; align-items: center; }
+.finder-setaside-gate {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border-block-end: 1px solid var(--border-default);
+  background: var(--surface-sunken);
+}
+.finder-setaside-gate p { margin: 0; flex: 1; min-width: 200px; color: var(--content-secondary); font-size: var(--text-sm); }
+.finder-setaside-gate .btn { min-height: 44px; }
+.finder-dismissed-head {
+  margin: var(--space-4) 0 var(--space-2);
+  color: var(--content-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+@media (max-width: 600px) {
+  .finder-failures > summary { flex-wrap: wrap; }
+  .finder-failures-hint { text-align: start; }
+  .finder-setaside .finder-failure .btn { flex: 1 1 auto; justify-content: center; }
+}
 .finder-failures-foot {
   margin: 0;
   padding: var(--space-3) var(--space-4);
