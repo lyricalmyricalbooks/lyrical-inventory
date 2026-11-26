@@ -1,10 +1,11 @@
 import { escapeHtml as esc } from '../lib/html.js';
-import { emailDay, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { emailDay, emailSenderName as senderName, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
 import { localDayPlus } from '../lib/calendar-day.js';
+import { withTimeLimit } from '../lib/time-limit.js';
 import '../styles/receipt-finder.css';
 
 const LABELS = { all: 'All', ready: 'Ready', review: 'Needs review', duplicate: 'Duplicates', queued: 'Waiting to file', imported: 'Filed', ignored: 'Dismissed' };
@@ -17,7 +18,7 @@ const PILES = {
   filed: { label: 'Filed', statuses: ['imported'] },
 };
 
-const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '' });
+const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '', lastReport: null });
 
 // Emails are read a few at a time rather than one after another. The AI call
 // dominates each one, so this is the difference between a scan that takes a
@@ -292,9 +293,12 @@ async function mountReceiptFinder(element, dependencies) {
         <div class="finder-progress-track"><div class="finder-progress-fill" data-progress-fill style="width:0%"></div></div>
         <span class="finder-progress-text" data-progress-text></span>
       </div>
+      <p class="finder-progress-now" data-progress-now aria-live="off"></p>
       <p class="finder-status" data-finder-status role="status" aria-live="polite">${state.lastScan ? esc(lastScanText()) : 'Scan yesterday’s mail, or pick a longer period. Nothing is filed until you approve it.'}</p>
+      <div data-finder-report></div>
       <div class="finder-health" data-finder-health>
         <span class="finder-health-item" data-health-reader></span>
+        <button type="button" class="btn sm finder-test-btn" data-action="test-reader">Test the reader</button>
         <label class="finder-auto finder-health-item"><input type="checkbox" data-daily-toggle> Scan every morning <span class="finder-auto-note" data-daily-note>Checking…</span></label>
       </div>
     </section>
@@ -454,6 +458,43 @@ function renderPiles(counts, pile) {
       <span class="finder-pile-hint">${hints[key]}</span></button>`).join('');
 }
 
+// Each row of the last scan's report, in the order the publisher cares about:
+// what needs them, what was found, then what was passed over and why.
+const REPORT_WORDS = {
+  failed: ['Couldn’t be read', 'bad'],
+  found: ['New receipt found', 'ok'],
+  waiting: ['Already found, waiting in your piles', 'ok'],
+  'found-before': ['Already found in an earlier scan', 'ok'],
+  filed: ['Already in your expenses', 'ok'],
+  dismissed: ['You dismissed this receipt earlier', 'muted'],
+  aside: ['Not a receipt', 'muted'],
+  'aside-before': ['Not a receipt (checked before)', 'muted'],
+};
+const REPORT_ORDER = Object.keys(REPORT_WORDS);
+
+function renderReport() {
+  const slot = host.querySelector('[data-finder-report]');
+  if (!slot) return;
+  const last = state.lastReport;
+  const rows = (last?.rows || []).filter(row => row.key?.startsWith(state.account + ':'));
+  if (busy || !rows.length) { slot.replaceChildren(); return; }
+  const wasOpen = !!slot.querySelector('details[open]');
+  const sorted = [...rows].sort((a, b) => REPORT_ORDER.indexOf(a.outcome) - REPORT_ORDER.indexOf(b.outcome));
+  const tally = REPORT_ORDER.map(outcome => [outcome, rows.filter(row => row.outcome === outcome).length]).filter(([, n]) => n);
+  const when = new Date(last.at);
+  const whenText = Number.isFinite(when.getTime()) ? when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  slot.innerHTML = `<details class="finder-report"${wasOpen ? ' open' : ''}>
+    <summary><span class="finder-report-sum">What this scan did${whenText ? ` <span class="finder-report-when">${esc(whenText)}</span>` : ''}</span>
+      <span class="finder-report-tally">${esc(tally.map(([outcome, n]) => `${n} ${REPORT_WORDS[outcome][0].toLowerCase()}`).join(' · '))}</span></summary>
+    <ul class="finder-report-list">${sorted.map(row => `
+      <li class="finder-report-row is-${REPORT_WORDS[row.outcome]?.[1] || 'muted'}">
+        <span class="finder-report-what"><strong>${esc(row.label || 'Email without a subject')}</strong>${row.detail ? `<small>${esc(row.detail)}</small>` : ''}</span>
+        <span class="finder-report-outcome">${esc(REPORT_WORDS[row.outcome]?.[0] || row.outcome)}</span>
+        <a class="finder-report-open" href="${esc(gmailLink(row.key))}" target="_blank" rel="noopener noreferrer" aria-label="Open in Gmail: ${esc((row.label || 'email').slice(0, 80))}">Open</a>
+      </li>`).join('')}</ul>
+  </details>`;
+}
+
 function renderProgress() {
   const wrap = host.querySelector('[data-finder-progress]');
   wrap.hidden = !busy || !scanTotal;
@@ -465,7 +506,7 @@ function renderProgress() {
   wrap.setAttribute('aria-valuemin', '0');
   wrap.setAttribute('aria-valuemax', String(scanTotal));
   wrap.setAttribute('aria-valuenow', String(scanDone));
-  host.querySelector('[data-progress-text]').textContent = `Reading ${scanDone} of ${scanTotal} emails`;
+  host.querySelector('[data-progress-text]').textContent = `${scanDone} of ${scanTotal} emails read`;
 }
 
 // One row per REASON, not per email. A scan that trips the same AI-key problem
@@ -556,6 +597,7 @@ function render() {
     renderDailySweep();
     renderHealth();
     renderProgress();
+    renderReport();
     const counts = Object.fromEntries(RECEIPT_STATUSES.map(status => [status, 0]));
     state.drafts.forEach(draft => { counts.all++; counts[statusOf(draft)]++; });
     renderAlert(counts);
@@ -590,6 +632,7 @@ function render() {
     host.querySelector('[data-finder-actionbar]').hidden = !counts.ready && !counts.queued && !state.pageToken;
     host.querySelector('[data-action="import"]').disabled = !selected || busy;
     host.querySelector('[data-action="scan"]').disabled = busy;
+    host.querySelector('[data-action="test-reader"]').disabled = busy;
     host.querySelector('[data-action="scan-day"]').disabled = busy;
     host.querySelectorAll('.finder-period [data-preset]').forEach(button => { button.disabled = busy; });
     host.querySelector('[data-action="cancel"]').hidden = !busy;
@@ -613,6 +656,13 @@ function renderEmpty() {
     return `<div class="empty-state"><div class="e-icon" aria-hidden="true">🔍</div><h4>Nothing matches this view</h4>
       <p>Choose All, or clear the search box, to see your other receipts again.</p>
       <button type="button" class="btn" data-action="show-all">Show all receipts</button></div>`;
+  }
+  // A scan whose emails were all already filed, dismissed or not receipts
+  // found plenty, just nothing new. Saying "no receipts in that period" next to
+  // a report listing them read as the finder being broken.
+  if (state.lastScan && state.lastReport?.rows?.some(row => row.key?.startsWith(state.account + ':'))) {
+    return `<div class="empty-state"><h4>Nothing new to file</h4>
+      <p>The last scan didn’t turn up any new receipts. “What this scan did” above shows what happened to each email it checked.</p></div>`;
   }
   if (state.lastScan) {
     return `<div class="empty-state"><div class="e-icon" aria-hidden="true">📭</div><h4>No receipts in that period</h4>
@@ -774,6 +824,7 @@ async function onClick(event) {
       case 'use-sheets': await useSheetsScript(); break;
       case 'clear-failures': await clearRecordedFailures(); break;
       case 'scan': await scan(false); break;
+      case 'test-reader': await testReader(); break;
       case 'scan-day': await scanOneDay(-1); break;
       case 'next': await scan(true); break;
       case 'cancel': controller?.abort(); break;
@@ -976,6 +1027,54 @@ async function ensureServiceReady() {
 // What the set-aside list shows for an email it no longer keeps a copy of.
 const emailLabel = email => ({ subject: email.subject || '', from: email.from || '', date: emailDay(email.date) });
 
+// How long one email may take before it is set aside as "took too long" and
+// the scan moves on. Without a limit, one Gmail call or AI answer that never
+// came back froze the whole scan on "Reading 1 of 3" with no way to tell.
+const GMAIL_LIMIT_MS = 30 * 1000;
+const AI_LIMIT_MS = 2 * 60 * 1000;
+const TOO_SLOW_GMAIL = 'Gmail took more than 30 seconds to send this email. Read it again.';
+const TOO_SLOW_AI = 'The AI took more than 2 minutes to read this email, so it was skipped. Read it again, or check the reader with “Test the reader”.';
+
+// What each reader is doing right now, for the live line under the progress
+// bar. Keyed by email so three parallel readers each get their own line.
+const reading = new Map();
+let readingTicker = 0;
+function stage(key, text, label) {
+  const entry = reading.get(key) || { label: '', since: Date.now() };
+  if (label !== undefined) entry.label = label;
+  entry.text = text; entry.since = Date.now();
+  reading.set(key, entry);
+  paintReading();
+}
+function paintReading() {
+  const node = host?.querySelector('[data-progress-now]');
+  if (!node) return;
+  const now = Date.now();
+  node.textContent = [...reading.values()].slice(0, SCAN_CONCURRENCY).map(entry => {
+    const secs = Math.floor((now - entry.since) / 1000);
+    const name = entry.label ? `“${entry.label.slice(0, 60)}”` : 'An email';
+    return `${name}: ${entry.text}${secs >= 3 ? ` (${secs} s)` : ''}`;
+  }).join('\n');
+}
+function startReadingTicker() {
+  reading.clear();
+  clearInterval(readingTicker);
+  readingTicker = setInterval(paintReading, 1000);
+}
+function stopReadingTicker() {
+  clearInterval(readingTicker); readingTicker = 0; reading.clear(); paintReading();
+}
+
+// What happened to every email the last scan looked at, so a scan that ends
+// with nothing ready says why instead of looking broken. Kept in memory and
+// saved with the mailbox; only the latest scan's.
+let scanReport = null;
+function note(key, outcome, label, detail = '') {
+  if (!scanReport) return;
+  scanReport.rows = scanReport.rows.filter(row => row.key !== key);
+  scanReport.rows.push({ key, outcome, label: String(label || '').slice(0, 160), detail: String(detail || '').slice(0, 300) });
+}
+
 async function readCandidate(id, signal, endpoint, force = false) {
   const owner = uid, account = state.account, key = `${account}:${id}`;
   // A halt raised by another reader must stop this one before it spends
@@ -984,14 +1083,22 @@ async function readCandidate(id, signal, endpoint, force = false) {
   // An email read by an earlier scan is skipped rather than paid for twice —
   // but it still counts towards this scan's progress, or the bar stalls.
   const prior = state.scans[key];
-  if (!force && prior?.done && (prior.count > 0 || prior.reader === READER_VERSION)) { scanDone++; scanCached++; scheduleRender(); return; }
+  if (!force && prior?.done && (prior.count > 0 || prior.reader === READER_VERSION)) {
+    note(key, prior.count > 0 ? 'found-before' : 'aside-before', prior.subject, prior.count > 0 ? '' : SET_ASIDE_WHY[prior.skipped] || 'read, but no receipt found in it');
+    scanDone++; scanCached++; scheduleRender(); return;
+  }
   // Deliberately not recorded as scanned: if that expense is later deleted,
   // the next scan should find the receipt again.
-  if (knownMessages?.has(key)) { scanDone++; scanFiled++; scheduleRender(); return; }
+  const known = knownMessages?.get(key);
+  if (known) { note(key, known.kind, known.label); scanDone++; scanFiled++; scheduleRender(); return; }
   let email = state.emails[key];
   try {
-    if (!email) email = await client.message(id, account, signal);
+    if (!email) {
+      stage(key, 'opening the email', prior?.subject || '');
+      email = await withTimeLimit(GMAIL_LIMIT_MS, signal, TOO_SLOW_GMAIL, child => client.message(id, account, child));
+    }
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
+    const label = email.subject || senderName(email.from) || '';
     // No amount in the text and nothing attached: it cannot be a receipt, so it
     // is not worth an AI read. Most of a broad search is mail like this.
     // A publisher who asked for this email to be read again has already judged
@@ -1000,6 +1107,7 @@ async function readCandidate(id, signal, endpoint, force = false) {
     if (skipReason) {
       dropEmail(key);
       state.scans[key] = { done: true, ...emailLabel(email), count: 0, skipped: skipReason, reader: READER_VERSION };
+      note(key, 'aside', label, SET_ASIDE_WHY[skipReason]);
       scanSkipped++;
       await persist();
       scanDone++; scheduleRender();
@@ -1007,14 +1115,18 @@ async function readCandidate(id, signal, endpoint, force = false) {
     }
     // Attachments are fetched together rather than one after another; a receipt
     // email routinely carries several and they are independent downloads.
-    await Promise.all(email.fileParts.map(file => client.attachment(id, file, signal)));
+    if (email.fileParts.length) {
+      stage(key, `downloading ${email.fileParts.length === 1 ? 'the attachment' : `${email.fileParts.length} attachments`}`, label);
+      await withTimeLimit(GMAIL_LIMIT_MS * 2, signal, TOO_SLOW_GMAIL, child => Promise.all(email.fileParts.map(file => client.attachment(id, file, child))));
+    }
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     state.emails[key] = email;
     await persist(); // Source bytes must survive before the AI result does.
     const useAppAi = deps.hasAppAi?.();
-    const result = await extractFoundReceipts({ endpoint,
-      idToken: useAppAi ? undefined : await deps.user().getIdToken(), email, signal,
-      readAi: useAppAi ? deps.readAi : undefined });
+    stage(key, useAppAi ? 'the AI is reading it' : 'your Sheet script’s AI is reading it', label);
+    const idToken = useAppAi ? undefined : await deps.user().getIdToken();
+    const result = await withTimeLimit(AI_LIMIT_MS, signal, TOO_SLOW_AI, child => extractFoundReceipts({ endpoint,
+      idToken, email, signal: child, readAi: useAppAi ? deps.readAi : undefined }));
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
     result.receipts.forEach((raw, index) => {
       const draft = normalizeFoundReceipt(raw, email, index);
@@ -1031,6 +1143,9 @@ async function readCandidate(id, signal, endpoint, force = false) {
     // scan of a mostly-ordinary inbox.
     if (!result.receipts.length) dropEmail(key);
     state.scans[key] = { done: true, ...emailLabel(email), count: result.receipts.length, reader: READER_VERSION };
+    note(key, result.receipts.length ? 'found' : 'aside', label, result.receipts.length
+      ? result.receipts.map(raw => [raw.vendor, raw.amount != null && raw.currency ? `${raw.currency} ${raw.amount}` : ''].filter(Boolean).join(' ')).join('; ')
+      : 'the AI read it and found no receipt');
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
@@ -1039,6 +1154,7 @@ async function readCandidate(id, signal, endpoint, force = false) {
     // lapsed Gmail connection 86. Neither is the email's fault, so neither is
     // recorded against it: the next scan simply reads it again.
     const systemic = systemicReceiptFailure(error);
+    note(key, 'failed', email?.subject || senderName(email?.from) || '', systemic || error.message);
     if (systemic) {
       if (!haltReason) haltReason = systemic;
       controller?.abort();
@@ -1046,17 +1162,29 @@ async function readCandidate(id, signal, endpoint, force = false) {
       state.scans[key] = { error: error.message, ...(email ? emailLabel(email) : {}), subject: email?.subject || id, endpoint };
       await persist();
     }
+  } finally {
+    reading.delete(key); paintReading();
   }
   scanDone++;
   scheduleRender();
 }
 
+// An expense already filed from an email, or a receipt the finder already
+// holds, is not read again. The report says which, by name: "already in your
+// expenses" for a receipt that is merely waiting in a pile was wrong.
 function buildKnownMessages() {
-  const account = state.account, known = new Set();
+  const account = state.account, known = new Map();
   for (const expense of deps.expenses() || []) {
-    if (expense?.emailMsgId && (!expense.emailAccount || expense.emailAccount === account)) known.add(`${account}:${expense.emailMsgId}`);
+    if (expense?.emailMsgId && (!expense.emailAccount || expense.emailAccount === account)) {
+      known.set(`${account}:${expense.emailMsgId}`, { kind: 'filed', label: expense.vendor || expense.desc || '' });
+    }
   }
-  for (const draft of state.drafts) if (draft.account === account) known.add(`${account}:${draft.messageId}`);
+  for (const draft of state.drafts) {
+    const key = `${account}:${draft.messageId}`;
+    if (draft.account === account && !known.has(key)) {
+      known.set(key, { kind: draft.status === 'ignored' ? 'dismissed' : draft.status === 'imported' ? 'filed' : 'waiting', label: draft.vendor || '' });
+    }
+  }
   return known;
 }
 
@@ -1099,6 +1227,8 @@ async function scan(nextPage) {
   busy = true; controller = new AbortController(); const signal = controller.signal;
   scanTotal = 0; scanDone = 0; scanSkipped = 0; scanCached = 0; scanFiled = 0; haltReason = '';
   knownMessages = buildKnownMessages();
+  scanReport = { at: new Date().toISOString(), rows: [] };
+  startReadingTicker();
   const before = state.drafts.length;
   const failedBefore = Object.values(state.scans).filter(item => item.error).length;
   render();
@@ -1108,6 +1238,7 @@ async function scan(nextPage) {
     const page = await client.list(query, nextPage ? state.pageToken : '', signal);
     const messages = page.messages || [];
     scanTotal = messages.length;
+    announce(messages.length ? `Found ${messages.length} email${messages.length === 1 ? '' : 's'} that could be receipts. Reading them now…` : '');
     render();
     if (!messages.length) {
       state.pageToken = page.nextPageToken || ''; state.lastQuery = query; state.lastScan = new Date().toISOString();
@@ -1124,10 +1255,11 @@ async function scan(nextPage) {
     const failed = Object.values(state.scans).filter(item => item.error).length - failedBefore;
     announce([
       found ? `Found ${found} receipt${found === 1 ? '' : 's'} in ${messages.length} emails.` : `Checked ${messages.length} emails — none of them held a new receipt.`,
-      scanFiled ? `${scanFiled} ${scanFiled === 1 ? 'was' : 'were'} already in your expenses.` : '',
+      scanFiled ? `${scanFiled} ${scanFiled === 1 ? 'was' : 'were'} already found or filed.` : '',
       scanSkipped ? `${scanSkipped} ${scanSkipped === 1 ? 'was a delivery note or had' : 'were delivery notes or had'} no amount, so no AI was spent on ${scanSkipped === 1 ? 'it' : 'them'}.` : '',
       scanCached ? `${scanCached} ${scanCached === 1 ? 'was' : 'were'} already checked in an earlier scan.` : '',
-      failed > 0 ? `${failed} could not be read — the reasons are listed above.` : '',
+      failed > 0 ? `${failed} could not be read — see “Needs you”.` : '',
+      'Each email is listed under “What this scan did”.',
       state.pageToken ? 'There are more emails to check — use “Check the next 25 emails”.' : '',
     ].filter(Boolean).join(' '));
   } catch (error) {
@@ -1137,7 +1269,11 @@ async function scan(nextPage) {
         ? `Scan stopped after the first failure, so nothing more was spent on it. ${haltReason}`
         : 'Scan stopped. Everything already read has been saved; scan again to carry on.');
     } else throw error;
-  } finally { busy = false; controller = null; knownMessages = null; scanTotal = 0; scanDone = 0; render(); }
+  } finally {
+    stopReadingTicker();
+    if (scanReport) { state.lastReport = scanReport; scanReport = null; persist().catch(() => {}); }
+    busy = false; controller = null; knownMessages = null; scanTotal = 0; scanDone = 0; render();
+  }
 }
 
 // All the failures in one pass, a few at a time like a scan — not one scan per
@@ -1255,6 +1391,7 @@ async function rereadEmails(keys, { force }) {
   busy = true; controller = new AbortController(); const signal = controller.signal;
   scanTotal = keys.length; scanDone = 0; scanSkipped = 0; scanCached = 0; haltReason = '';
   const total = keys.length;
+  startReadingTicker();
   render();
   try {
     const endpoint = await ensureServiceReady();
@@ -1280,7 +1417,41 @@ async function rereadEmails(keys, { force }) {
     if (error.name !== 'AbortError') throw error;
     if (haltReason) { state.lastHalt = haltReason; await persist().catch(() => {}); }
     announce(haltReason ? `Stopped retrying at the first failure, so nothing more was spent on it. ${haltReason}` : 'Stopped. Everything already read has been saved.');
-  } finally { busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
+  } finally { stopReadingTicker(); busy = false; controller = null; scanTotal = 0; scanDone = 0; render(); }
+}
+
+// One sample receipt, read end to end by the same reader a scan uses, so
+// "is the AI working?" has a yes or no answer in a few seconds instead of a
+// scan that finds nothing. Costs one AI read; touches no email.
+const SAMPLE_RECEIPT = {
+  id: 'sample', from: 'Sample Paper Co <billing@example.com>', subject: 'Your receipt from Sample Paper Co',
+  body: 'Thank you for your order.\nReceipt #1001\nPrinter paper, 2 reams    $20.00\nHST    $2.60\nTotal paid: $22.60 CAD\nPaid by Visa ending 4242',
+  fileParts: [],
+};
+
+async function testReader() {
+  if (busy) return;
+  const useAppAi = !!deps.hasAppAi?.();
+  const endpoint = activeEndpoint();
+  if (!useAppAi && !endpoint) throw new Error('Save an AI key in Settings › AI and receipts, or connect your Google Sheet script, then test again.');
+  busy = true; render();
+  const started = Date.now();
+  const who = useAppAi ? 'the app’s own AI key' : 'your Google Sheet script';
+  announce(`Testing the reader with a sample receipt, using ${who}…`);
+  try {
+    const idToken = useAppAi ? undefined : await deps.user().getIdToken();
+    const sample = { ...SAMPLE_RECEIPT, account: state.account, date: new Date().toUTCString() };
+    const result = await withTimeLimit(AI_LIMIT_MS, undefined, TOO_SLOW_AI, signal => extractFoundReceipts({
+      endpoint, idToken, email: sample, signal, readAi: useAppAi ? deps.readAi : undefined }));
+    const secs = Math.max(1, Math.round((Date.now() - started) / 1000));
+    const total = result.receipts.map(raw => receiptMoney(raw.amount)).find(value => value !== null);
+    announce(total === 22.6
+      ? `The reader works. It read the sample receipt (total 22.60) in ${secs} seconds, using ${who}.`
+      : `The reader answered in ${secs} seconds but did not find the sample’s total of 22.60, so real receipts may be missed. Try again; if it keeps happening, check the AI key in Settings › AI and receipts.`);
+  } catch (error) {
+    if (error.name === 'AbortError') return;
+    announce(`The reader is not working: ${error.message}`);
+  } finally { busy = false; render(); }
 }
 
 function stopReceiptFinder() { controller?.abort(); }
