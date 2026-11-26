@@ -4050,6 +4050,24 @@
             </div>
           </div>
 
+          <details class="ship-flow-group ship-cc-details" id="so-options">
+            <summary class="sect">Shippo label options</summary>
+            <div style="display:flex;flex-direction:column;">
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="so-signature">
+                <span>Signature required on delivery</span>
+              </label>
+              <label class="tc-toggle-wrap">
+                <input type="checkbox" id="so-return">
+                <span>Return label: the customer sends the parcel back to you</span>
+              </label>
+            </div>
+            <div class="tc-form-grid">
+              <div class="tc-form-group"><label class="tc-form-label" for="so-insure">Insure for (CAD)</label><input id="so-insure" type="number" inputmode="decimal" min="0" step="0.01" class="tc-form-input" placeholder="No insurance"></div>
+            </div>
+            <div class="tc-form-hint">These apply to Shippo rates and labels only. Signature fees are in the prices shown. Insurance is charged by Shippo on top of the label. A return label doesn't mark the order shipped; it's saved on the order as its return.</div>
+          </details>
+
           <details class="ship-flow-group ship-cc-details">
             <summary class="sect">Chit Chats options</summary>
             <div class="tc-form-grid">
