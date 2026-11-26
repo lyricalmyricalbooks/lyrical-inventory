@@ -17,7 +17,7 @@ export const FOLIO_EMOJI_ICONS = {
   '🏬': 'consignment', '🏢': 'consignment', '🎯': 'target', '❓': 'help', '✈': 'plane', '⚙': 'settings',
   '⚖': 'tax', '🏷': 'sell', '📌': 'pin', '📎': 'paperclip', '🚚': 'truck', '🔄': 'rotate', '🔁': 'rotate',
   '🌐': 'globe', '🔒': 'lock', '💡': 'lightbulb', '🖼': 'image', '🏭': 'printer', '📒': 'order', '🟨': 'order',
-  '⬇': 'download', '⬆': 'upload',
+  '▦': 'table', '⬇': 'download', '⬆': 'upload',
 };
 
 const EMOJI_KEY = s => s.replace(/[️‍\s]/g, '');
