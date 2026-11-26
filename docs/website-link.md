@@ -374,3 +374,24 @@ New deep links (text is URI-encoded, at most 100 characters; anything else in a 
 - App: `#book=<inventoryBookId>` opens that book, `#search=<text>` opens the app's search with the text filled in.
 - Website: `#catalog/book/<bookId>` opens that book in the book editor, `#search=<text>` opens the admin search with the
   text filled in. After opening, each app puts its own address back, so a reload doesn't open it again.
+
+## Claude for the stockroom (26 November 2026)
+
+The stockroom can ask Claude without holding the key. It POSTs JSON to the website's `stockroomClaude` function
+(`https://us-central1-lyricalmyrical-web-v2.cloudfunctions.net/stockroomClaude`) with `Authorization: Bearer <stockroom
+ID token>`. The website checks that token against the inventory project (owner's verified email only), its own origin
+list (`STOCKROOM_ORIGINS`, kept apart from the shop's) and a rate limit. The key, the owner's Quick / Best writing choice,
+the monthly limit and the meter are the website's (Settings › General › AI writing assistant; `adminSecrets/ai` and
+`adminSecrets/claudeUsage`), so both apps share one budget and one out-of-credits pause.
+
+Request `op`:
+- `"status"`: `{ meter }` only, nothing sent to Anthropic.
+- `"check"`: Try again. Clears the pause, then one tiny request. `{ ok, meter }`.
+- `"message"` (default): one Claude turn. Body: `system`, `messages` (Claude's shape: `text`, base64 `image` /
+  PDF `document`, `tool_use`, `tool_result` parts), optional `tools` (`name`, `description`, `input_schema`; Claude's
+  own server tools are refused), `tool_choice`, `max_tokens` (at most 8192) and `format` (a JSON schema for the answer).
+  Answer: `{ message: { content, stop_reason, model }, meter }`.
+
+`meter` = `{ configured, choice, capDollars, spentMicros, requests, rest }`; `rest` is `""`, `"credits"`, `"limit"` or
+`"cap"`. A paused or capped Claude answers 402 with `{ error, rest, meter }` and nothing is sent to Anthropic; no key
+saved answers 412 with `needsKey: true`. `error` is always plain words the stockroom can show as it is.

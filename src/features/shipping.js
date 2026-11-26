@@ -262,6 +262,7 @@ import {
   describeTrackingAudit,
 } from '../lib/tracking-audit.js';
 import { storageRead, storageSet } from '../lib/safe-storage.js';
+import { anyAiReady } from '../lib/claude-chat.js';
 
 /**
  * The return address as last saved on the shipping form.
@@ -9376,11 +9377,11 @@ function renderPostageMatchWorklist() {
   // guess about whether pressing it is worth the wait or the API allowance.
   const scanAllBtn = $('postage-match-scan-all');
   if (scanAllBtn && !_postageBatchScan) {
-    const scanCount = (TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()) ? postageScanCandidates(expenses).length : 0;
+    const scanCount = anyAiReady(TAX_CENTER.settings) ? postageScanCandidates(expenses).length : 0;
     scanAllBtn.disabled = scanCount === 0;
     scanAllBtn.textContent = scanCount
       ? `Read ${scanCount} receipt${scanCount === 1 ? '' : 's'}`
-      : ((TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim()) ? 'Nothing left to read' : 'Add an AI key to read receipts');
+      : (anyAiReady(TAX_CENTER.settings) ? 'Nothing left to read' : 'Add an AI key to read receipts');
   }
 
   if (!expenses.length) {
@@ -9392,7 +9393,7 @@ function renderPostageMatchWorklist() {
     return;
   }
 
-  const canScan = !!(TAX_CENTER.settings?.geminiKey || TAX_CENTER.settings?.openRouterKey?.trim());
+  const canScan = anyAiReady(TAX_CENTER.settings);
 
   host.innerHTML = expenses.map(expense => {
     const key = postageExpenseKey(expense);
@@ -9781,7 +9782,7 @@ async function scanAllPostageReceipts() {
     showToast('Stopping after the receipt being read now…');
     return;
   }
-  if (!TAX_CENTER.settings?.geminiKey && !TAX_CENTER.settings?.openRouterKey?.trim()) {
+  if (!anyAiReady(TAX_CENTER.settings)) {
     showToast('Add your Gemini or OpenRouter key in Settings › AI and receipts to read receipts', 'warn', 4200);
     return;
   }

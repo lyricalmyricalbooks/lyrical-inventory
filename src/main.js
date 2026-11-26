@@ -412,6 +412,7 @@ import {
   saveTaxCenter,
   saveTaxCenterSettings,
   testOpenRouterConnectionFromSettings,
+  claudeSettingsActions,
   testZonosConnectionHandler,
   testChitChatsConnectionHandler,
   testCanadaPostConnectionHandler,
@@ -716,7 +717,7 @@ const intelActionStubs = Object.fromEntries(INTEL_ACTION_NAMES.map(name => [
 ]));
 
 registerActions({
-  ...intelActionStubs, ...bigCartelActions,
+  ...intelActionStubs, ...bigCartelActions, ...claudeSettingsActions,
   // Phone navigation: the bottom bar, the Today tiles and rows, the All Books list.
   'nav.tab': el => switchTab(el.dataset.go),
   'nav.book': el => switchBook(el.dataset.book),

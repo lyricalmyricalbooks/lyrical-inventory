@@ -30,6 +30,7 @@ import { INTEL_TOOL_SCHEMAS } from '../lib/publisher-intel-tools.js';
 import { friendlyChatError, runIntelTurn } from '../lib/gemini-chat.js';
 import { askGeminiOrBackup } from '../lib/gemini-quota.js';
 import { friendlyOpenRouterError, runOpenRouterTurn } from '../lib/openrouter-chat.js';
+import { claudeOn, friendlyClaudeError, runClaudeTurn, withClaude } from '../lib/claude-chat.js';
 import { closeIntelExchange, trimIntelHistory } from '../lib/intel-history.js';
 import { EXPENSE_CATEGORIES } from './receipts.js';
 import { _tcBuildLedger, _tcGetTripsSummaryAll, saveTaxCenter } from './taxcentre.js';
@@ -107,12 +108,12 @@ function disclosureAccepted() {
 function intelProviderPref() {
   try {
     const v = localStorage.getItem(PROVIDER_KEY);
-    return v === 'gemini' || v === 'backup' ? v : 'auto';
+    return v === 'gemini' || v === 'backup' || v === 'claude' ? v : 'auto';
   } catch (_) { return 'auto'; }
 }
 
 function setIntelProviderPref(value) {
-  try { localStorage.setItem(PROVIDER_KEY, value === 'gemini' || value === 'backup' ? value : 'auto'); } catch (_) { /* still works this session */ }
+  try { localStorage.setItem(PROVIDER_KEY, value === 'gemini' || value === 'backup' || value === 'claude' ? value : 'auto'); } catch (_) { /* still works this session */ }
   renderIntel();
 }
 
@@ -193,6 +194,8 @@ function intelText(raw) {
 function toolTrace(names, msg) {
   const backup = msg && msg.via === 'backup'
     ? `<span class="intel-via">answered by your backup model${msg.viaModel ? ` (${escapeHtml(msg.viaModel)})` : ''}</span>`
+    : msg && msg.via === 'claude'
+    ? '<span class="intel-via">answered by Claude</span>'
     : '';
   if (!names || !names.length) return backup ? `<div class="intel-trace">${backup}</div>` : '';
   const label = [...new Set(names)].map(n => TOOL_LABELS[n] || n).join(', ');
@@ -392,7 +395,7 @@ function intelBlocker() {
   // Either provider is enough to answer a question. Requiring Google here would
   // mean a publisher whose Google key has been rotated or restricted cannot use
   // the panel at all, which is the exact situation the backup exists for.
-  if (!TAX_CENTER?.settings?.geminiKey && !backupProvider()) {
+  if (!TAX_CENTER?.settings?.geminiKey && !backupProvider() && !claudeOn(TAX_CENTER?.settings)) {
     return 'Add your AI key in Settings and this panel can start answering questions.';
   }
   if (typeof navigator !== 'undefined' && navigator && navigator.onLine === false) {
@@ -409,14 +412,20 @@ function intelBlocker() {
  */
 function intelModelSwitchHtml() {
   const backup = backupProvider();
-  if (!backup || !TAX_CENTER?.settings?.geminiKey) return '';
+  const hasGemini = !!TAX_CENTER?.settings?.geminiKey;
+  const hasClaude = claudeOn(TAX_CENTER?.settings);
+  if ([backup, hasGemini, hasClaude].filter(Boolean).length < 2) return '';
   const pref = intelProviderPref();
-  const backupLabel = backup.model.length > 20 ? `${backup.model.slice(0, 19)}…` : backup.model;
   const pill = (value, text, title) => `<button type="button" class="intel-model-pill ${pref === value ? 'is-active' : ''}"
       role="radio" aria-checked="${pref === value}" title="${escapeHtml(title)}" data-action="intel.provider" data-value="${value}">${escapeHtml(text)}</button>`;
-  return pill('auto', 'Auto', 'Ask Gemini, and switch to your backup automatically if Gemini can’t answer')
-    + pill('gemini', 'Gemini', 'Always ask Gemini')
-    + pill('backup', backupLabel, `Always ask your backup model (${backup.model})`);
+  let html = pill('auto', 'Auto', 'Ask your saved AIs in turn, switching automatically if one can’t answer');
+  if (hasGemini) html += pill('gemini', 'Gemini', 'Always ask Gemini');
+  if (backup) {
+    const backupLabel = backup.model.length > 20 ? `${backup.model.slice(0, 19)}…` : backup.model;
+    html += pill('backup', backupLabel, `Always ask your backup model (${backup.model})`);
+  }
+  if (hasClaude) html += pill('claude', 'Claude', 'Always ask Claude, on the credits set up on your website');
+  return html;
 }
 
 function renderIntel() {
@@ -533,12 +542,31 @@ async function askWithFallback(question, pref = 'auto') {
   };
   const backup = backupProvider();
   const hasGemini = !!TAX_CENTER?.settings?.geminiKey;
+  const hasClaude = claudeOn(TAX_CENTER?.settings);
 
   // A pin to a provider that's no longer configured (key removed since the
   // publisher chose it) degrades to auto rather than refusing to answer.
   if (pref === 'backup' && !backup) pref = 'auto';
   if (pref === 'gemini' && !hasGemini) pref = 'auto';
+  if (pref === 'claude' && !hasClaude) pref = 'auto';
 
+  // Claude (through the website, on prepaid credits) joins on auto: first when
+  // the publisher chose that in Settings, otherwise only when the others can't
+  // answer. A pin to Claude asks Claude alone; a pin elsewhere leaves it out.
+  const claude = hasClaude && (pref === 'auto' || pref === 'claude')
+    ? () => runClaudeTurn({ ...shared }).catch((e) => { if (e && typeof e === 'object') e.__viaClaude = true; throw e; })
+    : null;
+  if (pref === 'claude') return claude();
+  const others = (hasGemini && pref !== 'backup') || (backup && pref !== 'gemini') ? () => askOthers(shared, pref, backup, hasGemini) : null;
+  return withClaude({
+    claude, others,
+    claudeFirst: TAX_CENTER?.settings?.claudeFirst === true,
+    onSwitch: (_e, { toClaude }) => setIntelStatus(toClaude ? 'Asking Claude instead…' : 'Claude could not answer — asking your other AI…'),
+  });
+}
+
+/** Gemini, then the OpenRouter backup: the long-standing path, unchanged. */
+function askOthers(shared, pref, backup, hasGemini) {
   // When Google is asked and when the backup takes over is the same rule the
   // receipt scanner follows (askGeminiOrBackup in gemini-quota.js): on auto, a
   // Google allowance already known to be spent — by this panel or by a receipt
@@ -625,6 +653,7 @@ async function sendIntelMessage() {
       // and a figure from Google are not equally trustworthy, and the publisher
       // is entitled to know which one they are reading.
       ...(out.via === 'openrouter' ? { via: 'backup', viaModel: String(out.model || '') } : {}),
+      ...(out.via === 'claude' ? { via: 'claude' } : {}),
     });
     // The stored history always ends with the words the publisher actually saw,
     // and is only ever cut where a question starts: a cut between a tool call
@@ -640,7 +669,8 @@ async function sendIntelMessage() {
       setIntelStatus('Stopped.');
     } else {
       console.error('Intelligence turn failed', e);
-      const friendly = e?.__alreadyFriendly ? e.message : (e?.__viaOpenRouter ? friendlyOpenRouterError(e) : friendlyChatError(e));
+      const own = e?.__alreadyFriendly ? e.message : (e?.__viaOpenRouter ? friendlyOpenRouterError(e) : friendlyChatError(e));
+      const friendly = e?.claudeError ? `${own} — and Claude could not either: ${friendlyClaudeError(e.claudeError)}` : own;
       INTEL_MESSAGES.push({
         role: 'app', at: Date.now(), tools: [], isError: true, question,
         text: `I could not answer that — ${friendly}.`,
