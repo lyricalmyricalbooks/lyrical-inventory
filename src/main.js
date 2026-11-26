@@ -16817,19 +16817,24 @@ function reconRenderKeyRow(forceEdit) {
   if (!row) return;
   const saved = _reconSavedKey();
   if (saved && !forceEdit && !row.dataset.editing) {
-    row.innerHTML = `<span class="recon-key-saved">🔒 Stripe key saved <span class="recon-key-mask">••••${escapeHtml(saved.slice(-4))}</span></span>
+    row.innerHTML = `<span class="recon-key-saved">Stripe key saved · <span class="recon-key-mask">••••${escapeHtml(saved.slice(-4))}</span></span>
       <button class="btn tag sm" onclick="reconEditKey()">Change</button>`;
   } else {
     row.innerHTML = `<input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" autocomplete="off" value="${escapeHtml(saved)}">`;
   }
 }
 
-// The settings sit folded under the list, so the payments come first. The
-// Stripe settings start open only while no key is saved, so first-time setup
-// is never hidden. The data flag keeps the user's own toggling from being
-// reset by the next render.
+// On a wide screen both blocks sit open under the list as plain cards; on a
+// phone they fold into rows so the payments come first. The Stripe settings
+// start open on a phone only while no key is saved, so first-time setup is
+// never hidden. The data flag keeps the user's own toggling from being reset
+// by the next render.
+function _reconWide() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 769px)').matches;
+}
 function _reconInitFolds(hasKey) {
-  [['recon-settings', !hasKey], ['pm-settings', false]].forEach(([id, open]) => {
+  const wide = _reconWide();
+  [['recon-settings', wide || !hasKey], ['pm-settings', wide]].forEach(([id, open]) => {
     const el = document.getElementById(id);
     if (!el || el.dataset.foldInit) return;
     el.dataset.foldInit = '1';
@@ -16890,9 +16895,25 @@ function _reconNotSaleBtn(idSafe) {
   return `<button class="btn tag sm" data-action="recon.notSale" data-id="${idSafe}" title="A donation, a test charge or anything else that isn’t a copy sold">Not a book sale</button>`;
 }
 
-// One payment row. Every section draws the same row: what was paid, then the
-// book and copies, then Record. The order number, the amount, the currency
-// and the exchange rate fill themselves in and fold away under "Details".
+// One payment row. Every section draws the same row: who paid and when, the
+// book (with copies), then the amount and Record. "Not a book sale" sits under
+// it, and the order number, amount, currency and exchange rate fold away
+// under "Details".
+function _reconWho(p) {
+  return p.customer || p.email || p.description || 'Card payment';
+}
+function _reconSub(p) {
+  const order = stripeOrderNumber(p);
+  return [p.date, p.customer ? p.email : '', /^STRIPE-/.test(order) ? '' : order].filter(Boolean).join(' · ');
+}
+function _reconInfo(p, pills, extra) {
+  const showDesc = p.description && p.description !== _reconWho(p);
+  return `<div class="recon-info">
+      <div class="recon-who">${escapeHtml(_reconWho(p))}${pills}</div>
+      <div class="recon-meta">${escapeHtml(_reconSub(p))}</div>
+      ${showDesc ? `<div class="recon-meta-desc">${escapeHtml(p.description)}</div>` : ''}${extra || ''}
+    </div>`;
+}
 function _reconNeedCard(p, c) {
   const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
   const disputed = p.disputed ? ` <span class="pill red recon-pill">Disputed</span>` : '';
@@ -16903,20 +16924,22 @@ function _reconNeedCard(p, c) {
       ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
       : `<span class="recon-warn">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
     return `<div class="card recon-card">
-      <div class="recon-variant">
-        <div class="recon-info"><div>${_reconAmountBadge(p)} <span class="pill blue recon-pill">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
-        <div class="recon-actions">${goBtn}${_reconNotSaleBtn(idSafe)}</div>
-      </div></div>`;
+      <div class="recon-main recon-variant">
+        ${_reconInfo(p, ` <span class="pill blue recon-pill">Invoice</span>${disputed}`)}
+        <div class="recon-act">${_reconAmountBadge(p)}${goBtn}</div>
+      </div>
+      <div class="recon-sub">${_reconNotSaleBtn(idSafe)}</div></div>`;
   }
 
   // Big Cartel order that was scanned but not yet applied → one-click apply.
   if (c.kind === 'bigcartel' && c.scanned) {
     return `<div class="card recon-card">
-      <div class="recon-variant">
-        <div class="recon-info"><div>${_reconAmountBadge(p)} <span class="pill green recon-pill">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
-        <div class="recon-actions">
-          <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>${_reconNotSaleBtn(idSafe)}</div>
-      </div></div>`;
+      <div class="recon-main recon-variant">
+        ${_reconInfo(p, ` <span class="pill green recon-pill">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}`)}
+        <div class="recon-act">${_reconAmountBadge(p)}
+          <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button></div>
+      </div>
+      <div class="recon-sub">${_reconNotSaleBtn(idSafe)}</div></div>`;
   }
 
   // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
@@ -16926,22 +16949,25 @@ function _reconNeedCard(p, c) {
   const suggest = _reconSuggestPill(pick);
   const recDisabled = pickId ? '' : ' disabled';
   return `<div class="card recon-card">
-    <div class="recon-info"><div>${_reconAmountBadge(p)}${kindPill}${disputed}</div>${_reconMeta(p)}${suggest}</div>
-    <div class="recon-fields">
-      <div class="form-group recon-f-book">
-        <label for="recon-book-${idSafe}">Book</label>
-        <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(pickId, !c.bookId, fits)}</select>
+    <div class="recon-main">
+      ${_reconInfo(p, kindPill + disputed, suggest)}
+      <div class="recon-fields recon-pick">
+        <div class="form-group recon-f-book">
+          <label for="recon-book-${idSafe}">Book</label>
+          <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(pickId, !c.bookId, fits)}</select>
+        </div>
+        <div class="form-group recon-f-qty">
+          <label for="recon-qty-${idSafe}">Copies</label>
+          <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, pickId)}" min="1" oninput="this.dataset.manual='1'">
+        </div>
       </div>
-      <div class="form-group recon-f-qty">
-        <label for="recon-qty-${idSafe}">Copies</label>
-        <input type="number" inputmode="numeric" id="recon-qty-${idSafe}" value="${_reconDefaultQty(p, pickId)}" min="1" oninput="this.dataset.manual='1'">
-      </div>
-      <div class="recon-actions">
-        <button class="btn gold sm recon-rec" id="recon-rec-${idSafe}"${recDisabled} aria-describedby="recon-hint-${idSafe}" onclick="reconcileRecordSale('${idSafe}')">Record</button>
-        ${_reconNotSaleBtn(idSafe)}
+      <div class="recon-act">
+        ${_reconAmountBadge(p)}
+        <button class="btn gold sm recon-rec" id="recon-rec-${idSafe}"${recDisabled} aria-describedby="recon-hint-${idSafe}" onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
       </div>
     </div>
     <div class="recon-hint" id="recon-hint-${idSafe}"${pickId ? ' hidden' : ''}>Choose a book to record this sale.</div>
+    <div class="recon-sub">${_reconNotSaleBtn(idSafe)}</div>
     <details class="recon-more">
       <summary>Details · order number, amount, exchange rate</summary>
       <div class="recon-fields recon-more-fields">
@@ -16968,8 +16994,30 @@ function _reconNeedCard(p, c) {
   </div>`;
 }
 
+// What got done in the last 7 days, for the summary card: how many payments
+// were settled, and the money recorded as sales (in the currency most of it
+// came in, since a sum across currencies would mean nothing).
+function _reconWeekStats(matched) {
+  const d = new Date(Date.now() - 7 * 86400000);
+  const since = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const week = matched.filter(({ p }) => String(p.date) >= since);
+  const byCur = {};
+  week.forEach(({ p, c }) => {
+    if (c.kind === 'recorded' && !p.disputed) byCur[p.currency] = (byCur[p.currency] || 0) + Number(p.amount || 0);
+  });
+  const top = Object.entries(byCur).sort((a, b) => b[1] - a[1])[0];
+  return { done: week.length, recorded: top ? fmt(roundCents(top[1]), top[0]) : fmt(0, matched[0]?.p.currency || 'CAD') };
+}
+
 export function renderReconcile() {
   const needsEl = document.getElementById('recon-needs');
+  // Remember whether the user opened or shut Ready, across redraws.
+  if (needsEl && !needsEl.dataset.readyWatch) {
+    needsEl.dataset.readyWatch = '1';
+    needsEl.addEventListener('toggle', (e) => {
+      if (e.target.classList?.contains('recon-ready')) _reconReadyOpen = e.target.open;
+    }, true);
+  }
   const matchedEl = document.getElementById('recon-matched');
   const summaryEl = document.getElementById('recon-summary');
   const toolbarEl = document.getElementById('recon-toolbar');
@@ -17029,15 +17077,13 @@ export function renderReconcile() {
   });
   window._reconReadyIds = ready.map(({ p }) => p.id);
 
-  // One line instead of a dashboard: what is left and what is done.
+  // Four figures over the list: what is left, what is waiting to confirm, and
+  // what the last week got done.
   if (summaryEl) {
-    const parts = [
-      `<strong>${needYou.length}</strong> need${needYou.length === 1 ? 's' : ''} you`,
-      `<strong>${ready.length}</strong> ready to confirm`,
-      `<strong>${matched.length}</strong> done`,
-    ];
-    const filtering = shown.length !== needs.length ? ` · showing ${shown.length} of ${needs.length}` : '';
-    summaryEl.innerHTML = `<p class="recon-line">${parts.join(' · ')}${filtering}</p>`;
+    const wk = _reconWeekStats(matched);
+    const cell = (cls, label, fig) => `<div class="recon-stat${cls}"><span class="recon-stat-l">${label}</span><span class="recon-stat-n">${fig}</span></div>`;
+    const filtering = shown.length !== needs.length ? `<p class="recon-line">Showing ${shown.length} of ${needs.length}</p>` : '';
+    summaryEl.innerHTML = `<div class="recon-stats">${cell(' is-lead', 'Needs you', needYou.length)}${cell('', 'Ready', ready.length)}${cell('', 'Done this week', wk.done)}${cell(' is-money', 'Recorded', wk.recorded)}</div>${filtering}`;
   }
 
   // ── The inbox: Needs you, then Ready
@@ -17050,7 +17096,7 @@ export function renderReconcile() {
       'Pick the book for each payment, or mark it as not a book sale.', '', needYou)
       + _reconSection('ready', 'Ready', ready.length,
         'The app picked these books. Check them, change any that are wrong, then confirm.',
-        ready.length > 1 ? `<button class="btn gold sm" data-action="recon.confirmReady">Confirm all ${ready.length}</button>` : '', ready);
+        ready.length > 1 ? `<button class="btn sm" data-action="recon.confirmReady">Confirm all ${ready.length}</button>` : '', ready);
   }
 
   needsEl.querySelectorAll('[data-recon-default]').forEach(input => {
@@ -17082,14 +17128,35 @@ export function renderReconcile() {
 
 // One section of the inbox: a head (name, count, one line on what to do, and
 // its button) over the payment rows. An empty section says so in one line.
+// Ready is a list of one-line rows (who, the book picked, the amount); each
+// opens into the full row so a wrong pick can still be changed.
+let _reconReadyOpen = null;
+function _reconReadyRow(p, c) {
+  const { pick } = _reconSuggestion(p, c);
+  return `<details class="recon-ready-row">
+    <summary><b>${escapeHtml(_reconWho(p))}</b><span class="recon-ready-book">${escapeHtml(BOOKS[pick?.bookId]?.title || '')}</span><span class="recon-amount">${_stripeFmtMoney(p.amount, p.currency)}</span></summary>
+    ${_reconNeedCard(p, c)}
+  </details>`;
+}
 function _reconSection(key, title, count, note, action, items) {
+  if (key === 'ready') {
+    if (!items.length) return '';
+    const open = _reconReadyOpen === null ? _reconWide() : _reconReadyOpen;
+    return `<details class="recon-sec recon-sec-ready recon-ready"${open ? ' open' : ''}>
+      <summary class="recon-sec-head">
+        <h3 class="recon-sec-title" id="recon-sec-ready">Ready <span class="pill green recon-pill">${count} matched</span></h3>
+        ${action ? `<span class="recon-sec-action">${action}</span>` : ''}
+      </summary>
+      <p class="recon-sec-note">${note}</p>
+      <div class="recon-ready-list">${items.map(({ p, c }) => _reconReadyRow(p, c)).join('')}</div>
+    </details>`;
+  }
   const body = items.length
     ? items.map(({ p, c }) => _reconNeedCard(p, c)).join('')
-    : `<p class="recon-sec-empty">${key === 'need' ? 'Nothing needs you right now.' : 'Nothing waiting to confirm.'}</p>`;
+    : `<p class="recon-sec-empty">Nothing needs you right now.</p>`;
   return `<section class="recon-sec recon-sec-${key}" aria-labelledby="recon-sec-${key}">
     <div class="recon-sec-head">
-      <h3 class="recon-sec-title" id="recon-sec-${key}">${title} <span class="pill ${key === 'need' && count ? 'amber' : 'gray'} recon-pill">${count}</span></h3>
-      ${action ? `<div class="recon-sec-action">${action}</div>` : ''}
+      <h3 class="recon-sec-title" id="recon-sec-${key}">${title} <span class="pill ${count ? 'amber' : 'gray'} recon-pill">${count}</span></h3>
       <p class="recon-sec-note">${note}</p>
     </div>
     ${body}
