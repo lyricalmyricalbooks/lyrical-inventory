@@ -40,3 +40,44 @@ export function shippoQuoteProblem(quote, { fingerprint, now = Date.now() } = {}
   if (!(age >= 0 && age < SHIPPO_RATE_MAX_AGE_MS)) return 'expired';
   return null;
 }
+
+/**
+ * Shippo's carrier token for a rate's provider name: "Canada Post" →
+ * "canada_post", "DHL Express" → "dhl_express", "USPS" → "usps". Tracking asks
+ * by token. Empty for an empty name.
+ */
+export function shippoCarrierToken(provider) {
+  return String(provider ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+const SHIPPO_PICKUP_SUBSTATUS = new Set(['delivery_attempted', 'notice_left', 'pickup_available', 'package_held']);
+const SHIPPO_RETURN_SUBSTATUS = new Set(['return_to_sender', 'package_returned', 'package_undeliverable']);
+
+/**
+ * One Shippo tracking answer (GET /tracks/{carrier}/{number}) in the shape the
+ * delivery watch reads: { found, status, eventDateTime, eventLocation,
+ * actualDeliveryDate, state }. `state` is set only where Shippo says so
+ * outright, so the watch's own "not moving for a week" rule still applies to
+ * everything else. Returns { found: false } when Shippo knows nothing yet.
+ */
+export function readShippoTrack(track) {
+  const ts = track?.tracking_status;
+  const status = String(ts?.status || '').toUpperCase();
+  if (!ts || !status || status === 'UNKNOWN') return { found: false };
+  const loc = ts.location || {};
+  const place = [loc.city, loc.state, loc.country].filter(Boolean).join(', ');
+  const when = String(ts.status_date || '');
+  const sub = String(ts.substatus?.code || '').toLowerCase();
+  let state = '';
+  if (status === 'DELIVERED') state = 'delivered';
+  else if (status === 'RETURNED' || SHIPPO_RETURN_SUBSTATUS.has(sub)) state = 'returning';
+  else if (SHIPPO_PICKUP_SUBSTATUS.has(sub)) state = 'pickup';
+  return {
+    found: true,
+    status: String(ts.status_details || status).trim(),
+    eventDateTime: when,
+    eventLocation: place,
+    actualDeliveryDate: state === 'delivered' ? when.slice(0, 10) : '',
+    state,
+  };
+}

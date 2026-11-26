@@ -1,3 +1,4 @@
+import { shippoCarrierToken } from './carriers/shippo-rules.js';
 import { roundCents } from './money.js';
 import { normalizeTrackingNumber } from './postage-matching.js';
 
@@ -239,9 +240,14 @@ export function enrichShippoExpense(expense, transaction = {}, shipment = {}, sh
     recipientCountry: recipient.country || '',
     recipientPhone: recipient.phone || '',
   };
+  // The carrier, as Shippo names it, so the parcel can be tracked later. Only
+  // an imported transaction carries its rate expanded; an in-app purchase sets
+  // it on the expense itself.
+  const shippoCarrier = shippoCarrierToken(transaction.rate && typeof transaction.rate === 'object' ? transaction.rate.provider : '');
   return {
     ...accountingFields,
     ...(trackingNumber ? { trackingNumber } : {}),
+    ...(shippoCarrier ? { shippoCarrier } : {}),
     shippoTransactionId: String(transaction.object_id || '').trim(),
     shippoShipmentId: String(shipment.object_id || (typeof transaction.shipment === 'string' ? transaction.shipment : '') || '').trim(),
     shippoOrderId: String(shippoOrder.object_id || (typeof transaction.order === 'string' ? transaction.order : '') || '').trim(),

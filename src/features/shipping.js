@@ -57,7 +57,7 @@ import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt }
 import { openReviewInbox } from './review-inbox.js';
 import { commitRecoveredWebsiteOrder, orders, renderOrders } from './website-orders.js';
 import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/carriers/label-duplicate-guard.js';
-import { toShippoParcel, shippoQuoteProblem } from '../lib/carriers/shippo-rules.js';
+import { toShippoParcel, shippoQuoteProblem, shippoCarrierToken, readShippoTrack } from '../lib/carriers/shippo-rules.js';
 import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
 import { websiteShipmentNote } from './website-link.js';
 import {
@@ -2161,10 +2161,42 @@ function shippedLedgerRows() {
   return rows;
 }
 
+/**
+ * Shippo's carrier for a shipped order, for tracking it through Shippo: the one
+ * saved when the label was bought here, or the one on the Shippo label expense
+ * carrying the same tracking number (labels bought on Shippo's website).
+ */
+function shippoCarrierLookup() {
+  const byTracking = new Map();
+  (TAX_CENTER.businessExpenses || []).forEach(e => {
+    const num = String(e?.trackingNumber || '').replace(/[\s-]/g, '').toUpperCase();
+    if (num && e.shippoCarrier) byTracking.set(num, e.shippoCarrier);
+  });
+  return (entry) => entry.shippoCarrier
+    || byTracking.get(String(entry.trackingNumber || entry.trackingPin || '').replace(/[\s-]/g, '').toUpperCase())
+    || '';
+}
+
+/** Shippo's tracking for one parcel, read into the delivery watch's shape. */
+async function fetchShippoTracking(token, carrier, trackingNumber) {
+  const resp = await fetch(`https://api.goshippo.com/tracks/${encodeURIComponent(carrier)}/${encodeURIComponent(trackingNumber)}`, {
+    headers: { Authorization: `ShippoToken ${token}`, 'Content-Type': 'application/json' },
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => '');
+    throw new Error(describeShippoError(resp.status, text));
+  }
+  return readShippoTrack(await resp.json());
+}
+
 async function followShippedParcels({ force = false } = {}) {
   if (isAuthor()) return null;
   const { apiKey, apiSecret } = resolveCanadaPostCredentials(TAX_CENTER.settings || {});
-  const configured = !!(apiKey && apiSecret);
+  const canadaPostReady = !!(apiKey && apiSecret);
+  const shippoKey = TAX_CENTER.settings?.shippoKey || '';
+  // A Shippo test key tracks nothing real, so it never follows parcels.
+  const shippoReady = !!shippoKey && !isShippoTestKey(shippoKey);
+  const configured = canadaPostReady || shippoReady;
   const { online, visible } = browserWatchState();
   const due = force
     ? configured && online && !_deliveryChecking
@@ -2182,7 +2214,11 @@ async function followShippedParcels({ force = false } = {}) {
   _deliveryChecking = true;
   try {
     const now = Date.now();
-    const todo = shipmentsToFollow(shippedLedgerRows(), { now });
+    const todo = shipmentsToFollow(shippedLedgerRows(), {
+      now,
+      canadaPost: canadaPostReady,
+      shippoCarrierFor: shippoReady ? shippoCarrierLookup() : null,
+    });
     const isTest = !!TAX_CENTER.settings?.cpTestMode;
     const touched = new Set();
     const news = [];
@@ -2192,7 +2228,9 @@ async function followShippedParcels({ force = false } = {}) {
     for (const item of todo) {
       let result = null;
       try {
-        result = await verifyCanadaPostTrackingPin({ pin: item.pin, apiKey, apiSecret, isTest });
+        result = item.source === 'shippo'
+          ? await fetchShippoTracking(shippoKey, item.carrier, item.pin)
+          : await verifyCanadaPostTrackingPin({ pin: item.pin, apiKey, apiSecret, isTest });
         answered++;
       } catch (error) {
         // "No such parcel" is the tracking audit's business, not this watch's —
@@ -7750,6 +7788,8 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
     found.entry.shipped = true;
     found.entry.shippedDate = today();
     found.entry.trackingNumber = trackingNumber || '';
+    // Kept so the parcel can be tracked through Shippo whatever the carrier.
+    if (shippoCarrierToken(provider)) found.entry.shippoCarrier = shippoCarrierToken(provider);
     // A Shippo test key buys a label that never scans: say so on the order,
     // so it is never treated (or sent to the website) as a real parcel.
     if (isShippoTestKey(shippoKey)) found.entry.trackingSimulated = true;
@@ -7804,6 +7844,7 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
       ref,
       receipt: localReceipt || labelUrl,
       trackingUrl: data.tracking_url_provider || '',
+      ...(shippoCarrierToken(provider) ? { shippoCarrier: shippoCarrierToken(provider) } : {}),
       trip: '',
     };
 
@@ -12164,6 +12205,7 @@ export {
   collectShippoMessages,
   renderShippoDiagnostics,
   buyShippoLabel,
+  followShippedParcels,
   openBatchShipping,
   checkBatchOrders,
   buyBatchLabels,
