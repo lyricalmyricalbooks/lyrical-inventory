@@ -615,7 +615,7 @@ table{border-radius:12px;}
 /* Badges and status tags: soft rounded pills, no outline */
 .tab-panel :is(.badge,.tag,.status-pill,[class*="-badge"]:not(.modal-title-badge)){border-radius:999px !important;border-width:0 !important;box-shadow:none !important;letter-spacing:0 !important;text-transform:none !important;font-weight:600 !important;}
 /* Quiet buttons: hairline, white */
-.tab-panel .btn:not(.btn-primary):not(.primary):not(.btn-danger){background:var(--surface-card) !important;border:1px solid var(--folio-line-btn) !important;box-shadow:none !important;}
+.tab-panel .btn:not(.gold):not(.danger-btn):not(.tx):not(.ink):not(.btn-primary):not(.primary):not(.btn-danger){background:var(--surface-card) !important;border:1px solid var(--folio-line-btn) !important;box-shadow:none !important;}
 /* Ticks and radios take the accent */
 input[type=checkbox],input[type=radio],input[type=range]{accent-color:var(--folio-accent);}
 /* Progress bars and meters: rounded tracks */
@@ -662,3 +662,13 @@ input[type=checkbox],input[type=radio],input[type=range]{accent-color:var(--foli
 /* Big money figure on dashboard: Geist, not condensed */
 .pub-shell .tab-panel :is(.owed-amount,.money-card-amount,[class*="owed-val"],[class*="big-figure"]){font-family:var(--font-ui) !important;font-weight:650 !important;letter-spacing:-.035em !important;}
 
+
+/* ===== Round four fixes (2026-11-26) ===== */
+/* Cards/Table and Overview/Gallery switches: hairline box, no pink outline */
+.tc-trips-view-toggle,.tc-vault-view-switch{border:1px solid var(--border2) !important;border-radius:12px !important;background:var(--cream2) !important;}
+.tc-trips-view-btn,.tc-vault-view-btn{border-radius:9px !important;}
+/* Book picker in the top bar: a visible white box with a dark chevron */
+.app-header #book-dropdown-btn{background:var(--surface-card) !important;border:1px solid var(--folio-line-btn) !important;border-radius:10px !important;box-shadow:none !important;color:var(--text) !important;text-transform:none !important;letter-spacing:0 !important;font-weight:600 !important;gap:12px !important;padding:6px 12px !important;}
+.app-header #book-dropdown-btn:hover,.app-header #book-dropdown.open #book-dropdown-btn{background:var(--surface-card) !important;border-color:var(--folio-accent) !important;color:var(--text) !important;transform:none !important;}
+.app-header #book-dropdown-btn .book-dropdown-caret{opacity:1 !important;}
+.app-header #book-dropdown-btn .book-dropdown-caret path{fill:var(--text2) !important;}

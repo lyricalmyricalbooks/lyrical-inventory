@@ -47,3 +47,7 @@ test('lone-emoji picture boxes become icons, and later renders are caught too', 
   expect(root.querySelector('.hist-kpi-icon use').getAttribute('href')).toBe('#ic-printer');
   expect(document.getElementById('later').querySelector('use').getAttribute('href')).toBe('#ic-sparkles');
 });
+
+test('the Table switch uses a table icon', () => {
+  expect(folioIconFor('▦')).toBe('table');
+});
