@@ -33,7 +33,7 @@ describe('payment settings fold away', () => {
     for (const id of ['recon-keyrow', 'stripe-sale-auto-wrap', 'stripe-sale-auto-cb', 'sale-codes-box', 'stripe-sale-codes', 'stripe-paid-notify-wrap', 'stripe-paid-notify-cb']) {
       expect(block).toContain(id);
     }
-    expect(block).toMatch(/<summary>Payment settings · Stripe key, short codes, alerts<\/summary>/);
+    expect(block).toMatch(/<summary>Payment settings<span class="recon-fold-sub"> · Stripe key, short codes, alerts<\/span><\/summary>/);
   });
 
   test('Accepted Payment Methods is its own fold and keeps its container id', () => {
@@ -48,7 +48,8 @@ describe('payment settings fold away', () => {
   test('renderReconcile sets each fold once: Stripe settings open only with no saved key', () => {
     expect(main).toContain('_reconInitFolds(!!_reconSavedKey());');
     const init = fnBody('function _reconInitFolds(', 'function reconOnFilter(');
-    expect(init).toMatch(/\['recon-settings', !hasKey\], \['pm-settings', false\]/);
+    // Wide screens: both open as cards. Phones: Stripe settings open only with no saved key.
+    expect(init).toMatch(/\['recon-settings', wide \|\| !hasKey\], \['pm-settings', wide\]/);
     expect(init).toMatch(/el\.open = open;/);
     expect(init).toMatch(/dataset\.foldInit/);
   });
@@ -74,9 +75,9 @@ describe('card and summary markup', () => {
     const cards = fnBody('function _reconAmountBadge(', 'export function renderReconcile() {');
     expect(cards).not.toMatch(/width:280px|height:38px/);
     expect(cards).not.toMatch(/style="/);
-    expect(cards).toMatch(/class="recon-fields"/);
+    expect(cards).toMatch(/class="recon-fields recon-pick"/);
     expect(cards).toMatch(/recon-f-book/);
-    expect(cards).toMatch(/recon-actions/);
+    expect(cards).toMatch(/class="recon-act"/);
   });
 
   test('the Record sale hint is a visible line keyed to the book choice', () => {
@@ -85,9 +86,11 @@ describe('card and summary markup', () => {
     expect(main).toMatch(/const hint = document\.getElementById\(`\$\{prefix\}hint-\$\{id\}`\);/);
   });
 
-  test('#recon-summary is one line of counts, not a dashboard', () => {
-    expect(main).toMatch(/summaryEl\.innerHTML = `<p class="recon-line">/);
-    expect(main).toMatch(/need\$\{needYou\.length === 1 \? 's' : ''\} you/);
+  test('#recon-summary is one card of four figures: Needs you, Ready, Done this week, Recorded', () => {
+    expect(main).toMatch(/summaryEl\.innerHTML = `<div class="recon-stats">/);
+    for (const label of ["'Needs you', needYou.length", "'Ready', ready.length", "'Done this week', wk.done", "'Recorded', wk.recorded"]) {
+      expect(main).toContain(label);
+    }
   });
 
   test('the order number, amount, currency and rate fold away under Details on each row', () => {

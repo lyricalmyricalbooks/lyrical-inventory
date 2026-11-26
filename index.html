@@ -1554,7 +1554,7 @@
        the card-reader codes and alerts. Folded on a phone once a key is saved
        (see _reconInitFolds). -->
   <details class="recon-fold" id="recon-settings">
-    <summary>Payment settings · Stripe key, short codes, alerts</summary>
+    <summary>Payment settings<span class="recon-fold-sub"> · Stripe key, short codes, alerts</span></summary>
     <div class="recon-fold-body">
       <div id="recon-keyrow" class="recon-keyrow">
         <input type="password" id="recon-key" placeholder="rk_live_… or sk_live_… (reused from Tax Centre / Invoices if already saved)" autocomplete="off">
@@ -1588,14 +1588,14 @@
         <div class="payment-methods-grid">
           <!-- Global Website Settings -->
           <div class="payment-methods-col">
-            <h4 class="payment-methods-title">Website Settings (lyricalmyricalbooks.com)</h4>
+            <h4 class="payment-methods-title">Website · lyricalmyricalbooks.com</h4>
             <div class="payment-methods-list" id="pm-global-list">
               <!-- Populated by JS -->
             </div>
           </div>
           <!-- Book-Level Settings -->
           <div class="payment-methods-col">
-            <h4 class="payment-methods-title">Individual Book Override</h4>
+            <h4 class="payment-methods-title">Individual book override</h4>
             <div class="form-group" style="margin-bottom:14px;">
               <label for="pm-book-select">Select a book</label>
               <select id="pm-book-select" onchange="renderBookPaymentConfig()"></select>
@@ -1615,7 +1615,7 @@
           </div>
         </div>
         <div class="card-actions" style="margin-top:1.5rem; padding-top:1rem; border-top:var(--stroke-hair) dashed var(--border); display:flex; justify-content:flex-end;">
-          <button class="btn gold lg" onclick="savePaymentConfig()">Save Payment Methods</button>
+          <button class="btn gold lg" onclick="savePaymentConfig()">Save payment methods</button>
         </div>
       </div>
     </div>
