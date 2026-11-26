@@ -9,6 +9,7 @@ npm test               # Vitest, once (tests/*.test.js); npm run test:watch to w
 npm run lint           # ESLint over src
 npm run lint:contrast  # colour-contrast ratchet (scripts/contrast-baseline.json)
 npm run lint:tokens    # design-token ratchet (scripts/token-baseline.json)
+npm run check:styles   # computed-style snapshot: --out=before.json, change CSS, --compare=before.json
 npm run typecheck      # tsc over the JS (JSDoc types)
 npm run build          # Vite production build; npm run check:size checks the bundle budget
 npm run e2e            # browser walk-through of a fair day (scripts/e2e/fair-day.mjs)
@@ -16,18 +17,19 @@ npm run shots          # phone screenshots (scripts/phone-shots/)
 ```
 
 CI (`.github/workflows/ci.yml`) runs lint, lint:contrast, typecheck, test, build, check:size and e2e on every PR.
-`deploy.yml` publishes `main` to GitHub Pages.
+`deploy.yml` publishes `main` to GitHub Pages. It can fail silently after a merge ("artifact not found"), so check the deploy run after merging.
 
 ## Layout
 
 ```
 index.html              App shell (single page, offline PWA)
-src/main.js             App wiring, tabs and most screens (large; search before adding)
+src/main.js             App wiring, tabs and many screens (~20k lines; grep before adding, never grow it)
 src/core/store.js       Local state + offline queue
-src/features/           One file per screen or workflow (pos, receipts, invoices, taxcentre, shipping, sales-ledger...)
-src/lib/                Shared helpers (cents.js for money, csv, carriers/ for Canada Post, consignment, barcode-scan...)
+src/features/           One file per screen or workflow (pos, receipts, invoices, taxcentre, shipping, website-link...)
+src/lib/                Shared helpers, mostly pure and tested (cents.js for money, csv, carriers/, consignment...)
 src/firebase.js         Firestore + Auth
-src/style.css           Riso Press palette (:root); src/styles/system.css scales, theme-dark.css night mode
+src/style.css           Colour tokens (first :root); src/styles/system.css scales, theme-dark.css night mode,
+                        folio.css the Folio rule bodies (imported last in main.js, so it wins)
 apps-script/            Google Apps Script (Code.gs; copy verbatim to public/gas-code.txt, see warning below)
 backend/server.js       Optional local Node helper for development (npm run dev:backend / dev:all); not deployed
 android/                Android wrapper assets
@@ -35,6 +37,12 @@ tests/                  Vitest tests
 docs/                   Carrier API rules (Canada Post, Chit Chats), receipt finder setup, design hand-offs
 firestore.rules, database.rules.json, storage.rules   Security rules
 ```
+
+## Where sales come from
+- **Website (the shop's own backend):** the shop's website (a separate repo and Firebase project) writes each paid order, refund and dispatch into `websiteOrders/{orderId}` in this app's Firestore. The app records it through the normal ledger save and publishes `websiteStockFeed/{bookId}` back. This app is the master stock count and never takes or refunds payments. Contract: [docs/website-link.md](docs/website-link.md); wiring in `src/features/website-link.js`, pure rules in `src/lib/website-link.js`.
+- **Stripe:** no webhooks. The browser polls Stripe while the app is open. Ledger rows are keyed `stripe-<chargeId>` (split `-2`, re-record `-rN`) and the merge dedupes on that key. Build on the Payments inbox (Needs you / Ready / Done), not new add-on cards.
+- **Gmail order scan** (`src/features/website-orders.js`) is the older email-based path.
+- **Big Cartel is retired.** Its code (`src/features/bigcartel.js`, `src/lib/bigcartel-*.js`, the Apps Script `proxybigcartel` action) is hidden and its background checks are off. Don't build on it or suggest it, but past Big Cartel orders must stay readable and counted. Removing the code is planned; ask the owner first.
 
 ## Your job after every change
 After completing any code enhancement, end your turn with a short "Next moves" list: 5 genuinely high-value suggestions for improving the app, ranked best-first.
@@ -101,7 +109,7 @@ Apply the full process (understand → assess risk → plan → implement → ve
 **Always leave a paper trail.** State plainly, in the PR description (or the session summary if no PR was warranted), which original issue was already resolved and by what commit/PR, and which real issue was fixed instead. That confirms the run wasn't idle, and gives whoever maintains the code-health scanner what they need to dedupe at the source.
 
 ## Standing product decisions
-- Big Cartel is retired: don't build or prioritise Big Cartel features.
+- Big Cartel is retired; website orders come from the shop's own backend (see "Where sales come from").
 - Shipping defaults to metric (kg/g, cm).
 - A profit-sharing author's share is worked out on the full sale price, before Stripe card fees.
 
@@ -119,7 +127,8 @@ Purely internal work (tests, refactors, docs, CI) is hidden automatically; leave
 
 ## Customizations & Style Guidelines
 - **UX comes with the code, not after it.** A code change isn't done when it's functionally correct if it touches something a user sees or interacts with — a screen, a form, a list, a modal, a new state. Look at what the change touched and apply what's relevant from [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md) (spacing, empty/loading states, contrast, touch targets, etc.) as part of the same change, without being asked separately for "design polish." Backend-only, test-only, or database-only work is exempt — don't invent a UI concern where there isn't one.
-- **Design system — Riso Press.** The app follows one design system: flat risograph inks, square corners, 2px ink outlines, hard offset shadows, Anton / Archivo / DM Mono, with a warm-grey night mode. Its source of truth is the code (the palette in the `:root` block of `src/style.css`, the shared scales in `src/styles/system.css`, night mode in `src/styles/theme-dark.css`); the browsable reference — tokens, principles and a live card per component — is the "Riso Press" Design System artifact on claude.ai (https://claude.ai/artifact/MvJwSgL7vE4vExRKaC9Gph). When a change adds or alters a token or a shared component class, update that artifact too so it doesn't drift from the app.
+- **Design system — Folio** (replaced Riso Press on 2026-11-24). Calm, one accent colour, white cards and inputs with hairline borders, sentence-case labels, soft shadows; book cover colours don't tint the chrome. The desktop side menu stays black. The code is the source of truth: tokens in the first `:root` of `src/style.css`, scales in `src/styles/system.css`, night mode in `src/styles/theme-dark.css`, rule bodies in `src/styles/folio.css`. Use tokens, never raw colours, so night mode follows. Printed and emailed invoices and receipts use raw values on purpose; leave them. The ux-designer skill and the "Riso Press" artifact (https://claude.ai/artifact/MvJwSgL7vE4vExRKaC9Gph) still describe Riso Press: their spacing, state and accessibility rules hold, but where they describe the look, Folio wins.
+- **Restyles keep the layout.** A design-system restyle or mockup changes only the look: keep every screen's sections, order, navigation and phone layout. Mockups and design artifacts are in day (light) mode, and always check the phone layout.
 - **Guidelines:** the UX/UI rules and the Riso Press summary live in [.agents/skills/ux-designer/SKILL.md](.agents/skills/ux-designer/SKILL.md), the offline-first sync rules in [.agents/skills/backend-architect/SKILL.md](.agents/skills/backend-architect/SKILL.md), and the financial ledger precision and role-based security rules in [.agents/skills/ledger-auditor/SKILL.md](.agents/skills/ledger-auditor/SKILL.md).
 - **Pattern Reference:** Before writing a new list, dropdown, button, pill, table, or empty state, read [.agents/UX_PATTERNS.md](.agents/UX_PATTERNS.md) to reuse existing classes and design patterns before inventing new ones.
 

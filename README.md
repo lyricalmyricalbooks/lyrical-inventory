@@ -14,7 +14,7 @@ when the connection comes back.
 | **App** | Vanilla JavaScript, no framework. The code is in `index.html`, `src/main.js`, `src/features/*.js` (the larger screens) and `src/lib/*.js` (pure logic, each with tests). Vite bundles it and builds the service worker. |
 | **Data** | Firebase: **Firestore** (books under `books/{bookId}/data/{part}`, config under `settings/{name}`), the **Realtime Database** (older fallback), **Auth** (Google sign-in) and **Storage** (receipt files). The SDK is loaded from `www.gstatic.com` in `src/firebase.js` and precached so the app starts offline. |
 | **Offline saving** | Changes show on screen at once, then save to Firestore. When the device is offline, the latest state of each book waits in an on-device queue and uploads later. If another device changed the same book in the meantime, the two versions are merged, not overwritten. |
-| **Outside services** | Canada Post, Big Cartel and outgoing email go through your deployed Google Apps Script (`apps-script/Code.gs`). Stripe, the Gmail receipt finder and AI receipt scanning are called from the browser. |
+| **Outside services** | Website orders arrive from the shop's own website through a shared Firestore inbox (`docs/website-link.md`). Canada Post and outgoing email go through your deployed Google Apps Script (`apps-script/Code.gs`). Stripe, the Gmail receipt finder and AI receipt scanning are called from the browser. |
 | **Hosting** | GitHub Pages. `.github/workflows/deploy.yml` builds and publishes on every push to `main`. |
 | **Access rules** | `firestore.rules`, `database.rules.json`, `storage.rules`. Only the publisher account reads everything. An author reads and writes only their own book, plus the few settings their screens need. |
 
