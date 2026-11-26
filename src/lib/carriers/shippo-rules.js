@@ -81,3 +81,21 @@ export function readShippoTrack(track) {
     state,
   };
 }
+
+/**
+ * Shippo's shipment `extra` block for the label options the publisher picked,
+ * or null when none are on. Shippo's field names: `signature_confirmation`,
+ * `insurance` ({ amount, currency, content } with the amount as a string), and
+ * `is_return` (Shippo swaps the addresses, so the label carries the parcel
+ * from the customer back to the shop).
+ */
+export function shippoLabelExtras({ signature = false, insureAmount = 0, currency = 'CAD', content = 'Printed books', isReturn = false } = {}) {
+  const extra = {};
+  if (signature) extra.signature_confirmation = 'STANDARD';
+  const insured = Number(insureAmount);
+  if (Number.isFinite(insured) && insured > 0) {
+    extra.insurance = { amount: insured.toFixed(2), currency: String(currency || 'CAD').toUpperCase(), content: String(content || 'Printed books').slice(0, 100) };
+  }
+  if (isReturn) extra.is_return = true;
+  return Object.keys(extra).length ? extra : null;
+}

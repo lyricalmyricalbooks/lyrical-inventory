@@ -57,7 +57,7 @@ import { renderExpenses, saveReceiptToLocalFile, readShippingFieldsFromReceipt }
 import { openReviewInbox } from './review-inbox.js';
 import { commitRecoveredWebsiteOrder, orders, renderOrders } from './website-orders.js';
 import { findExistingLabel, describeExistingLabel, websiteLabelWords } from '../lib/carriers/label-duplicate-guard.js';
-import { toShippoParcel, shippoQuoteProblem, shippoCarrierToken, readShippoTrack } from '../lib/carriers/shippo-rules.js';
+import { toShippoParcel, shippoQuoteProblem, shippoCarrierToken, readShippoTrack, shippoLabelExtras } from '../lib/carriers/shippo-rules.js';
 import { isShippoTestKey, isWebsiteFulfilled } from '../lib/website-link.js';
 import { websiteShipmentNote } from './website-link.js';
 import {
@@ -346,6 +346,7 @@ function renderOrderShippingSummary(order, expenses = linkablePostageExpenses())
   // returning parcel is visible on the order itself, not only in a passing card.
   const delivery = deliveryPhrase(order);
   if (delivery) parts.push(delivery);
+  if (order.returnTrackingNumber) parts.push(`Return label ${escapeHtml(order.returnTrackingNumber)}`);
   const declId = order.declarationId || order.zonosDeclarationId || '';
   if (declId) {
     parts.push(`<span class="zonos-decl-tag" style="font-family:var(--font-mono);font-size:var(--text-xs);color:var(--green);background:rgba(46,125,50,0.08);padding:2px 6px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(46,125,50,0.2);display:inline-flex;align-items:center;gap:4px;">Decl ID: <strong>${escapeHtml(declId)}</strong> <button type="button" onclick="navigator.clipboard.writeText(${jsArg(declId)});showToast('✓ Copied Declaration ID');" style="background:none;border:none;cursor:pointer;padding:0 2px;font-size:var(--text-xs);" title="Copy Declaration ID">📋</button></span>`);
@@ -7642,6 +7643,26 @@ let _shippoPurchaseInFlight = false;
 // The form as it was when the Shippo rates on screen were quoted, and when.
 let _shippoRatesQuote = null;
 
+/** The Shippo-only label options (signature, insurance, return) as picked on the form. */
+function readShippoLabelOptions() {
+  return {
+    signature: !!$('so-signature')?.checked,
+    isReturn: !!$('so-return')?.checked,
+    insureAmount: parseFloat($('so-insure')?.value) || 0,
+    content: ($('sp-customs-description')?.value || '').trim() || 'Printed books',
+  };
+}
+
+/**
+ * The shipping form plus the Shippo-only options. Kept apart from the shared
+ * fingerprint so ticking a Shippo option never makes Canada Post or Chit Chats
+ * prices look out of date.
+ */
+function shippoQuoteFingerprint() {
+  const o = readShippoLabelOptions();
+  return JSON.stringify([shippingFormFingerprint(), o.signature, o.isReturn, o.insureAmount]);
+}
+
 /**
  * True when the Shippo rates on screen can still be bought. A rate is Shippo's
  * price for the exact addresses and parcel it was asked about, so once the form
@@ -7649,7 +7670,7 @@ let _shippoRatesQuote = null;
  * and the publisher is asked for a fresh quote instead of buying the old one.
  */
 function shippoQuoteStillGood() {
-  const problem = shippoQuoteProblem(_shippoRatesQuote, { fingerprint: shippingFormFingerprint() });
+  const problem = shippoQuoteProblem(_shippoRatesQuote, { fingerprint: shippoQuoteFingerprint() });
   if (!problem) return true;
   _shippoRatesQuote = null;
   const list = $('ship-results-list');
@@ -7705,11 +7726,15 @@ async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currenc
     if (!overridden) return;
   }
 
+  // A return label is a second label on purpose, so the duplicate guard is
+  // for outgoing labels only.
+  const isReturn = !!_shippoRatesQuote?.isReturn;
   const prefilledOrder = $('ship-prefill-dest')?.dataset.orderNumber;
-  if (prefilledOrder && !(await confirmNoExistingLabel(prefilledOrder))) return;
+  if (!isReturn && prefilledOrder && !(await confirmNoExistingLabel(prefilledOrder))) return;
 
-  const confirmed = await confirmDialog(`Confirm purchasing shipping label?\n\nCarrier: ${provider}\nService: ${serviceName}\nCost: ${amount} ${currency}`, {
-    title: 'Purchase Shipping Label',
+  const kind = isReturn ? 'return label (customer → you)' : 'shipping label';
+  const confirmed = await confirmDialog(`Confirm purchasing ${kind}?\n\nCarrier: ${provider}\nService: ${serviceName}\nCost: ${amount} ${currency}`, {
+    title: isReturn ? 'Purchase Return Label' : 'Purchase Shipping Label',
     okLabel: 'Purchase',
     cancelLabel: 'Cancel'
   });
@@ -7724,9 +7749,10 @@ async function buyShippoLabelOnce(rateId, provider, serviceName, amount, currenc
     const { labelUrl, trackingNumber } = await purchaseShippoRate({
       rateId, provider, serviceName, amount, currency,
       orderNumber: $('ship-prefill-dest')?.dataset.orderNumber,
+      isReturn,
     });
     if (labelUrl) window.open(labelUrl, '_blank');
-    showToast(`✓ Label purchased! Tracking: ${trackingNumber || 'N/A'}`, 'ok', 6000);
+    showToast(`✓ ${isReturn ? 'Return label' : 'Label'} purchased! Tracking: ${trackingNumber || 'N/A'}`, 'ok', 6000);
   } catch (err) {
     console.error('Failed to buy Shippo label:', err);
     showToast(`❌ Purchase failed: ${err.message}`, 'err');
@@ -7753,7 +7779,7 @@ function findOrderAcrossBooks(orderNumber) {
  * postage expense, links it to the order. No prompts — every caller confirms
  * with the publisher first. Throws when Shippo does not sell the label.
  */
-async function purchaseShippoRate({ rateId, provider, serviceName, amount, currency, orderNumber = '', labelFileType = '' }) {
+async function purchaseShippoRate({ rateId, provider, serviceName, amount, currency, orderNumber = '', labelFileType = '', isReturn = false }) {
   const shippoKey = TAX_CENTER.settings?.shippoKey || '';
   if (!shippoKey) throw new Error('No Shippo API key saved.');
 
@@ -7784,7 +7810,15 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
   // Auto-mark the order as Shipped, in whichever book sold it.
   const selectedOrderNumber = normalizeShippingOrderNumber(orderNumber);
   const found = selectedOrderNumber ? findOrderAcrossBooks(selectedOrderNumber) : null;
-  if (found) {
+  if (found && isReturn) {
+    // A return label belongs to the order but is not its shipment: the order
+    // stays as shipped (or not) as it was, and the return is noted beside it.
+    found.entry.returnTrackingNumber = trackingNumber || '';
+    found.entry.returnLabelDate = today();
+    if (shippoCarrierToken(provider)) found.entry.returnCarrier = shippoCarrierToken(provider);
+    saveState(found.bookId);
+    renderHist();
+  } else if (found) {
     found.entry.shipped = true;
     found.entry.shippedDate = today();
     found.entry.trackingNumber = trackingNumber || '';
@@ -7831,7 +7865,9 @@ async function purchaseShippoRate({ rateId, provider, serviceName, amount, curre
 
     const expense = {
       id: Date.now(),
-      desc: `Shippo shipping label${trackingNumber ? ` #${trackingNumber}` : ''} — ${provider} ${serviceName}`,
+      // The "Shippo shipping label" prefix is what the carrier scorecard and
+      // postage matching read, so a return says so at the end instead.
+      desc: `Shippo shipping label${trackingNumber ? ` #${trackingNumber}` : ''} — ${provider} ${serviceName}${isReturn ? ' (return)' : ''}`,
       cat: 'Shipping & Postage',
       currency: purchaseCurrency,
       amount: purchaseAmount,
@@ -8623,6 +8659,8 @@ async function calculateShippoRates() {
   renderShippoRateReadiness();
   // The tile price belongs to the form as it was when the quote was asked for.
   const quotedFor = shippingFormFingerprint();
+  const shippoQuotedFor = shippoQuoteFingerprint();
+  const labelOptions = readShippoLabelOptions();
 
   const isInternational = isInternationalShipment(sfCountryCode, stCountryCode);
 
@@ -8687,6 +8725,9 @@ async function calculateShippoRates() {
     const selectedOrderNumber = normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber);
     if (selectedOrderNumber) payload.metadata = `order_number:${selectedOrderNumber.slice(0, 100)}`;
 
+    const extra = shippoLabelExtras(labelOptions);
+    if (extra) payload.extra = extra;
+
     if (isInternational) {
       payload.customs_declaration = buildShippoCustomsDeclaration({ sfName, sfCountryCode, stCountryCode, spWeight, spWeightUnit });
     }
@@ -8736,7 +8777,9 @@ async function calculateShippoRates() {
       return;
     }
 
-    renderShippingChargePrediction(rates);
+    // A return label's prices are not what to charge a customer, nor the
+    // outgoing price the carrier tiles compare.
+    if (!labelOptions.isReturn) renderShippingChargePrediction(rates);
 
     // ⚡ Bolt Optimization: Use a single O(N) imperative loop to find cheapest and fastest rates instead of O(N log N) multiple sorts
     let cheapestRate = null;
@@ -8761,24 +8804,30 @@ async function calculateShippoRates() {
       }
     }
 
-    setCarrierTilePrice('shippo', cheapestRate ? [cheapestRate.amount] : [], {
-      currency: String(cheapestRate?.currency || 'CAD').toUpperCase(), fingerprint: quotedFor,
-    });
+    if (!labelOptions.isReturn) {
+      setCarrierTilePrice('shippo', cheapestRate ? [cheapestRate.amount] : [], {
+        currency: String(cheapestRate?.currency || 'CAD').toUpperCase(), fingerprint: quotedFor,
+      });
+    }
 
-    if (isInternational) {
+    if (isInternational && !labelOptions.isReturn) {
       calculateZonosDutiesHandler({ shippingAmount: cheapestRate ? parseFloat(cheapestRate.amount) : 15.00, carrierName: cheapestRate?.provider || '' }).catch(() => {});
     }
 
     const cheapestId = cheapestRate?.object_id;
 
     if (list) {
-      const customerPaid = selectedOrderShippingPaid();
+      // What the customer paid for shipping says nothing about a return label.
+      const customerPaid = labelOptions.isReturn ? null : selectedOrderShippingPaid();
       // Restore sorted rates for display in UI since we eliminated the explicit sort above
       const ratesForDisplay = [...rates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount));
       const cadPrices = ratesForDisplay
         .filter(r => String(r.currency || '').toUpperCase() === 'CAD')
         .map(r => parseFloat(r.amount));
-      list.innerHTML = rateCoverageNoteHtml(cadPrices, customerPaid) + ratesForDisplay.map(r => {
+      const listNote = labelOptions.isReturn
+        ? '<div class="tc-form-hint">Return label prices: the customer sends the parcel back to you.</div>'
+        : rateCoverageNoteHtml(cadPrices, customerPaid);
+      list.innerHTML = listNote + ratesForDisplay.map(r => {
         const logoUrl = r.provider_image_75 || '';
         const isCheapest = r.object_id === cheapestId;
         const isFastest = r.object_id === fastestId && !isCheapest;
@@ -8817,7 +8866,7 @@ async function calculateShippoRates() {
         `;
       }).join('');
       list.style.display = 'flex';
-      _shippoRatesQuote = { fingerprint: quotedFor, at: Date.now() };
+      _shippoRatesQuote = { fingerprint: shippoQuotedFor, at: Date.now(), isReturn: labelOptions.isReturn };
     }
 
   } catch (err) {
