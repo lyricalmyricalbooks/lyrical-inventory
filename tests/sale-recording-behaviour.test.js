@@ -132,6 +132,29 @@ describe('selling at the Event POS register', () => {
     expect(saved(HARBOUR).revenue).toBe(240);
   });
 
+  it('charges another currency in whole cents, so the lines add up to the total', async () => {
+    // Offline seed rates: 1 EUR = 1.47 CAD, 1 USD = 1.36 CAD, so a €25 book
+    // is US$27.0220… a copy: charged as $27.02, three for $81.06.
+    win.posSetCurrency('USD');
+    win.posUpdateQty(FABLE, 3);
+    expect(document.getElementById('pos-cart-items').textContent).toContain('81.06');
+    const total = await sellAtRegister({}, { currency: 'USD' });
+    expect(total).toBe('$81.06');
+    const payment = state(FABLE).hist[0].payment;
+    expect(payment.currency).toBe('USD');
+    expect(payment.amount).toBe(81.06);
+    expect(payment.convertedTotal).toBe(75);
+  });
+
+  it('does not keep an estimated offline rate as if it were a live one', async () => {
+    delete app.main._fxRateCache.CAD_EUR;
+    await sellAtRegister({ [FABLE]: 1 });
+    // The sale used the estimate…
+    expect(state(FABLE).hist[0].payment.rate).toBeCloseTo(1 / 1.47, 6);
+    // …but the app-wide cache, which later lookups trust as live, stays clean.
+    expect(app.main._fxRateCache.CAD_EUR).toBeUndefined();
+  });
+
   it('returns to the book that was on screen', async () => {
     await sellAtRegister({ [FABLE]: 1 });
     expect(app.main.activeBook).toBe(HARBOUR);

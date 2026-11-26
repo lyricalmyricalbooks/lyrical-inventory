@@ -18,6 +18,7 @@ import {
   reminderBlockReason,
   reminderSettings,
 } from '../src/lib/payment-reminders.js';
+import { invoiceAmountOwed } from '../src/lib/invoice-payments.js';
 
 // The thing being protected here is a relationship with a customer, not a
 // number on a screen: every one of these decisions ends in a real email landing
@@ -498,5 +499,22 @@ describe('sampleReminderInvoice', () => {
     const mail = buildReminderEmail(sample, { settings: reminderSettings({}), today: TODAY, amountLabel: 'CA$120.00' });
     expect(mail.subject).toContain('INV-SAMPLE-0001');
     expect(mail.text).toContain('The Corner Bookshop');
+  });
+});
+
+describe('part-paid invoices', () => {
+  const part = (amountMinor, chargeId = 'ch_1') => ({ chargeId, verdict: 'short', amountMinor, currency: 'CAD' });
+
+  it('does not chase an invoice whose card part payments already cover it', () => {
+    const inv = lateInvoice({ total: 200, currencyCode: 'CAD', stripePartPayments: [part(10000), part(10000, 'ch_2')] });
+    expect(reminderBlockReason(inv, { today: TODAY, days: 7 })).toBe('paid');
+  });
+
+  it('still chases a half-paid invoice, for the balance rather than the full total', () => {
+    const inv = lateInvoice({ total: 200, currencyCode: 'CAD', stripePartPayments: [part(10000)] });
+    expect(reminderBlockReason(inv, { today: TODAY, days: 7 })).toBeNull();
+    expect(invoiceAmountOwed(inv)).toBe(100);
+    const mail = buildReminderEmail(inv, { settings: {}, amountLabel: `$${invoiceAmountOwed(inv).toFixed(2)}` });
+    expect(mail.subject).toContain('$100.00 outstanding');
   });
 });

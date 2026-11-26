@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { csvCell, csvRow, csvToObjects, toCsv } from '../src/lib/csv.js';
+import { csvCell, csvRow, csvToObjects, splitDelimitedRecords, toCsv } from '../src/lib/csv.js';
 
 // These exports go to an accountant and to spreadsheet imports, so a cell that
 // silently shifts the columns after it is a real reporting error, not a
@@ -81,6 +81,18 @@ describe('toCsv', () => {
 
 // The order-history import reads .csv files with this instead of SheetJS, so a
 // CSV import works offline before the Excel library has ever been downloaded.
+describe('splitDelimitedRecords', () => {
+  it('treats an inch mark mid-cell as text, so the rows after it still import', () => {
+    const raw = 'Order,Notes\r\n1001,Signed 8" print\r\n1002,plain\r\n1003,"Quoted, ""ok""\nline two"\r\n';
+    expect(splitDelimitedRecords(raw)).toEqual([
+      ['Order', 'Notes'],
+      ['1001', 'Signed 8" print'],
+      ['1002', 'plain'],
+      ['1003', 'Quoted, "ok"\nline two'],
+    ]);
+  });
+});
+
 describe('csvToObjects', () => {
   it('keys each data row by the header row, the way sheet_to_json does', () => {
     const text = '\uFEFFOrder #,Date,Channel,Qty,Unit Price,Notes\r\n'

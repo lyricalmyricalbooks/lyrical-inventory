@@ -95,6 +95,56 @@ export function alreadyApplied(invoice, payment) {
 }
 
 /**
+ * The part-payment verdicts whose amount is real money in the invoice's own
+ * currency. A 'currency-mismatch' note stores the invoice's currency code next
+ * to an amount in some other currency, and an 'unreadable' one may have no
+ * amount at all, so neither can be added to what the store has paid.
+ */
+const COUNTED_PART_VERDICTS = new Set(['short', 'over']);
+
+/**
+ * What the store has already paid towards this invoice by card, in whole minor
+ * units of the invoice's currency — the sum of its recorded part payments.
+ *
+ * Each charge counts once however many times it was noted, and
+ * `excludeChargeId` leaves one charge out: the one being judged right now, so
+ * a charge that was already noted is not counted against itself.
+ */
+export function invoicePaidSoFarMinor(invoice, { excludeChargeId = '' } = {}) {
+  const cur = invoiceCurrencyCode(invoice);
+  if (!cur) return 0;
+  const skip = String(excludeChargeId || '').trim();
+  const seen = new Set();
+  let sum = 0;
+  for (const p of (Array.isArray(invoice?.stripePartPayments) ? invoice.stripePartPayments : [])) {
+    if (!p || !COUNTED_PART_VERDICTS.has(p.verdict)) continue;
+    // A part payment the publisher refunded in Stripe no longer pays anything.
+    if (p.refunded) continue;
+    if (normalizeCurrencyCode(p.currency, '') !== cur) continue;
+    const id = String(p.chargeId || '').trim();
+    if (id && (id === skip || seen.has(id))) continue;
+    const minor = Number(p.amountMinor);
+    if (!Number.isInteger(minor) || minor <= 0) continue;
+    if (id) seen.add(id);
+    sum += minor;
+  }
+  return sum;
+}
+
+/**
+ * What is still owed on an invoice, in major units: the total less any card
+ * part payments already recorded. Never below zero. Falls back to the plain
+ * total when nothing has been paid towards it (or the total can't be read).
+ */
+export function invoiceAmountOwed(invoice) {
+  const total = Number(invoice?.total) || 0;
+  const paid = invoicePaidSoFarMinor(invoice);
+  const totalMinor = invoiceTotalMinor(invoice);
+  if (!paid || totalMinor === null) return total;
+  return minorToMajor(Math.max(0, totalMinor - paid), invoiceCurrencyCode(invoice));
+}
+
+/**
  * Does this charge settle this invoice?
  *
  * Exactly one verdict, and the caller does nothing a verdict did not authorise.
@@ -104,7 +154,8 @@ export function alreadyApplied(invoice, payment) {
  *
  * Returns `{ verdict, expectedMinor, paidMinor, shortfallMinor, currency }`.
  * `shortfallMinor` is positive when the store still owes and negative when it
- * overpaid, so one number covers both directions.
+ * overpaid, so one number covers both directions. `expectedMinor` is what was
+ * still owed: the total less earlier card part payments.
  */
 export function judgeInvoicePayment({ payment, invoice } = {}) {
   const base = { expectedMinor: null, paidMinor: null, shortfallMinor: null, currency: '' };
@@ -122,7 +173,14 @@ export function judgeInvoicePayment({ payment, invoice } = {}) {
 
   const invCur = invoiceCurrencyCode(invoice);
   const payCur = normalizeCurrencyCode(payment.currency, '');
-  const expectedMinor = invoiceTotalMinor(invoice);
+  // What is still owed when this charge arrives: the total less what earlier
+  // part payments already covered, so the instalment that pays the balance
+  // settles the invoice. This charge itself is left out of that sum, so judging
+  // it again after it was noted gives the same answer.
+  const totalMinor = invoiceTotalMinor(invoice);
+  const expectedMinor = totalMinor === null
+    ? null
+    : totalMinor - invoicePaidSoFarMinor(invoice, { excludeChargeId: payment.id });
   const paidMinor = paymentMinor(payment);
 
   // A blank amount or an unidentifiable currency is not a small problem to be

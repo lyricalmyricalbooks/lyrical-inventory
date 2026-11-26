@@ -92,11 +92,19 @@ export function newImportId(now = Date.now(), rand = Math.random) {
  */
 export function importBatches(hist) {
   const groups = new Map();
+  const group = (id, at, name) => {
+    const g = groups.get(id) || { id, at: '', name: '', count: 0, refunds: 0 };
+    if (!g.at && at) g.at = at;
+    if (!g.name && name) g.name = name;
+    groups.set(id, g);
+    return g;
+  };
   for (const h of hist || []) {
-    if (!h || !h.importId || h.voided) continue;
-    const g = groups.get(h.importId) || { id: h.importId, at: h.importedAt || '', name: h.importName || '', count: 0 };
-    g.count++;
-    groups.set(h.importId, g);
+    if (!h) continue;
+    if (h.importId && !h.voided) group(h.importId, h.importedAt, h.importName).count++;
+    // Sales an import voided as refunded: still undoable, even when the file
+    // held nothing but refunds and added no rows of its own.
+    if (h.voided && h.refundedByImport) group(h.refundedByImport, h.refundedByImportAt, h.refundedByImportName).refunds++;
   }
   return [...groups.values()].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
 }

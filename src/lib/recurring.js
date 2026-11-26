@@ -286,7 +286,7 @@ function walkCharges(sub, visit) {
  *   - a charge dated in the future is never injected, so a subscription that
  *     bills on the 28th doesn't inflate the current month from the 1st;
  *   - a paused subscription owes nothing, and resuming does not backfill the
- *     gap (resumeRecurring in taxcentre.js rolls `lastInjected` forward).
+ *     gap (resumedLastInjected rolls `lastInjected` forward on resume).
  *
  * Each charge carries the `amount` in force on its own date, so a run of missed
  * periods spanning a price change posts each one at what it actually cost.
@@ -303,6 +303,18 @@ export function recurringDueCharges(sub, now = new Date()) {
     return true;
   });
   return due;
+}
+
+/**
+ * The `lastInjected` a paused subscription should carry once it is resumed
+ * `now`: every charge that fell due while it was paused — up to and including
+ * yesterday — counts as skipped, so resuming never posts charges from the
+ * paused period. A charge due today still posts. Never moves backwards.
+ */
+export function resumedLastInjected(sub, now = new Date()) {
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const missed = recurringDueCharges({ ...sub, paused: false }, yesterday);
+  return missed.length ? missed[missed.length - 1].monthKey : (sub?.lastInjected || '');
 }
 
 /**

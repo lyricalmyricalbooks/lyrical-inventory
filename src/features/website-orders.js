@@ -38,6 +38,7 @@ import { fmt, fmtD, getBookCurrencyCode } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { addSaleToState, syncHistoryVoidDeletion } from './sales-ledger.js';
 import { syncToSheets } from './sheets-bridge.js';
+import { readScriptJson } from '../lib/script-reply.js';
 import { linkablePostageExpenses, renderOrderShippingSummary, shippingPurchaseRowPayload } from './shipping.js';
 import { storageSet, storageRead } from '../lib/safe-storage.js';
 
@@ -643,8 +644,8 @@ async function scanGmailWithRetries(sheetsUrl, daysBack, onStatus, maxRetries = 
         mode: 'cors'
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      if (!data || !data.ok) throw new Error(data.error || 'Server returned failure');
+      const data = await readScriptJson(res);
+      if (!data.ok) throw new Error(data.error || 'Server returned failure');
       return { parsed: data };
     } catch (e) {
       lastError = e;

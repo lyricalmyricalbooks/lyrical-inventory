@@ -728,7 +728,9 @@ function automationSignals(ctx, out) {
       if (!parts.length || inv.status === 'paid' || inv.voided) continue;
       const cur = parts[0].currency || inv.currencyCode || '';
       const paid = parts.reduce((sum, p) => sum + (Number(p.amountMinor) || 0), 0) / 100;
-      const due = (Number(parts[parts.length - 1].expectedMinor) || 0) / 100;
+      // The invoice's total: each part payment's expectedMinor is the balance
+      // left before it, so only the first one equals the total.
+      const due = Number(inv.total) > 0 ? Number(inv.total) : (Number(parts[0].expectedMinor) || 0) / 100;
       out.push({
         id: `money-invoice-short:${bookId}:${inv.id || inv.num}`, group: 'orders', status: 'warn', icon: '🧾',
         label: `Invoice ${inv.num || ''} was only partly paid`.replace('  ', ' '),

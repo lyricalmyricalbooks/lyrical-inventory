@@ -53,7 +53,7 @@ describe('latestImport', () => {
       { importId: 'c', importedAt: '2026-10-25T00:00:00Z', voided: true },
       { num: 'M-1' },
     ];
-    expect(latestImport(hist)).toEqual({ id: 'b', at: '2026-10-20T00:00:00Z', name: 'b.csv', count: 1 });
+    expect(latestImport(hist)).toEqual({ id: 'b', at: '2026-10-20T00:00:00Z', name: 'b.csv', count: 1, refunds: 0 });
     expect(latestImport([{ num: 'x' }])).toBeNull();
   });
 
@@ -65,6 +65,14 @@ describe('latestImport', () => {
       { importId: 'c', importedAt: '2026-10-25T00:00:00Z', voided: true },
     ];
     expect(importBatches(hist).map(b => [b.id, b.count])).toEqual([['b', 1], ['a', 2]]);
+  });
+
+  it('keeps an import of only refunds undoable', () => {
+    const hist = [
+      { num: '1001', voided: true, refundedByImport: 'r', refundedByImportAt: '2026-11-01T00:00:00Z', refundedByImportName: 'refunds.csv' },
+      { importId: 'a', importedAt: '2026-10-01T00:00:00Z' },
+    ];
+    expect(importBatches(hist).map(b => [b.id, b.count, b.refunds, b.name])).toEqual([['r', 0, 1, 'refunds.csv'], ['a', 1, 0, '']]);
   });
 });
 

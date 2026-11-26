@@ -89,6 +89,12 @@ describe('Tax Centre ledger', () => {
     expect(allLedger.find(r => r.sourceType === 'artistDebtRecovery')).toMatchObject({ origAmount: 30, type: 'Transfer', isIncome: true });
     expect(totalGrossSales).toBe(55);
   });
+  it('books an "artist keeps all" settlement as the whole sale going out, share plus forgiven cut', () => {
+    const { allLedger } = buildLedger('2026', {
+      hound: { ...states.hound, artistPayouts: [{ id: 'kept', date: '2026-06-02', amount: 10, forgivenCut: 10, method: 'Kept from direct sale (full)' }] },
+    });
+    expect(allLedger.find(r => r.sourceType === 'artistPayout')).toMatchObject({ origAmount: 20, baseAmount: 20, isIncome: false });
+  });
   it('totals sales for the selected year only', () => {
     // hound 2×20 = 40 CAD, altrove 1×10 EUR × 1.5 = 15 CAD. The 2025 sale, the
     // voided one and the artist-pending one must not count.
@@ -206,5 +212,35 @@ describe('Tax Centre ledger — each sale at its own date\'s rate', () => {
     expect(ship.origCurrency).toBe('CAD');
     // 40 (hound) + 15 (€10 at 1.5) + 10 shipping
     expect(totalGrossSales).toBeCloseTo(65, 6);
+  });
+});
+
+describe('Tax Centre ledger — foreign book expenses with no CAD value', () => {
+  const usd = (expense) => ({
+    booksOverride: { ...BOOKS, yank: { id: 'yank', title: 'Yankee Doodle', currency: 'US$' } },
+    statesOverride: {
+      ...states,
+      yank: { hist: [], stores: [], ledger: [], expenses: [{ id: 1, date: '2026-04-10', desc: 'Printer', amount: 500, currency: 'USD', cat: 'Printing', baseAmount: null, ...expense }] },
+    },
+  });
+  const BASE = 150; // hound print run 100 + booth fee 50
+
+  it('counts nothing and flags it when no USD rate is known, rather than USD 500 as CAD 500', () => {
+    const { allLedger, totalOperatingExpenses } = buildLedger('2026', {}, usd({}));
+    const row = allLedger.find(r => (r.desc || '').includes('Printer'));
+    expect(row.baseAmount).toBe(0);
+    expect(row.hasRateError).toBe(true);
+    expect(totalOperatingExpenses).toBeCloseTo(BASE, 6);
+  });
+
+  it("does not stand today's rate in for an expense flagged as missing its date's rate", () => {
+    const { totalOperatingExpenses } = buildLedger('2026', {}, { ...usd({ fxMissing: true }), fxCache: { ..._fxRateCache, USD_CAD: 1.4 } });
+    expect(totalOperatingExpenses).toBeCloseTo(BASE, 6);
+  });
+
+  it("converts at the expense's own date's rate once it is known", () => {
+    const fxCache = { ..._fxRateCache, 'USD_CAD@2026-04-10': 1.36 };
+    const { totalOperatingExpenses } = buildLedger('2026', {}, { ...usd({ fxMissing: true }), fxCache });
+    expect(totalOperatingExpenses).toBeCloseTo(BASE + 680, 6);
   });
 });

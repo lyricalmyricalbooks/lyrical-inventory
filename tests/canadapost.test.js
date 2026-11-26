@@ -40,14 +40,14 @@ describe('Canada Post XML & Postal Code Helpers', () => {
 
   it('builds valid US and International JSON destinations', () => {
     const usJson = buildRateScenarioJson({
-      destCountry: 'US',
+      originPostalCode: 'M4B1B3', destCountry: 'US',
       destPostalOrZip: '90210'
     });
     expect(usJson).toContain('"unitedStates"');
     expect(usJson).toContain('"zipCode":"90210"');
 
     const intJson = buildRateScenarioJson({
-      destCountry: 'GB'
+      originPostalCode: 'M4B1B3', destCountry: 'GB'
     });
     expect(intJson).toContain('"countryCode":"GB"');
   });
@@ -441,6 +441,26 @@ describe('Canada Post Label & Shipment Creation', () => {
     expect(normalizeStateOrProvince('British Columbia', 'CA')).toBe('BC');
     expect(normalizeStateOrProvince('QC')).toBe('QC');
     expect(normalizeStateOrProvince('WA')).toBe('WA');
+  });
+
+  it('normalizes accented and French province names', async () => {
+    const { normalizeStateOrProvince } = await import('../src/lib/carriers/canadapost.js');
+    expect(normalizeStateOrProvince('Québec', 'CA')).toBe('QC');
+    expect(normalizeStateOrProvince('québec')).toBe('QC');
+    expect(normalizeStateOrProvince('Nouvelle-Écosse', 'CA')).toBe('NS');
+    expect(normalizeStateOrProvince('Colombie-Britannique', 'CA')).toBe('BC');
+    expect(normalizeStateOrProvince('Nouveau-Brunswick', 'CA')).toBe('NB');
+    expect(normalizeStateOrProvince('Terre-Neuve-et-Labrador', 'CA')).toBe('NL');
+    expect(normalizeStateOrProvince('Île-du-Prince-Édouard', 'CA')).toBe('PE');
+  });
+
+  it('refuses to quote rates for a blank postal or ZIP code instead of inventing one', () => {
+    expect(() => buildRateScenarioJson({ originPostalCode: 'M4B1B3', destCountry: 'CA', destPostalOrZip: '' })).toThrow(/postal code/);
+    expect(() => buildRateScenarioJson({ originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '  ' })).toThrow(/ZIP code/);
+    expect(() => buildRateScenarioJson({ originPostalCode: '', destCountry: 'CA', destPostalOrZip: 'V6B2W9' })).toThrow(/return postal code/);
+    // International quotes need only the country.
+    expect(JSON.parse(buildRateScenarioJson({ originPostalCode: 'M4B1B3', destCountry: 'GB' })).destination)
+      .toEqual({ international: { countryCode: 'GB' } });
   });
 
   it('correctly formats multi-line addresses and normalized states in shipment JSON', async () => {
@@ -1550,7 +1570,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
     });
 
     const quotes = await getCanadaPostRates({
-      destCountry: 'US', destPostalOrZip: '10009',
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009',
       apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
     });
     expect(quotes[0].quoteType).toBe('commercial');
@@ -1564,7 +1584,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
     global.fetch = relay([noQuotes, usQuotes]);
 
     const quotes = await getCanadaPostRates({
-      destCountry: 'US', destPostalOrZip: '10009',
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009',
       apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
     });
 
@@ -1584,7 +1604,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
     });
 
     await getCanadaPostRates({
-      destCountry: 'US', destPostalOrZip: '10009',
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009',
       apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
     });
     expect(gatewayCalls).toBe(1);
@@ -1595,7 +1615,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
     global.fetch = relay([noQuotes, noQuotes]);
 
     const quotes = await getCanadaPostRates({
-      destCountry: 'US', destPostalOrZip: '10009',
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009',
       apiKey: 'k', apiSecret: 's', customerNumber: '0001298882', isTest: false
     });
     expect(quotes).toEqual([]);
@@ -1611,7 +1631,7 @@ describe('Commercial rates that come back empty fall back to retail', () => {
     });
 
     const quotes = await getCanadaPostRates({
-      destCountry: 'US', destPostalOrZip: '10009',
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009',
       apiKey: 'k', apiSecret: 's', customerNumber: '', isTest: false
     });
     expect(gatewayCalls).toBe(1);
@@ -1625,7 +1645,7 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
     // The Apigee gateway validates with additionalProperties:false, so a
     // defensive hyphenated key alongside the camelCase one is a 400.
     const payload = buildRateScenarioJson({
-      destCountry: 'US', destPostalOrZip: '10009', customerNumber: '0001298882', contractId: '4299100'
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009', customerNumber: '0001298882', contractId: '4299100'
     });
     expect(payload).not.toMatch(/"[a-z]+-[a-z]/);
     const parsed = JSON.parse(payload);
@@ -1638,7 +1658,7 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
     const { buildRateScenarioJson } = await import('../src/lib/carriers/canadapost.js');
     // Rule 9114: counter rates are refused if either is present.
     const parsed = JSON.parse(buildRateScenarioJson({
-      destCountry: 'US', destPostalOrZip: '10009',
+      originPostalCode: 'M4B1B3', destCountry: 'US', destPostalOrZip: '10009',
       customerNumber: '0001298882', contractId: '4299100', quoteType: 'counter'
     }));
     expect(parsed.quoteType).toBe('counter');
@@ -1649,7 +1669,7 @@ describe('Rate payloads obey the gateway’s strict schema', () => {
   it('never sends a contract id without its customer number', async () => {
     const { buildRateScenarioJson } = await import('../src/lib/carriers/canadapost.js');
     const parsed = JSON.parse(buildRateScenarioJson({
-      destCountry: 'CA', destPostalOrZip: 'V6B2W9', customerNumber: '', contractId: '4299100'
+      originPostalCode: 'M4B1B3', destCountry: 'CA', destPostalOrZip: 'V6B2W9', customerNumber: '', contractId: '4299100'
     }));
     expect('contractId' in parsed).toBe(false);
   });

@@ -105,6 +105,7 @@ import {
   recurringDueCharges,
   recurringStatus,
   relativeDayLabel,
+  resumedLastInjected,
   summarizeRecurring,
   upcomingCharges,
 } from '../lib/recurring.js';
@@ -718,7 +719,7 @@ function _tcRecurringRowHtml(raw, now, baseCurrency) {
       <td class="r">
         <div class="rec-actions">
           <button class="btn sm" onclick="openRecurringEditor(${jsArg(s.id)})" title="Edit this subscription">Edit</button>
-          ${status === 'ended' ? '' : `<button class="btn sm" onclick="toggleRecurringPause(${jsArg(s.id)})" title="${s.paused ? 'Resume billing from this month' : 'Stop posting charges without deleting the record'}">${s.paused ? 'Resume' : 'Pause'}</button>`}
+          ${status === 'ended' ? '' : `<button class="btn sm" onclick="toggleRecurringPause(${jsArg(s.id)})" title="${s.paused ? 'Resume billing from today' : 'Stop posting charges without deleting the record'}">${s.paused ? 'Resume' : 'Pause'}</button>`}
           <button class="btn sm danger-btn" onclick="removeRecurring(${jsArg(s.id)})" title="Delete this subscription">Remove</button>
         </div>
       </td>
@@ -2475,10 +2476,12 @@ function _tcBuildLedger(selectedYear) {
         // Pre-calculated at submission time — no double conversion
         eBase = e.baseAmount;
       } else {
-        // No stored CAD value: convert at the expense's own date's rate.
+        // No stored CAD value: convert at the expense's own date's rate. With
+        // no rate at all it counts 0 and is flagged (as business expenses do)
+        // until healExpenseRates fills it in — never USD 500 as CAD 500.
         const eRate = datedCadRate(bookCur, e.date, _fxRateCache);
-        eBase = roundCents((e.amount || 0) * eRate.rate);
-        eRateMissing = eRate.missing;
+        eRateMissing = eRate.missing || !!(e.fxMissing && eRate.estimated);
+        eBase = eRateMissing ? 0 : roundCents((e.amount || 0) * eRate.rate);
       }
 
       totalOperatingExpenses += eBase;
@@ -2519,7 +2522,11 @@ function _tcBuildLedger(selectedYear) {
 
         // `amount` is always in the book's own currency; a payout paid in
         // another currency keeps that cash in `payment` for the audit trail.
-        const pAmount = Number(p.amount) || 0;
+        // "Artist keeps all": the publisher's forgiven cut went to the artist
+        // too. It isn't royalties paid (amount), but it is money the sale's
+        // income never brought in, so it is an outflow here like the share.
+        const forgiven = Number(p.forgivenCut) || 0;
+        const pAmount = roundCents((Number(p.amount) || 0) + forgiven);
         const pFx = datedCadRate(cur, tDate, _fxRateCache);
         const pBase = roundCents(pAmount * pFx.rate);
         allLedger.push({
@@ -2529,6 +2536,8 @@ function _tcBuildLedger(selectedYear) {
           // settled by netting a debt, so a small or zero row isn't a mystery.
           desc: p.settlement
             ? `Author settlement (${b.title}) — earnings settled, including money retained from sales`
+            : forgiven > 0.005
+            ? `Artist Payout (${b.title}) — includes your ${fmt(forgiven, cur)} cut, forgiven`
             : payoutNetted(p) > 0.005
             ? `Artist Payout (${b.title}) — plus ${fmt(payoutNetted(p), cur)} netted against money owed`
             : `Artist Payout (${b.title})`,
@@ -4880,7 +4889,10 @@ async function saveRecurringEditor() {
       }
       // lastInjected is deliberately preserved: editing the price of a
       // subscription must not re-post periods the ledger already has.
+      const resuming = existing.paused && !draft.paused;
       Object.assign(existing, draft, { id: existing.id, lastInjected: existing.lastInjected || '' });
+      // Unticking "paused" here is a resume, same as the Resume button.
+      if (resuming) existing.lastInjected = resumedLastInjected(existing);
     } else {
       const clash = TAX_CENTER.recurring.find(s =>
         (s.desc || '').toLowerCase() === draft.desc.toLowerCase() && !s.paused);
@@ -4910,9 +4922,9 @@ async function saveRecurringEditor() {
 }
 
 /**
- * Pause or resume without deleting. Resuming rolls `lastInjected` forward to
- * the month before this one, so the ledger doesn't get a lump of back-charges
- * for a period the subscription was explicitly not billing.
+ * Pause or resume without deleting. Resuming rolls `lastInjected` past every
+ * charge that fell due while paused (through yesterday), so the ledger doesn't
+ * get back-charges for a period the subscription was explicitly not billing.
  */
 async function toggleRecurringPause(id) {
   await loadTaxCenter();
@@ -4921,10 +4933,7 @@ async function toggleRecurringPause(id) {
   if (!sub) { showToast('⚠ Subscription not found', 'err'); return; }
 
   if (sub.paused) {
-    const now = new Date();
-    const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const prevKey = `${prevMonth.getFullYear()}-${String(prevMonth.getMonth() + 1).padStart(2, '0')}`;
-    if ((sub.lastInjected || '') < prevKey) sub.lastInjected = prevKey;
+    sub.lastInjected = resumedLastInjected(sub);
     sub.paused = false;
   } else {
     sub.paused = true;

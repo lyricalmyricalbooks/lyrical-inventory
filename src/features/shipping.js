@@ -229,6 +229,7 @@ import {
   resolveCanadaPostCredentials,
   refundCanadaPostShipment,
   executeCanadaPostProxy,
+  normalizeStateOrProvince,
 } from '../lib/carriers/canadapost.js';
 import {
   resolveListShipmentsEndpoint,
@@ -5884,7 +5885,7 @@ function chitChatsFormPayload() {
   }
   const payload = {
     name: value('st-name'), address_1: value('st-street1'), address_2: value('st-street2'), city: value('st-city'),
-    province_code: value('st-state'), postal_code: value('st-zip'), country_code: country, phone: value('st-phone'),
+    province_code: normalizeStateOrProvince(value('st-state'), country), postal_code: value('st-zip'), country_code: country, phone: value('st-phone'),
     package_contents: 'merchandise', description, value: roundCents(unitValue * quantity).toFixed(2), value_currency: 'cad',
     order_id: normalizeShippingOrderNumber($('ship-prefill-dest')?.dataset.orderNumber || value('sp-order-num')),
     package_type: 'parcel', weight, weight_unit: weightUnit, size_x: Number(value('sp-length')), size_y: Number(value('sp-width')),
@@ -6151,13 +6152,27 @@ async function calculateCanadaPostRatesHandler() {
   const card = $('canadapost-rates-card');
   if (!card) return;
 
-  const sfZip = $('sf-zip')?.value || 'M4B 1B3';
+  // The form first, then the saved return address — never an invented one: a
+  // quote for a made-up postal code is a wrong price that looks right.
+  const sfZip = $('sf-zip')?.value?.trim() || savedShippingOrigin().zip || '';
   const stCountryCode = resolveCountryCode($('st-country')?.value);
-  const stZip = $('st-zip')?.value || '';
+  const stZip = $('st-zip')?.value?.trim() || '';
   if (!stCountryCode) {
     hideCanadaPostRatesCard();
     showToast('⚠ Choose the recipient’s country before getting Canada Post rates', 'warn');
     $('st-country')?.focus();
+    return;
+  }
+  if ((stCountryCode === 'CA' || stCountryCode === 'US') && !stZip) {
+    hideCanadaPostRatesCard();
+    showToast(`⚠ Add the recipient’s ${stCountryCode === 'US' ? 'ZIP' : 'postal'} code before getting Canada Post rates`, 'warn');
+    $('st-zip')?.focus();
+    return;
+  }
+  if (!sfZip) {
+    hideCanadaPostRatesCard();
+    showToast('⚠ Add your return postal code before getting Canada Post rates', 'warn');
+    $('sf-zip')?.focus();
     return;
   }
 
@@ -6210,7 +6225,7 @@ async function calculateCanadaPostRatesHandler() {
     let quotes;
     if (apiKey && apiSecret && isEnabled && navigator.onLine) {
       quotes = await getCanadaPostRates({
-        originPostalCode: sfZip || 'M4B1B3',
+        originPostalCode: sfZip,
         destCountry: stCountryCode,
         destPostalOrZip: stZip,
         weightKg,

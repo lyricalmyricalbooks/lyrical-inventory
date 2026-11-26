@@ -21,6 +21,7 @@
 
 import { BILL_TO_PERSON } from './invoices.js';
 import { escapeHtml } from './html.js';
+import { invoiceAmountOwed } from './invoice-payments.js';
 
 /** What the settings mean before the publisher has touched them. */
 export const REMINDER_DEFAULTS = {
@@ -110,6 +111,9 @@ export function reminderBlockReason(inv, { today, days, now = Date.now() } = {})
   if (status === 'cancelled') return 'cancelled';
   if (status !== 'sent') return 'not-sent';
   if (!isIsoDate(inv.dueDate)) return 'no-due-date';
+  // Card part payments that already cover the whole bill: nothing is owed, even
+  // though the invoice was never marked paid (an overpayment waits for a person).
+  if (Number(inv.total) > 0 && invoiceAmountOwed(inv) <= 0) return 'paid';
 
   const state = invoiceReminderState(inv);
   if (state.count > 0) return 'already-chased';

@@ -1015,7 +1015,7 @@ function _wireCategoryAutofill(descId, catId, hintId, { keywords = false } = {})
     say('');
   });
   descInput.addEventListener('input', (e) => {
-    if (catSelect.dataset.handPicked) return;
+    if (catSelect.dataset.handPicked || catSelect.dataset.scanPicked) return;
     const text = e.target.value;
     const set = cat => { catSelect.value = cat; catSelect.dataset.autoValue = catSelect.value; };
     const hit = findExpenseRule(TAX_CENTER.expenseRules, { description: text }, { allowed: _offeredCategories(catSelect) });
@@ -1035,7 +1035,7 @@ function _wireCategoryAutofill(descId, catId, hintId, { keywords = false } = {})
 /** After an expense is logged: typing may pre-fill the category again. */
 function resetCategoryAutofill(catId, hintId) {
   const catSelect = document.getElementById(catId);
-  if (catSelect) { delete catSelect.dataset.handPicked; delete catSelect.dataset.autoValue; }
+  if (catSelect) { delete catSelect.dataset.handPicked; delete catSelect.dataset.autoValue; delete catSelect.dataset.scanPicked; }
   const hint = document.getElementById(hintId);
   if (hint) { hint.textContent = ''; hint.hidden = true; }
 }
@@ -1300,7 +1300,9 @@ function downloadFullTaxSeasonExport() {
     }).forEach(p => {
       // `amount` is in the book's native currency — convert to CAD to match the
       // column header, at the payout's own date's rate as the Tax Centre does.
-      const payoutRaw = parseFloat(p.amount || 0);
+      // A forgiven cut ("artist keeps all") left the business with the share.
+      const forgiven = Number(p.forgivenCut) || 0;
+      const payoutRaw = roundCents((parseFloat(p.amount || 0) || 0) + forgiven);
       const pFx = datedCadRate(cur, p.date, _fxRateCache);
       const hRate = pFx.rate;
       flagRateIfMissing(book, cur, pFx.missing, payoutRaw > 0);
@@ -1313,6 +1315,7 @@ function downloadFullTaxSeasonExport() {
       // explains itself (a fully netted payment shows 0.00 with the reason).
       const netted = payoutNetted(p);
       const desc = [p.method || 'Payment to artist',
+        forgiven > 0.005 ? `includes ${(forgiven * hRate).toFixed(2)} publisher cut forgiven` : '',
         netted > 0.005 ? `plus ${(netted * hRate).toFixed(2)} netted against money the artist owed` : ''].filter(Boolean).join(' — ');
       csv += `${p.date},${esc(book.title)},"Artist Payout",${esc(desc)},${payoutCAD.toFixed(2)},"",""\n`;
     });

@@ -166,7 +166,9 @@ describe('healExpenseRates on book expenses', () => {
     s.expenses = [{ id: 31, currency: 'EUR', amount: 20, fxRate: null, baseAmount: null, fxMissing: true, date: '2025-06-02' }];
     fakeRates({ byDate: { 'EUR@2025-06-02': 1.5 } });
     expect(await app.main.healExpenseRates()).toBe(1);
-    expect(s.expenses[0]).toMatchObject({ baseAmount: 30, fxRate: 1.5, fxMissing: false });
+    // fxRate is the rate into the book's own currency (none: it is a euro
+    // expense in a euro book), so only the Canadian value is filled in.
+    expect(s.expenses[0]).toMatchObject({ baseAmount: 30, fxRate: null, fxMissing: false });
   });
 });
 

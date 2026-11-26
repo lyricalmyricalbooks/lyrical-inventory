@@ -250,7 +250,18 @@ export function refundsToRaise(refunds = [], sales = []) {
     if (!refund || refund.status === 'failed' || refund.status === 'canceled') return;
     const all = byCharge.get(refund.chargeId) || [];
     // A row only partly refunded before can be raised again if this refund completes it.
-    const prior = all.filter(row => row.refundNoted && row.refundPartial && refund.id && refund.id !== row.refundNoted);
+    // A refund with an id only adds to a total kept under another id: when the
+    // earlier one was noted from the charge's own flag ('refunded'), this may be
+    // that same refund, and adding it again would read a half refund as full.
+    // A signal from the charge carries the real running total, so it counts
+    // only when the total has grown past what was noted.
+    // A refund listed with its charge's running total is judged on that total
+    // whatever noted the row before.
+    const total = Number(refund.chargeRefundedTotal);
+    const hasTotal = refund.chargeRefundedTotal != null && Number.isFinite(total);
+    const prior = all.filter(row => row.refundNoted && row.refundPartial && (refund.id ? refund.id !== row.refundNoted : true) && (hasTotal
+      ? total > (Number(row.refundedSoFar) || 0) + 0.005
+      : refund.id && row.refundNoted !== 'refunded'));
     const rows = all.filter(row => !row.refundNoted).concat(prior);
     if (!rows.length || seen.has(refund.chargeId)) return;
     seen.add(refund.chargeId);

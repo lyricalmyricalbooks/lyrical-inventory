@@ -111,6 +111,15 @@ describe('computeCashFlowMetrics', () => {
     expect(computeCashFlowMetrics(paidOnly, 'all').artistPayouts).toBeCloseTo(42, 5);
   });
 
+  it('counts a forgiven cut ("artist keeps all") with the share, since the artist kept both', () => {
+    const keptAll = {
+      ...sources,
+      states: { b1: { artistPayouts: [{ id: 'p11', date: '2025-01-01', amount: 10, forgivenCut: 90, method: 'Kept from direct sale (full)' }] } },
+      books: { b1: books.b1 },
+    };
+    expect(computeCashFlowMetrics(keptAll, 'all').artistPayouts).toBeCloseTo(100, 5);
+  });
+
   it('converts a payout on a foreign-currency book at the book rate', () => {
     // `amount` is denominated in the book's own currency, so a USD book's
     // payout converts once via that book's rate — the foreign cash handed over

@@ -21,6 +21,7 @@ import {
   recurringDueCharges,
   recurringStatus,
   relativeDayLabel,
+  resumedLastInjected,
   summarizeRecurring,
 } from '../src/lib/recurring.js';
 
@@ -295,6 +296,30 @@ describe('recurringDueCharges', () => {
   });
 });
 
+describe('resumedLastInjected', () => {
+  // Billed on the 1st, paused since January (December was the last charge).
+  const paused = sub({ startDate: '2025-06-01', lastInjected: '2025-12', paused: true });
+
+  it('skips every charge that fell due while paused, including this month\'s', () => {
+    const MAR_20 = new Date(2026, 2, 20);
+    const resumed = { ...paused, paused: false, lastInjected: resumedLastInjected(paused, MAR_20) };
+    expect(resumed.lastInjected).toBe('2026-03');
+    expect(recurringDueCharges(resumed, MAR_20)).toEqual([]);
+    expect(nextRecurringDate(resumed, MAR_20)).toBe('2026-04-01');
+    expect(recurringDueCharges(resumed, new Date(2026, 3, 1)).map(d => d.date)).toEqual(['2026-04-01']);
+  });
+
+  it('still posts a charge that falls due on the day it is resumed', () => {
+    const APR_1 = new Date(2026, 3, 1);
+    const resumed = { ...paused, paused: false, lastInjected: resumedLastInjected(paused, APR_1) };
+    expect(recurringDueCharges(resumed, APR_1).map(d => d.date)).toEqual(['2026-04-01']);
+  });
+
+  it('never moves lastInjected backwards', () => {
+    expect(resumedLastInjected(sub({ startDate: '2026-01-05', lastInjected: '2026-08', paused: true }), NOW)).toBe('2026-08');
+  });
+});
+
 describe('nextRecurringDate', () => {
   it('skips a period already posted this month', () => {
     expect(nextRecurringDate(sub({ startDate: '2026-01-05', lastInjected: '2026-08' }), NOW))
@@ -467,6 +492,11 @@ describe('recurring subscriptions panel markup', () => {
     const columns = (headRow.match(/<th[ >]/g) || []).length;
     expect(columns).toBe(7);
     expect(taxcentre).toContain(`colspan="${columns}"`);
+  });
+
+  it('skips the paused period whichever way a subscription is resumed', () => {
+    // The Resume button and unticking "paused" in the editor both resume.
+    expect(taxcentre.match(/resumedLastInjected\(/g) || []).toHaveLength(2);
   });
 
   it('keeps every editor field wired to the form reader', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcArtistEarnings, tierEffectiveCap, payoutRequestCovered, planNetPayout, sumOpenReceivables, payoutNetted } from '../src/lib/earnings.js';
+import { calcArtistEarnings, heldSaleShare, tierEffectiveCap, payoutRequestCovered, planNetPayout, sumOpenReceivables, payoutNetted } from '../src/lib/earnings.js';
 
 const tier = (label, revenueUpTo, artistPct) => ({ label, revenueUpTo, artistPct });
 const sale = (qty, price, extra = {}) => ({ qty, price, ...extra });
@@ -325,5 +325,36 @@ describe('a payout request is not closed by a credit that is not new money', () 
     s.hist[0].artistPending = false;
     s.artistPayouts.push({ date: '2026-11-04', amount: 50, method: 'Kept from direct sale' });
     expect(payoutRequestCovered(req, calcArtistEarnings(book, s))).toBe(false);
+  });
+});
+
+describe('a tier limit or production cost with a fraction of a cent', () => {
+  it('finishes the tier walk instead of freezing the dashboard', () => {
+    const typo = calcArtistEarnings({ profitTiers: [tier('Tier 1', 50.333, 10), tier('Final', null, 50)] }, { hist: [sale(1, 80)] });
+    expect(typo.cumulativeRevenue).toBe(80);
+    const cost = calcArtistEarnings({ productionCost: 100.004, profitTiers: [tier('Pre Break-even', null, 0), tier('Post Break-even', null, 50)] }, { hist: [sale(1, 200)] });
+    expect(cost.totalArtistEarned).toBe(50);
+  });
+});
+
+describe('heldSaleShare', () => {
+  const book = { profitTiers: [tier('Tier 1', 100, 10), tier('Final', null, 50)] };
+  it('is the held sale\'s own share at its place in the tiers', () => {
+    // An older held $100 sale fills the 10% tier; a newer $100 sale is at 50%.
+    const held = sale(1, 100, { artistPending: true });
+    const state = { hist: [sale(1, 100), held] };
+    expect(heldSaleShare(book, state, held, 100)).toBe(10);
+    // The Settle up panel agrees: keep 10 of the 100 held.
+    expect(calcArtistEarnings(book, state).heldByArtistShare).toBe(10);
+  });
+
+  it('leaves nothing owed either way when the artist keeps everything', () => {
+    // "Artist keeps all": only their share counts as paid, so the forgiven cut
+    // doesn't turn into an overpayment taken from later royalties.
+    const held = sale(1, 100, { artistPending: true });
+    const state = { hist: [held] };
+    const share = heldSaleShare(book, state, held, 100);
+    const settled = calcArtistEarnings(book, { hist: [{ ...held, artistPending: false }], artistPayouts: [{ amount: share, forgivenCut: 100 - share }] });
+    expect(settled.owedToArtist).toBe(0);
   });
 });

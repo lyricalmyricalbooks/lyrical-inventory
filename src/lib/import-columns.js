@@ -39,6 +39,9 @@ export function importColumn(row, field) {
  */
 export function importAmount(value) {
   if (typeof value === 'number') return value;
+  // Excel's accounting format saves a minus amount as "(30.00)" or "$(30.00)";
+  // read that as negative so a refund row isn't imported as a sale.
+  const bracketed = /^\s*[A-Za-z]{0,3}\s*[$€£¥]?\s*\(\s*[$€£¥]?[\d.,\s]*\d[\d.,\s]*\)\s*$/.test(String(value ?? ''));
   let text = String(value ?? '').replace(/[^\d.,-]/g, '');
   const lastComma = text.lastIndexOf(',');
   const lastDot = text.lastIndexOf('.');
@@ -46,7 +49,8 @@ export function importAmount(value) {
   // unless it is a lone comma followed by exactly three digits ("1,250").
   const decimalComma = lastComma > lastDot && (lastDot !== -1 || text.length - lastComma - 1 !== 3);
   text = decimalComma ? text.replace(/\./g, '').replace(',', '.') : text.replace(/,/g, '');
-  return parseFloat(text);
+  const n = parseFloat(text);
+  return bracketed ? -Math.abs(n) : n;
 }
 
 const blank = (v) => v === undefined || v === null || String(v).trim() === '';

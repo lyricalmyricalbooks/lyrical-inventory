@@ -29,7 +29,7 @@ import { TEST_PROFILE_FLAG, SAMPLE_BOOK_ID, clearTestStorage, isSampleDataSeeded
 import { installGasAuth } from './lib/gas-auth.js';
 installGasAuth(() => (typeof window._fbGetIdToken === 'function' ? window._fbGetIdToken() : ''));
 import { registerSW } from 'virtual:pwa-register';
-import { calcArtistEarnings, tierEffectiveCap } from './lib/earnings.js';
+import { calcArtistEarnings, heldSaleShare, tierEffectiveCap } from './lib/earnings.js';
 import { planArtistSettlement, applyArtistSettlement, planSettlementForPayment, expensesInSettleUp, pricedExpensesTag, pricedExpensesFromTag } from './lib/artist-settlement.js';
 import { restoreRecords } from './lib/storage-mode.js';
 import { createStripePriceAndLink } from './lib/stripe-payment-link.js';
@@ -332,6 +332,7 @@ import {
   buildPartPaymentNote,
   describeInvoicePaymentReversal,
   describeInvoicePaymentSweep,
+  invoiceAmountOwed,
   invoicePaymentRef,
   isZeroDecimalCurrency,
   judgeInvoicePayment,
@@ -1167,6 +1168,7 @@ import { LEDGER_TYPE_FILTERS, emptyLedgerFilter, ledgerFilterIsActive, ledgerSto
 import { filterHistoryRows, historySearchIsActive, describeHistorySearch } from './lib/order-history-search.js';
 import { resolveCountryCode } from './lib/countries.js';
 import { PUBLISHER_ONLY_TABS, AUTHOR_ONLY_TABS, helpTabOpenFor, helpQueryWords, helpMatches } from './lib/help-guide.js';
+import { unionById } from './lib/unread-settings.js';
 import { readStoredList } from './lib/stored-list.js';
 import { STORE_REVERSAL_PENDING_KEY } from './lib/store-reversals.js';
 import { isTestBook } from './lib/test-book.js';
@@ -4791,7 +4793,18 @@ const _fxHistoricalSources = {};
 export async function loadTaxCenter({ ratesInBackground = false } = {}) {
   if (isAuthor()) return;
   try {
-    const json = await window._fbLoadSettings('taxCenter'); // handles FS → RTDB fallback internally
+    let json;
+    try {
+      json = await window._fbLoadSettings('taxCenter', { strict: true }); // handles FS → RTDB fallback internally
+    } catch (readError) {
+      // Couldn't read the cloud copy (a new phone on a bad signal). Treating
+      // that as "no Tax Centre yet" let the daily rate download, or the next
+      // expense, save a near-empty one over every expense and subscription.
+      // Hold saves the way the startup preview does, and try again.
+      holdUnreadTaxCenter();
+      console.warn('Tax Centre not read yet, saves held until it loads', readError);
+      return;
+    }
     let keptPreviewEdits = false;
     if (json) {
       let loaded = { businessExpenses: [], recurring: [], settings: { baseCurrency: 'CAD', geminiKey: '' }, ...json };
@@ -4808,6 +4821,14 @@ export async function loadTaxCenter({ ratesInBackground = false } = {}) {
       if (TAX_CENTER.settings?.claudeKey && !TAX_CENTER.settings?.geminiKey) {
         TAX_CENTER.settings.geminiKey = TAX_CENTER.settings.claudeKey;
       }
+    } else if (TAX_CENTER._preview) {
+      // Read fine, and the cloud has no Tax Centre yet: what this device holds
+      // (its startup copy, or what was logged while the read kept failing) is
+      // the only copy, so stop holding it and save it.
+      const changed = _taxCenterPreviewBase !== JSON.stringify(TAX_CENTER);
+      delete TAX_CENTER._preview;
+      _taxCenterPreviewBase = null;
+      keptPreviewEdits = changed || (TAX_CENTER.businessExpenses || []).length > 0 || (TAX_CENTER.recurring || []).length > 0;
     }
     if (keptPreviewEdits) saveTaxCenter();
     if (TAX_CENTER.settings?.rates) Object.assign(_fxRateCache, TAX_CENTER.settings.rates);
@@ -4829,6 +4850,26 @@ export async function loadTaxCenter({ ratesInBackground = false } = {}) {
   } catch (e) {
     console.warn('Failed to load tax center', e);
   }
+}
+
+let _taxCenterRetry = null;
+function holdUnreadTaxCenter() {
+  if (!TAX_CENTER._preview) {
+    // Anything logged meanwhile is folded into the cloud copy once it loads
+    // (keepPreviewEdits), exactly as for the startup preview.
+    Object.defineProperty(TAX_CENTER, '_preview', { value: true, enumerable: false, configurable: true });
+    _taxCenterPreviewBase = JSON.stringify(TAX_CENTER);
+  }
+  if (_taxCenterRetry || typeof window === 'undefined') return;
+  const retry = () => {
+    if (!_taxCenterRetry) return;
+    clearTimeout(_taxCenterRetry.timer);
+    window.removeEventListener('online', retry);
+    _taxCenterRetry = null;
+    loadTaxCenter({ ratesInBackground: true }).then(() => { if (!TAX_CENTER._preview) renderCurrent(); });
+  };
+  _taxCenterRetry = { timer: setTimeout(retry, 30000) };
+  window.addEventListener('online', retry);
 }
 
 async function refreshDailyRates() {
@@ -9234,9 +9275,10 @@ export async function healExpenseRates() {
     if (!e || e.voided) return false;
     const cur = String(e.currency || 'CAD').toUpperCase();
     if (cur === 'CAD' || e.amountUnknown || !(Number(e.amount) > 0)) return false;
-    if (e.fxMissing === true) return true;
+    // No Canadian value at all: saved by an older build with no rate cached.
+    // The Tax Centre leaves those out until a rate is found, so find one.
+    if (e.fxMissing === true || e.baseAmount == null) return true;
     if (e.gratuity !== true || e.fxRate != null) return false;
-    if (e.baseAmount == null) return true;
     return Math.abs(Number(e.baseAmount) - Number(e.amount)) < 0.005;
   };
   for (const [bookId, st] of Object.entries(states || {})) {
@@ -9246,7 +9288,9 @@ export async function healExpenseRates() {
       if (!needsBookRate(e)) continue;
       const rate = await resolveExpenseRate(e.currency, e.date || today());
       if (!rate || rate === 1) continue;
-      if (!e.gratuity) e.fxRate = rate;
+      // fxRate is the rate into the book's own currency, so it is only this
+      // Canadian rate for a Canadian-dollar book; any rate already stored is kept.
+      if (!e.gratuity && e.fxRate == null && bookCurrencyCode(BOOKS[bookId]) === 'CAD') e.fxRate = rate;
       e.baseAmount = roundCents((Number(e.amount) || 0) * rate);
       e.fxMissing = false;
       bookFixed++;
@@ -9641,6 +9685,8 @@ function confirmImport() {
       voidHistEntry(s, book, h, { recompute: false });
       h.voidedReason = 'Refunded (spreadsheet import)';
       h.refundedByImport = importExtra.importId;
+      h.refundedByImportAt = importExtra.importedAt;
+      h.refundedByImportName = importExtra.importName;
       refunded++;
     });
   });
@@ -9683,33 +9729,39 @@ function confirmImport() {
 async function undoImport(importId) {
   const s = getState(), book = getBook();
   const rows = (s.hist || []).filter(h => h.importId === importId && !h.voided);
-  if (!rows.length) return;
+  // Sales this import voided as refunded. A file of only refunds adds no rows,
+  // and it still has to be undoable.
+  const refundedRows = (s.hist || []).filter(h => h.voided && h.refundedByImport === importId);
+  if (!rows.length && !refundedRows.length) return;
   // As voiding one sale by hand: a sale paid out in an author settlement, or
   // matched to a website order, stays.
   const isLocked = h => h.artistSettlementId || h.webOrderId;
   const locked = rows.filter(isLocked);
   const undoable = rows.filter(h => !isLocked(h));
-  if (!undoable.length) { showToast('Every row of this import is in an author settlement or matched to a website order, so it stays.', 'warn', 5000); return; }
-  const name = rows[0].importName ? ` from “${rows[0].importName}”` : '';
-  const ok = await confirmDialog(
-    `${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed. You can bring any of them back one by one from History.`,
-    { title: `Undo this import${name}?`, okLabel: 'Undo import', danger: true },
-  );
+  if (rows.length && !undoable.length && !refundedRows.length) { showToast('Every row of this import is in an author settlement or matched to a website order, so it stays.', 'warn', 5000); return; }
+  const fileName = (rows[0] && rows[0].importName) || (refundedRows[0] && refundedRows[0].refundedByImportName) || '';
+  const name = fileName ? ` from “${fileName}”` : '';
+  const parts = [];
+  if (undoable.length) parts.push(`${undoable.length} order${undoable.length === 1 ? '' : 's'} will be voided, and their stock and revenue reversed. You can bring any of them back one by one from History.`);
+  if (refundedRows.length) parts.push(`${refundedRows.length} sale${refundedRows.length === 1 ? '' : 's'} it marked as refunded will count again.`);
+  const ok = await confirmDialog(parts.join(' '), { title: `Undo this import${name}?`, okLabel: 'Undo import', danger: true });
   if (!ok) return;
   undoable.forEach(h => {
     voidHistEntry(s, book, h, { recompute: false });
     h.voidedReason = 'Import undone';
   });
   // Sales this import voided as refunded count again.
-  (s.hist || []).filter(h => h.voided && h.refundedByImport === importId).forEach(h => {
+  refundedRows.forEach(h => {
     unvoidHistEntry(s, book, h);
     delete h.refundedByImport;
+    delete h.refundedByImportAt;
+    delete h.refundedByImportName;
   });
   recomputeAfters(s, book);
   saveState(activeBook);
   renderHist();
   updateDash();
-  showToast(`Import undone: ${undoable.length} order${undoable.length === 1 ? '' : 's'} voided${locked.length ? `. ${locked.length} in an author settlement or matched to a website order ${locked.length === 1 ? 'was' : 'were'} kept` : ''}.`, locked.length ? 'warn' : 'ok', 5000);
+  showToast(`Import undone: ${undoable.length} order${undoable.length === 1 ? '' : 's'} voided${refundedRows.length ? `, ${refundedRows.length} refunded sale${refundedRows.length === 1 ? '' : 's'} restored` : ''}${locked.length ? `. ${locked.length} in an author settlement or matched to a website order ${locked.length === 1 ? 'was' : 'were'} kept` : ''}.`, locked.length ? 'warn' : 'ok', 5000);
 }
 
 // Hidden for this visit only; comes back the next time the app opens.
@@ -9734,7 +9786,12 @@ function renderImportNotice(s) {
   // still be taken back in one step.
   const past = showNotice ? batches.slice(1) : batches;
   if (!showNotice && !past.length) { host.hidden = true; host.innerHTML = ''; return; }
-  const what = b => `${b.count} order${b.count === 1 ? '' : 's'}${b.name ? ` from “${escapeHtml(b.name)}”` : ''}`;
+  const what = b => {
+    const bits = [];
+    if (b.count || !b.refunds) bits.push(`${b.count} order${b.count === 1 ? '' : 's'}`);
+    if (b.refunds) bits.push(`${b.refunds} refund${b.refunds === 1 ? '' : 's'}`);
+    return `${bits.join(' and ')}${b.name ? ` from “${escapeHtml(b.name)}”` : ''}`;
+  };
   const when = b => (b.at ? fmtD(b.at.slice(0, 10)) : 'an earlier date');
   host.hidden = false;
   host.innerHTML = (showNotice ? `<div class="stock-alert ok hist-import-notice">
@@ -10369,14 +10426,12 @@ async function settleArtistTransferKeepShare(transferId) {
   }
   t.total = transferAmount(t);
 
-  // The held sale already counts toward earnings, so its marginal share is the
-  // drop in lifetime earnings if it were removed (this respects tier placement).
   const h = heldSaleForTransfer(s.hist, t);
-  const full = calculateArtistEarnings(activeBook);
-  const without = calcArtistEarnings(book, { ...s, hist: s.hist.filter(x => x !== h) });
-  const share = (full && without)
-    ? Math.max(0, +(full.totalArtistEarned - without.totalArtistEarned).toFixed(2))
-    : +(t.total / 2).toFixed(2);
+  if (!h) {
+    showToast('The sale for this transfer isn’t in the history, so its share can’t be worked out. Check the order first.', 'err', 5000);
+    return;
+  }
+  const share = heldSaleShare(book, s, h, t.total);
   const publisherCut = +(t.total - share).toFixed(2);
 
   if (!(await confirmDialog(
@@ -10435,27 +10490,39 @@ async function settleArtistTransferKeepAll(transferId) {
     return;
   }
   t.total = transferAmount(t);
+  const h = heldSaleForTransfer(s.hist, t);
+  if (!h) {
+    showToast('The sale for this transfer isn’t in the history, so its share can’t be worked out. Check the order first.', 'err', 5000);
+    return;
+  }
+  // Only the artist's own share is a payment to them. The forgiven cut is the
+  // publisher giving up money, not royalties paid in advance: counted as a
+  // payout, it showed the artist as overpaid by that cut and took it back out
+  // of their next royalties.
+  const share = heldSaleShare(book, s, h, t.total);
+  const forgivenCut = roundCents(Math.max(0, t.total - share));
 
   if (!(await confirmDialog(
     `Settle ${escapeHtml(t.num)} — artist keeps everything?\n\n` +
-    `The full ${fmt(t.total, book.currency)} sale is booked to revenue and recorded as a ` +
-    `payout to the artist. Your publisher cut is forgiven — the artist owes nothing further.`,
+    `The full ${fmt(t.total, book.currency)} sale is booked to revenue. The artist's ` +
+    `${fmt(share, book.currency)} share is recorded as paid, and your ${fmt(forgivenCut, book.currency)} ` +
+    `cut is forgiven — the artist owes nothing further.`,
     { okLabel: 'Settle — forgive publisher cut' }
   ))) return;
-
-  const h = heldSaleForTransfer(s.hist, t);
 
   // Resolve the pending history entry; it counts as revenue from now on
   // (worked out from the history, as every load does).
   if (h) { h.artistPending = false; h.notes = (h.notes ? h.notes + ' · ' : '') + 'Artist kept full amount (publisher cut forgiven)'; }
   recomputeAfters(s, book);
 
-  // Record the full gross as a payout — artist held all of it.
+  // Record the artist's share as a payout (they hold it), with the forgiven
+  // cut alongside so the sale can still be turned back into a full transfer.
   if (!s.artistPayouts) s.artistPayouts = [];
   s.artistPayouts.push({
     id: makeEventId(),
     date: today(),
-    amount: roundCents(t.total),
+    amount: roundCents(share),
+    forgivenCut,
     method: 'Kept from direct sale (full)',
     notes: `${t.num} — artist retained full gross; publisher cut forgiven`,
     cur: bookCurrencyCode(book),
@@ -10476,7 +10543,7 @@ async function settleArtistTransferKeepAll(transferId) {
     paymentRate: t.payment?.rate ?? '',
     convertedTotal: cadEquivA
   });
-  showToast(`✓ Settled — artist keeps full ${fmt(t.total, book.currency)}; publisher cut forgiven`);
+  showToast(`✓ Settled — artist keeps full ${fmt(t.total, book.currency)}; your ${fmt(forgivenCut, book.currency)} cut forgiven`);
 }
 
 // Per-device memory of "Stripe confirmed this payment" (Stripe's redirect back
@@ -12492,7 +12559,7 @@ async function convertKeptAllToReceived() {
 
   if (!(await confirmDialog(
     `Record ${escapeHtml(h.num)} as fully forwarded?\n\n` +
-    `This sale was settled as "artist keeps all" — the artist kept ${fmt(payout.amount, book.currency)} ` +
+    `This sale was settled as "artist keeps all" — the artist kept ${fmt(roundCents((Number(payout.amount) || 0) + (Number(payout.forgivenCut) || 0)), book.currency)} ` +
     `and your cut was forgiven. Recording the full transfer removes that ` +
     `${fmt(payout.amount, book.currency)} payout: the publisher now holds all the cash and the artist ` +
     `is owed their normal share again.`,
@@ -12562,7 +12629,8 @@ export function openEditHist(idx) {
   if (settleZone) {
     const pIdx = findKeptAllPayout(s, h.num);
     if (h.directToArtist && !h.artistPending && pIdx !== -1) {
-      const amt = s.artistPayouts[pIdx].amount;
+      const kept = s.artistPayouts[pIdx];
+      const amt = roundCents((Number(kept.amount) || 0) + (Number(kept.forgivenCut) || 0));
       settleZone.style.display = '';
       $('edit-settle-body').innerHTML =
         `This sale was settled as <strong>artist keeps all</strong> — the artist kept ${fmt(amt, book.currency)} and your cut was forgiven. ` +
@@ -13747,7 +13815,9 @@ async function syncSheetsConnectionWithCloud() {
     const plan = planSheetsConnectionSync({
       localUrl: storageRead('lm-sheets-url') || '',
       localSpreadsheetUrl: storageRead('lm-sheets-spreadsheet-url') || '',
-      conn: await window._fbLoadSettings('sheetsConnection'),
+      // Strict: a failed read must not look like "no link saved", or an old
+      // link on this device would be written over the current one.
+      conn: await window._fbLoadSettings('sheetsConnection', { strict: true }),
       notifyUrl,
       normalize: normalizeAppsScriptUrl,
     });
@@ -14044,7 +14114,25 @@ function buildBackupPayload() {
   };
 }
 
+// True while the backup list couldn't be read from the cloud. Saving then
+// would write only the backups made since, dropping every older one from the
+// list (and from Restore), so the list is read again and merged first.
+let _systemBackupsUnread = false;
+
 async function saveSystemBackups() {
+  if (_systemBackupsUnread) {
+    let cloud;
+    try {
+      cloud = await window._fbLoadSettings(SYSTEM_BACKUP_KEY, { strict: true });
+    } catch (e) {
+      console.warn('Backup list still unread; not saving it over the cloud copy', e);
+      return;
+    }
+    _systemBackupsUnread = false;
+    systemBackups = unionById(Array.isArray(cloud) ? cloud : [], systemBackups)
+      .sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0))
+      .slice(0, SYSTEM_BACKUP_LIMIT);
+  }
   // Persist only the lean manifest — never inline snapshots (that's what blew
   // Firestore's 1 MiB doc limit). Each snapshot lives in its own backups doc.
   const manifest = systemBackups.map(b => {
@@ -14056,10 +14144,12 @@ async function saveSystemBackups() {
 
 async function loadSystemBackups() {
   try {
-    const stored = await window._fbLoadSettings(SYSTEM_BACKUP_KEY);
+    const stored = await window._fbLoadSettings(SYSTEM_BACKUP_KEY, { strict: true });
     systemBackups = Array.isArray(stored) ? stored : [];
+    _systemBackupsUnread = false;
   } catch (e) {
     systemBackups = [];
+    _systemBackupsUnread = true;
   }
 
   // One-time migration: older manifests inlined the full snapshot in every
@@ -14813,7 +14903,9 @@ async function loadPaymentLinks() {
 
 async function loadWebsitePaymentMethods() {
   try {
-    const stored = await window._fbLoadSettings('websitePaymentMethods');
+    // Strict: a failed read keeps the methods already loaded instead of
+    // resetting to all four (which the next save would write to the cloud).
+    const stored = await window._fbLoadSettings('websitePaymentMethods', { strict: true });
     if (stored && Array.isArray(stored)) {
       WEBSITE_PAYMENT_METHODS = stored;
     } else {
@@ -17249,6 +17341,22 @@ function _findInvoiceByCharge(chargeId) {
   return null;
 }
 
+// Marks a card part payment on an unpaid invoice as refunded (once), so it
+// stops counting towards what the store has paid.
+function markRefundedPartPayment(chargeId) {
+  const id = String(chargeId || '').trim();
+  if (!id) return;
+  for (const bookId of Object.keys(states)) {
+    let changed = false;
+    (states[bookId].invoices || []).forEach(inv => {
+      (Array.isArray(inv?.stripePartPayments) ? inv.stripePartPayments : []).forEach(p => {
+        if (p && String(p.chargeId || '').trim() === id && !p.refunded) { p.refunded = true; changed = true; }
+      });
+    });
+    if (changed) saveState(bookId);
+  }
+}
+
 /** Announce a payment that was pulled back after its invoice was settled. */
 function showInvoiceReversalAlert(payment, inv) {
   const said = describeInvoicePaymentReversal({
@@ -17362,6 +17470,9 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
             fullyRefunded: payment.fullyRefunded,
           });
         }
+        // A refunded part payment no longer counts towards its invoice, so
+        // the store's next payment is judged against the real balance.
+        if (payment.refunded) markRefundedPartPayment(payment.id);
         const cited = _findInvoiceByCharge(payment.id);
         // Only news if this is the charge an invoice says settled it. A refunded
         // charge that never settled anything is not this feature's business.
@@ -17470,7 +17581,9 @@ async function sweepStripeInvoicePayments({ force = false } = {}) {
     // Refunds of older charges, which the payment list above cannot see: it
     // is filtered by when a charge was made, and a refund can come weeks later.
     try {
-      refundSignals.push(...await fetchStripeRefundsSince(stripeInvoiceSweepSince()));
+      // Listed before the charge flags, as disputes are, so a refund seen in
+      // both is noted under its own id and not counted twice later.
+      refundSignals.unshift(...await fetchStripeRefundsSince(stripeInvoiceSweepSince()));
     } catch (error) {
       // A restricted key without refund access still gets the recent ones above.
       console.warn('Stripe refund check skipped', error);
@@ -17708,13 +17821,14 @@ async function recordReadyStripeSales(payments, { budgetMs = RECON_AUTO_BUDGET_M
  * newest first, following Stripe's pages. After a long break there can be
  * more than one page, and a refund past the first hundred used to go unseen.
  */
-async function _stripeListSince(resource, since, maxPages = 10) {
+async function _stripeListSince(resource, since, maxPages = 10, expand = []) {
   const key = getReconStripeKey();
   if (!key) return [];
   const out = [];
   let startingAfter = '';
   for (let page = 0; page < maxPages; page++) {
     const params = new URLSearchParams({ limit: '100' });
+    expand.forEach(field => params.append('expand[]', field));
     if (since > 0) params.set('created[gte]', String(Math.floor(since / 1000)));
     if (startingAfter) params.set('starting_after', startingAfter);
     const resp = await fetch(`https://api.stripe.com/v1/${resource}?${params.toString()}`, {
@@ -17745,13 +17859,21 @@ async function fetchStripeDisputesSince(since) {
 
 /** Refunds issued since `since`, newest first. */
 async function fetchStripeRefundsSince(since) {
-  return (await _stripeListSince('refunds', since)).map(r => {
+  // With the charge attached, each refund carries the charge's running refund
+  // total, so a later refund that completes an earlier partial one is judged
+  // on what has really come back, not on a sum that may count one twice.
+  return (await _stripeListSince('refunds', since, 10, ['data.charge'])).map(r => {
     const cur = String(r.currency || '').toUpperCase();
+    const charge = r.charge && typeof r.charge === 'object' ? r.charge : null;
     return {
       id: r.id,
       chargeId: typeof r.charge === 'string' ? r.charge : (r.charge?.id || ''),
       amount: _stripeMinorToMajor(r.amount || 0, cur),
       status: r.status,
+      ...(charge && Number.isFinite(Number(charge.amount_refunded)) ? {
+        chargeRefundedTotal: _stripeMinorToMajor(Number(charge.amount_refunded), String(charge.currency || cur).toUpperCase()),
+        fullyRefunded: charge.refunded === true,
+      } : {}),
     };
   }).filter(r => r.chargeId);
 }
@@ -18243,10 +18365,10 @@ export function invoicesAwaitingReminder(days, max = 0) {
   return max > 0 ? out.slice(0, max) : out;
 }
 
-/** The amount owed, formatted in the invoice's own currency. */
+/** The amount still owed (total less card part payments), in the invoice's own currency. */
 function invoiceAmountLabel(inv) {
   const book = invoiceOwnerBook(inv);
-  return fmt(inv.total || 0, inv.currency || (book && book.currency) || '');
+  return fmt(invoiceAmountOwed(inv), inv.currency || (book && book.currency) || '');
 }
 
 /**

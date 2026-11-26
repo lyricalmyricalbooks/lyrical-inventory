@@ -96,7 +96,11 @@ export const CA_PROVINCES = {
   'ALBERTA': 'AB', 'BRITISH COLUMBIA': 'BC', 'MANITOBA': 'MB', 'NEW BRUNSWICK': 'NB',
   'NEWFOUNDLAND': 'NL', 'NEWFOUNDLAND AND LABRADOR': 'NL', 'NOVA SCOTIA': 'NS',
   'NORTHWEST TERRITORIES': 'NT', 'NUNAVUT': 'NU', 'ONTARIO': 'ON', 'PRINCE EDWARD ISLAND': 'PE',
-  'QUEBEC': 'QC', 'SASKATCHEWAN': 'SK', 'YUKON': 'YT', 'YUKON TERRITORY': 'YT'
+  'QUEBEC': 'QC', 'SASKATCHEWAN': 'SK', 'YUKON': 'YT', 'YUKON TERRITORY': 'YT',
+  // French names (accents are stripped before lookup, so 'Nouvelle-Écosse' matches).
+  'NOUVELLE-ECOSSE': 'NS', 'COLOMBIE-BRITANNIQUE': 'BC', 'NOUVEAU-BRUNSWICK': 'NB',
+  'TERRE-NEUVE-ET-LABRADOR': 'NL', 'ILE-DU-PRINCE-EDOUARD': 'PE',
+  'TERRITOIRES DU NORD-OUEST': 'NT'
 };
 
 /**
@@ -106,7 +110,8 @@ export function normalizeStateOrProvince(val, countryCode = '') {
   if (!val || typeof val !== 'string') return '';
   const trimmed = val.trim();
   if (!trimmed) return '';
-  const upper = trimmed.toUpperCase();
+  // Address suggestions spell it 'Québec'; strip accents so it matches 'QUEBEC'.
+  const upper = trimmed.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   const c = String(countryCode || '').toUpperCase().trim();
 
   if (c === 'US' || !c) {
@@ -115,8 +120,8 @@ export function normalizeStateOrProvince(val, countryCode = '') {
   if (c === 'CA' || !c) {
     if (CA_PROVINCES[upper]) return CA_PROVINCES[upper];
   }
-  if (upper.length === 2) return upper;
-  return upper;
+  // Anything unrecognised goes back as typed (upper-cased, accents kept).
+  return trimmed.toUpperCase();
 }
 
 /**
@@ -130,7 +135,7 @@ export function cleanPostalCode(postalCode) {
  * Build the JSON mailing-scenario payload for Canada Post Rating API 4.0.0 /prices
  */
 export function buildRateScenarioJson({
-  originPostalCode = 'M4B1B3',
+  originPostalCode = '',
   destCountry = 'CA',
   destPostalOrZip = '',
   weightKg = 0.5,
@@ -141,7 +146,10 @@ export function buildRateScenarioJson({
   contractId = '',
   quoteType = 'auto'
 }) {
-  const origin = cleanPostalCode(originPostalCode) || 'M4B1B3';
+  // No stand-in addresses: a quote for a made-up postal code is a wrong price
+  // that looks right, so a missing one stops here instead of being invented.
+  const origin = cleanPostalCode(originPostalCode);
+  if (!origin) throw new Error('Add your return postal code before getting Canada Post rates.');
   const dest = String(destCountry || 'CA').toUpperCase().trim();
   // Canada Post parcel services require a minimum parcel weight floor (0.1 kg / 100g)
   const weight = Math.max(0.1, parseFloat(weightKg || 0.5));
@@ -151,9 +159,13 @@ export function buildRateScenarioJson({
 
   let destJson = {};
   if (dest === 'CA') {
-    destJson = { domestic: { postalCode: cleanPostalCode(destPostalOrZip) || 'V6B2W9' } };
+    const postalCode = cleanPostalCode(destPostalOrZip);
+    if (!postalCode) throw new Error('Add the customer\'s postal code before getting Canada Post rates.');
+    destJson = { domestic: { postalCode } };
   } else if (dest === 'US') {
-    destJson = { unitedStates: { zipCode: String(destPostalOrZip || '90210').replace(/[^0-9A-Z]/gi, '').slice(0, 5) || '90210' } };
+    const zipCode = String(destPostalOrZip || '').replace(/[^0-9A-Z]/gi, '').slice(0, 5);
+    if (!zipCode) throw new Error('Add the customer\'s ZIP code before getting Canada Post rates.');
+    destJson = { unitedStates: { zipCode } };
   } else {
     destJson = { international: { countryCode: dest } };
   }
@@ -1324,7 +1336,7 @@ export async function executeCanadaPostProxy({
  * Fetch live rates directly from Canada Post or via proxy
  */
 export async function getCanadaPostRates({
-  originPostalCode = 'M4B1B3',
+  originPostalCode = '',
   destCountry = 'CA',
   destPostalOrZip = '',
   weightKg = 0.5,

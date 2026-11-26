@@ -344,6 +344,55 @@ describe('AI receipt scan — the summary left on the form', () => {
     expect(form.checks().some(c => /the way you filed your last 2 Staples receipts/.test(c.text))).toBe(true);
   });
 
+  it('never overwrites a category the owner picked by hand', async () => {
+    const form = mountFormWithSummary();
+    form.el('cat').value = 'Office Supplies';
+    form.el('cat').dataset.handPicked = '1';
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Canada Post', description: 'Stamps', date: '2026-10-01', amount: 25, currency: 'CAD', category: 'Other' }),
+      businessExpenses: [
+        { desc: 'Canada Post — parcels', cat: 'Shipping & Postage' },
+        { desc: 'Canada Post — letters', cat: 'Shipping & Postage' },
+      ],
+    });
+    await h.run(form.cfg);
+
+    expect(form.el('cat').value).toBe('Office Supplies');
+    expect(form.el('amount').value).toBe('25.00');
+    // No note claims the scan filed it the usual way, since it didn't.
+    expect(form.checks().some(c => /the way you filed/.test(c.text))).toBe(false);
+  });
+
+  it("keeps the scan's category when the description is typed into afterwards, until the form resets", async () => {
+    const form = mountFormWithSummary();
+    const wiring = buildHarness({
+      names: ['_wireCategoryAutofill', 'resetCategoryAutofill', '_offeredCategories'],
+      deps: {
+        document,
+        TAX_CENTER: { expenseRules: [] },
+        findExpenseRule,
+        _tcGuessCategory: text => (/google/i.test(text) ? 'Software & Subscriptions' : ''),
+      },
+      returns: '({ wire: _wireCategoryAutofill, reset: resetCategoryAutofill })',
+    });
+    wiring.wire('exp-desc', 'exp-cat', 'exp-cat-hint', { keywords: true });
+    const h = scanHarness({
+      reply: okReply({ vendor: 'Staples', description: 'Paper', date: '2026-10-01', amount: 25, currency: 'CAD', category: 'Office Supplies' }),
+    });
+    await h.run(form.cfg);
+    expect(form.el('cat').value).toBe('Office Supplies');
+    // The scan's own choice is not a hand-pick: a second scan may still move it.
+    expect(form.el('cat').dataset.handPicked).toBeUndefined();
+
+    form.el('desc').value = 'Google Ads';
+    form.el('desc').dispatchEvent(new Event('input', { bubbles: true }));
+    expect(form.el('cat').value).toBe('Office Supplies');
+
+    wiring.reset('exp-cat', 'exp-cat-hint');
+    form.el('desc').dispatchEvent(new Event('input', { bubbles: true }));
+    expect(form.el('cat').value).toBe('Software & Subscriptions');
+  });
+
   it("files by the owner's sorting rule ahead of the shop's habit and the AI's guess", async () => {
     const form = mountFormWithSummary();
     const h = scanHarness({
