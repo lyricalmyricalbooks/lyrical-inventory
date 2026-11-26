@@ -1,5 +1,5 @@
 import { escapeHtml as esc } from '../lib/html.js';
-import { receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { emailDay, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
@@ -29,7 +29,9 @@ const SCAN_CONCURRENCY = 3;
 // search, the pre-check or the reading instructions. An email an older reader
 // found nothing in is read once more under the new one instead of being skipped
 // for good as "already checked"; one that did yield a receipt never is.
-const READER_VERSION = 3;
+// 4: the subject, sender and date were never read before (every email came
+// through blank), so the quick set-aside check judged each one on its body alone.
+const READER_VERSION = 4;
 const RENDER_INTERVAL_MS = 200;
 
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
@@ -137,7 +139,12 @@ function connectionLabel() {
 function lastScanText() {
   const when = new Date(state.lastScan);
   if (!Number.isFinite(when.getTime())) return '';
-  return `Last checked ${when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`;
+  const text = `Last checked ${when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`;
+  // Weeks without a scan while Gmail sat disconnected means receipts are piling
+  // up unread; say so, and what one click starts.
+  const days = Math.floor((Date.now() - when.getTime()) / 86400000);
+  if (days >= 7 && !tokenLive()) return `${text} That was ${days} days ago, so newer receipts haven’t been looked at yet. Reconnect Gmail, then scan.`;
+  return text;
 }
 
 function renderConnection() {
@@ -568,6 +575,7 @@ function render() {
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
     host.querySelector('[data-finder-errors]').innerHTML = pile === 'needs' ? renderFailures() : pile === 'aside' ? renderSetAside() : '';
+    if (pile === 'aside') queueMicrotask(() => labelSetAside().catch(() => {}));
     const ready = drafts.filter(draft => statusOf(draft) === 'ready');
     const all = host.querySelector('[data-select-all]');
     all.checked = ready.length > 0 && ready.every(draft => draft.selected);
@@ -633,6 +641,7 @@ function renderDraft(draft, open) {
         <span class="finder-meta">Confidence ${Math.round(draft.confidence * 100)}%</span>
         <span class="finder-meta">${esc(draft.paymentStatus)} · ${esc(draft.documentType)}</span></div>
       ${problems.length ? `<p class="finder-warning">${esc(problems.join('. '))}</p>` : ''}
+      ${draft.filledFromEmail?.length && !draft.reviewed && !locked ? `<p class="finder-warning">${esc(filledNote(draft.filledFromEmail))} Check ${draft.filledFromEmail.length === 1 ? 'it' : 'them'}, then tick “I reviewed” below.</p>` : ''}
       ${draft.error ? `<p class="finder-warning">${esc(draft.error)}</p>` : ''}
       ${skipped.length ? `<p class="finder-warning">${esc(skipped.map(file => file.skipped).join(' '))}</p>` : ''}
       ${status === 'duplicate' ? '<p class="finder-warning">Matches a saved expense. This receipt will not be imported again.</p>' : ''}
@@ -654,6 +663,11 @@ function renderDraft(draft, open) {
         <div class="finder-toolbar">${(source?.fileParts || []).map((file, index) => file.base64 ? `<button type="button" class="btn sm" data-download="${index}">Download ${esc(file.name)}</button>` : '').join('')}</div></details>
       ${status === 'ignored' ? '<button type="button" class="btn sm" data-restore>Restore receipt</button>' : ''}
     </div></details>`;
+}
+
+function filledNote(fields) {
+  const names = fields.map(field => ({ vendor: 'vendor', date: 'invoice date' }[field] || field));
+  return `The AI couldn’t find the ${names.join(' or ')}, so ${names.length === 1 ? 'it was' : 'they were'} taken from the email’s ${fields.map(field => field === 'date' ? 'send date' : 'sender').join(' and ')}.`;
 }
 
 async function onChange(event) {
@@ -959,6 +973,9 @@ async function ensureServiceReady() {
   return endpoint;
 }
 
+// What the set-aside list shows for an email it no longer keeps a copy of.
+const emailLabel = email => ({ subject: email.subject || '', from: email.from || '', date: emailDay(email.date) });
+
 async function readCandidate(id, signal, endpoint, force = false) {
   const owner = uid, account = state.account, key = `${account}:${id}`;
   // A halt raised by another reader must stop this one before it spends
@@ -982,7 +999,7 @@ async function readCandidate(id, signal, endpoint, force = false) {
     const skipReason = force ? '' : receiptSkipReason(email);
     if (skipReason) {
       dropEmail(key);
-      state.scans[key] = { done: true, subject: email.subject, count: 0, skipped: skipReason, reader: READER_VERSION };
+      state.scans[key] = { done: true, ...emailLabel(email), count: 0, skipped: skipReason, reader: READER_VERSION };
       scanSkipped++;
       await persist();
       scanDone++; scheduleRender();
@@ -1013,7 +1030,7 @@ async function readCandidate(id, signal, endpoint, force = false) {
     // saved mailbox — and therefore every later save — from growing with every
     // scan of a mostly-ordinary inbox.
     if (!result.receipts.length) dropEmail(key);
-    state.scans[key] = { done: true, subject: email.subject, count: result.receipts.length, reader: READER_VERSION };
+    state.scans[key] = { done: true, ...emailLabel(email), count: result.receipts.length, reader: READER_VERSION };
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
@@ -1026,7 +1043,7 @@ async function readCandidate(id, signal, endpoint, force = false) {
       if (!haltReason) haltReason = systemic;
       controller?.abort();
     } else {
-      state.scans[key] = { error: error.message, subject: email?.subject || id, endpoint };
+      state.scans[key] = { error: error.message, ...(email ? emailLabel(email) : {}), subject: email?.subject || id, endpoint };
       await persist();
     }
   }
@@ -1147,28 +1164,78 @@ const SET_ASIDE_WHY = {
   notification: 'looked like a shipping or account notice',
 };
 
+const senderOnly = from => String(from || '').replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim();
+const gmailLink = key => {
+  const at = key.lastIndexOf(':');
+  const account = key.slice(0, at), id = key.slice(at + 1);
+  return `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(account)}#all/${encodeURIComponent(id)}`;
+};
+
 function setAsideEmails() {
   const prefix = state.account + ':';
   return Object.entries(state.scans)
     .filter(([key, scan]) => scan.done && !scan.error && !scan.count && key.startsWith(prefix))
-    .map(([key, scan]) => ({ key, subject: scan.subject || '(no subject)', why: SET_ASIDE_WHY[scan.skipped] || 'read, but no receipt found in it' }));
+    .map(([key, scan]) => ({ key, subject: scan.subject || '', from: senderOnly(scan.from), date: scan.date || '',
+      why: SET_ASIDE_WHY[scan.skipped] || 'read, but no receipt found in it' }));
 }
+
+const dismissedCount = () => state.drafts.filter(draft => draft.status === 'ignored').length;
 
 function renderSetAside() {
   const all = setAsideEmails();
   if (!all.length) return '';
   const rows = all.slice(-SET_ASIDE_SHOWN).reverse();
   const canRetry = !busy && tokenLive();
+  const dismissed = dismissedCount();
+  // The pile's count includes receipts the publisher dismissed, which are
+  // listed under this block. Saying only "24 emails" beside a tile reading 26
+  // looked like two emails had gone missing.
+  const heading = `${all.length} email${all.length === 1 ? '' : 's'} set aside as not receipts`;
   return `<details class="finder-failures finder-setaside" open>
-    <summary><span class="finder-failures-sum">${all.length} email${all.length === 1 ? '' : 's'} set aside as not receipts</span>
-      <span class="finder-failures-hint">Missing one? Read it again</span></summary>
-    <ul class="finder-failures-list">${rows.map(row => `
+    <summary><span class="finder-failures-sum">${heading}</span>
+      <span class="finder-failures-hint">${dismissed ? `plus ${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed, below` : 'Missing one? Read it again'}</span></summary>
+    ${tokenLive() ? '' : `<div class="finder-setaside-gate"><p>Reconnect Gmail to read any of these again. You can still open them in Gmail to check.</p>
+      <button type="button" class="btn sm gold" data-action="connect">Reconnect Gmail</button></div>`}
+    <ul class="finder-failures-list">${rows.map(row => {
+      const title = row.subject || 'Subject not saved';
+      const day = row.date ? new Date(row.date + 'T12:00:00') : null;
+      const when = day && Number.isFinite(day.getTime()) ? day.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+      const meta = [row.from, when, row.why].filter(Boolean).join(' · ');
+      return `
       <li class="finder-failure">
-        <p><strong>${esc(row.subject.slice(0, 120))}</strong><br><span class="finder-setaside-why">${esc(row.why)}</span></p>
-        <button type="button" class="btn sm" data-reread="${esc(row.key)}" ${canRetry ? '' : 'disabled'} aria-label="Read this email again: ${esc(row.subject.slice(0, 80))}">Read again</button>
-      </li>`).join('')}</ul>
-    <p class="finder-failures-foot">${tokenLive() ? '' : 'Reconnect Gmail above to read these again. '}${all.length > SET_ASIDE_SHOWN ? `Showing the latest ${SET_ASIDE_SHOWN}. ` : ''}Reading again uses the AI once for that email; anything it finds appears in the list above for your approval.</p>
-  </details>`;
+        <p><strong class="${row.subject ? '' : 'finder-setaside-nosubject'}">${esc(title.slice(0, 120))}</strong><br><span class="finder-setaside-why">${esc(meta)}</span></p>
+        <a class="btn sm finder-setaside-open" href="${esc(gmailLink(row.key))}" target="_blank" rel="noopener noreferrer" aria-label="Open in Gmail: ${esc(title.slice(0, 80))}">Open in Gmail</a>
+        ${canRetry ? `<button type="button" class="btn sm" data-reread="${esc(row.key)}" aria-label="Read this email again: ${esc(title.slice(0, 80))}">Read again</button>` : ''}
+      </li>`;
+    }).join('')}</ul>
+    <p class="finder-failures-foot">${all.length > SET_ASIDE_SHOWN ? `Showing the latest ${SET_ASIDE_SHOWN}. ` : ''}Reading again uses the AI once for that email; anything it finds appears above for your approval.</p>
+  </details>${dismissed ? `<h4 class="finder-dismissed-head">${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed</h4>` : ''}`;
+}
+
+// Emails set aside before the subject, sender and date were read show no
+// subject at all. Those three headers are a tiny, AI-free Gmail read, so they
+// are filled in once Gmail is connected, a few at a time and once per session.
+const labelTried = new Set();
+let labelling = false;
+async function labelSetAside() {
+  if (labelling || busy || !tokenLive() || !active()) return;
+  const owner = uid, account = state.account;
+  const keys = setAsideEmails().slice(-SET_ASIDE_SHOWN).filter(row => !row.subject && !labelTried.has(row.key)).map(row => row.key);
+  if (!keys.length) return;
+  labelling = true;
+  keys.forEach(key => labelTried.add(key));
+  let changed = 0;
+  try {
+    await runPool(keys, SCAN_CONCURRENCY, async key => {
+      if (!tokenLive() || owner !== uid || account !== state.account) return;
+      try {
+        const email = await client.headers(key.slice(account.length + 1), account);
+        const scan = state.scans[key];
+        if (scan && !scan.subject && owner === uid) { Object.assign(scan, emailLabel(email)); changed++; }
+      } catch { /* a missing or deleted email keeps its plain row */ }
+    });
+    if (changed && active() && owner === uid) { await persist(); render(); }
+  } finally { labelling = false; }
 }
 
 async function rereadSetAside(key) {

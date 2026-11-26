@@ -69,7 +69,10 @@ const PLAIN_STUB_CHARS = 200;
 
 export function gmailMessage(message, account) {
   const headers = message.payload?.headers || [];
-  const header = name => headers.find(h => h.name.toLowerCase() === name)?.value || '';
+  // Gmail sends header names as written in the email ("Subject", "From"), so
+  // both sides are lower-cased. Comparing against the capitalised name left
+  // every email's subject, sender and date blank.
+  const header = name => headers.find(h => String(h.name || '').toLowerCase() === name.toLowerCase())?.value || '';
   const plain = [], html = [], fileParts = [];
   function walk(part) {
     const mime = normalizeAttachmentMime(part.mimeType);
@@ -150,6 +153,11 @@ export function createReceiptFinderClient({ token, fetchImpl = fetch, onExpired 
     profile: signal => gmail('profile', signal),
     list: (query, pageToken, signal, pageSize = 25) => gmail('messages?' + new URLSearchParams({
       q: query, maxResults: String(pageSize), fields: 'messages/id,nextPageToken', ...(pageToken ? { pageToken } : {}) }), signal),
+    // Subject, sender and date only: no body, no attachments, no AI. Used to
+    // label emails saved before those headers were read.
+    headers: async (id, account, signal) => gmailMessage(await gmail(`messages/${encodeURIComponent(id)}?${new URLSearchParams([
+      ['format', 'metadata'], ['metadataHeaders', 'Subject'], ['metadataHeaders', 'From'], ['metadataHeaders', 'Date'], ['fields', 'id,payload/headers'],
+    ])}`, signal), account),
     message: async (id, account, signal) => gmailMessage(await gmail(`messages/${encodeURIComponent(id)}?format=full&fields=id,snippet,payload`, signal), account),
     // One oversized attachment must not cost the publisher the rest of the
     // email: mark it skipped and let the body and the other files through.

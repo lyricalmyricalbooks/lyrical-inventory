@@ -4,14 +4,14 @@ import { normalizeFoundReceipt, mergeFinderSnapshot } from '../src/lib/receipt-f
 
 const mocks = vi.hoisted(() => ({ saved: null, token: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(),
   loadToken: vi.fn(), saveToken: vi.fn(), clearToken: vi.fn(), aiTest: vi.fn(),
-  extract: vi.fn(), list: vi.fn(), message: vi.fn(), check: vi.fn() }));
+  extract: vi.fn(), list: vi.fn(), message: vi.fn(), headers: vi.fn(), check: vi.fn() }));
 vi.mock('../src/lib/receipt-finder-store.js', () => ({ createReceiptFinderStore: () => ({
   load: mocks.load, save: mocks.save, clear: mocks.clear,
   loadToken: mocks.loadToken, saveToken: mocks.saveToken, clearToken: mocks.clearToken,
 }) }));
 vi.mock('../src/lib/receipt-finder-client.js', () => ({
   createReceiptFinderClient: () => ({ profile: async () => ({ emailAddress: 'publisher@example.com' }),
-    list: mocks.list, message: mocks.message, attachment: async (_id, file) => file }),
+    list: mocks.list, message: mocks.message, headers: mocks.headers, attachment: async (_id, file) => file }),
   extractFoundReceipts: mocks.extract, decodeGmailBase64: () => new Uint8Array(),
   checkReceiptFinderService: mocks.check,
   testReceiptAiService: mocks.aiTest,
@@ -515,8 +515,8 @@ describe('receipt finder UI', () => {
   });
   it('lists emails set aside as not receipts and reads one again even past the quick skip rule', async () => {
     mocks.saved.scans = {
-      'publisher@example.com:quiet': { done: true, subject: 'Thanks for your order', count: 0, skipped: 'no-amount', reader: 3 },
-      'publisher@example.com:found': { done: true, subject: 'Already a receipt', count: 1, reader: 3 },
+      'publisher@example.com:quiet': { done: true, subject: 'Thanks for your order', count: 0, skipped: 'no-amount', reader: 4 },
+      'publisher@example.com:found': { done: true, subject: 'Already a receipt', count: 1, reader: 4 },
     };
     // Nothing that would pass the quick check: no amount, no attachment.
     mocks.message.mockResolvedValue({ ...source, id: 'quiet', subject: 'Thanks for your order', body: 'We will be in touch soon.', fileParts: [] });
@@ -535,6 +535,38 @@ describe('receipt finder UI', () => {
     expect(mocks.saved.scans['publisher@example.com:quiet']).toMatchObject({ done: true, count: 0 });
     expect(mocks.saved.scans['publisher@example.com:quiet'].skipped).toBeUndefined();
     expect(document.querySelector('[data-finder-status]').textContent).toContain('still does not look like a receipt');
+  });
+  it('counts dismissed receipts in the set-aside header, and offers Gmail while disconnected', async () => {
+    mocks.saved.scans = {
+      'publisher@example.com:quiet': { done: true, subject: 'Your order', from: '"Kobo" <no-reply@kobo.com>', date: '2026-09-20', count: 0, skipped: 'no-amount', reader: 4 },
+    };
+    mocks.saved.drafts[0].status = 'ignored';
+    await mount();
+    document.querySelector('[data-status="aside"]').click();
+    const list = document.querySelector('.finder-setaside');
+    // The tile says 2 (one email, one dismissed receipt); the header must too.
+    expect(document.querySelector('[data-status="aside"] .finder-pile-count').textContent).toBe('2');
+    expect(list.textContent).toContain('1 email set aside as not receipts');
+    expect(list.textContent).toContain('plus 1 receipt you dismissed');
+    expect(document.querySelector('.finder-dismissed-head').textContent).toContain('1 receipt you dismissed');
+    expect(list.textContent).toMatch(/Kobo · Sep 20 · no price found in it/);
+    // Disconnected: no dead Read again buttons, but a way to reconnect and a Gmail link.
+    expect(list.querySelector('[data-reread]')).toBeNull();
+    expect(list.querySelector('[data-action="connect"]')).not.toBeNull();
+    expect(list.querySelector('a.finder-setaside-open').getAttribute('href')).toBe('https://mail.google.com/mail/u/?authuser=publisher%40example.com#all/quiet');
+  });
+  it('fills in the subject of an email set aside before subjects were read, without any AI', async () => {
+    mocks.saved.scans = { 'publisher@example.com:blank': { done: true, count: 0, skipped: 'no-amount', reader: 3 } };
+    mocks.headers.mockResolvedValue({ id: 'blank', subject: 'Receipt from Staples', from: 'Staples <noreply@staples.ca>', date: 'Tue, 22 Sep 2026 12:00:00 -0400' });
+    await mount();
+    document.querySelector('[data-status="aside"]').click();
+    expect(document.querySelector('.finder-setaside').textContent).toContain('Subject not saved');
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle(); await settle();
+    expect(mocks.headers).toHaveBeenCalledWith('blank', 'publisher@example.com');
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(mocks.saved.scans['publisher@example.com:blank']).toMatchObject({ subject: 'Receipt from Staples', date: '2026-09-22' });
+    expect(document.querySelector('.finder-setaside').textContent).toContain('Receipt from Staples');
   });
   it('says why a queued receipt is stuck instead of promising it will file itself', async () => {
     mocks.saved.drafts[0].status = 'queued';
@@ -555,7 +587,7 @@ describe('receipt finder UI', () => {
     mocks.extract.mockResolvedValue({ receipts: [] });
     mocks.saved.scans = {
       'publisher@example.com:old': { done: true, subject: 'Receipt old', count: 0 },
-      'publisher@example.com:current': { done: true, subject: 'Receipt current', count: 0, reader: 3 },
+      'publisher@example.com:current': { done: true, subject: 'Receipt current', count: 0, reader: 4 },
       'publisher@example.com:found': { done: true, subject: 'Receipt found', count: 1 },
     };
     await mount();
@@ -563,7 +595,7 @@ describe('receipt finder UI', () => {
     document.querySelector('[data-action="connect"]').click(); await settle();
     document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
     expect(mocks.message.mock.calls.map(call => call[0])).toEqual(['old']);
-    expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 3 });
+    expect(mocks.saved.scans['publisher@example.com:old']).toMatchObject({ done: true, reader: 4 });
     expect(document.querySelector('[data-finder-status]').textContent).toContain('2 were already checked');
   });
   it('shows the three piles, and Filed only once something is filed', async () => {

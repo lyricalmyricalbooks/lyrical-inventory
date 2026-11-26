@@ -109,10 +109,38 @@ export function receiptDate(value) {
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === text ? text : '';
 }
 
+// The shop's name as the email's sender shows it: the display name in
+// `"Amazon.ca" <auto-confirm@amazon.ca>`, or else the address's domain
+// ("Shopify" from billing@shopify.com). Robot names such as "noreply" and
+// mail-service domains are not a shop's name, so they give ''.
+const ROBOT_SENDER = /^(?:no-?reply|do-?not-?reply|notifications?|billing|receipts?|invoices?|orders?|support|info|mailer-daemon)$/i;
+const MAIL_SERVICE = /^(?:gmail|googlemail|outlook|hotmail|live|yahoo|icloud|me|aol|proton|protonmail)$/i;
+export function emailSenderName(from) {
+  const text = String(from || '').trim();
+  const match = /^\s*"?([^"<]*?)"?\s*<([^>]*)>\s*$/.exec(text);
+  const name = (match ? match[1] : '').trim();
+  if (name && !/@/.test(name) && !ROBOT_SENDER.test(name.replace(/\s+/g, ''))) return name.slice(0, 250);
+  const address = (match ? match[2] : text).trim();
+  const labels = (address.split('@')[1] || '').toLowerCase().split('.').filter(Boolean);
+  if (labels.length < 2) return '';
+  // The registrable part: "mail.squareup.com" → "squareup", "amazon.co.uk" → "amazon".
+  const base = labels.length > 2 && /^(?:co|com|org|net|ac|gov)$/.test(labels[labels.length - 2]) ? labels[labels.length - 3] : labels[labels.length - 2];
+  if (!base || MAIL_SERVICE.test(base) || ROBOT_SENDER.test(base)) return '';
+  return base.charAt(0).toUpperCase() + base.slice(1);
+}
+
+// The local day an email was sent, from its Date header; '' when unreadable.
+export function emailDay(dateHeader) {
+  const text = String(dateHeader || '').trim();
+  if (!text) return '';
+  const when = new Date(text);
+  return Number.isFinite(when.getTime()) ? localDay(when) : '';
+}
+
 export function normalizeFoundReceipt(raw, source, index = 0) {
   const confidence = typeof raw.confidence === 'number' && Number.isFinite(raw.confidence)
     ? Math.max(0, Math.min(1, raw.confidence)) : 0;
-  return {
+  const draft = {
     id: `${source.account}:${source.id}:${index}`, messageId: source.id, account: source.account,
     vendor: String(raw.vendor || '').slice(0, 250), description: String(raw.description || '').slice(0, 1000),
     reference: String(raw.reference || '').slice(0, 200), date: receiptDate(raw.date), dueDate: receiptDate(raw.dueDate),
@@ -130,6 +158,26 @@ export function normalizeFoundReceipt(raw, source, index = 0) {
     attachments: (source.fileParts || []).map(file => ({ name: file.name || '', mime: file.mime || '', attachmentId: file.attachmentId || file.partId || '' })),
     reviewed: false, selected: confidence >= 0.85, status: 'draft', error: '', updatedAt: Date.now(),
   };
+  return fillFromEmail(draft, source);
+}
+
+// A receipt the reader could not find a vendor or date in would sit in
+// "Needs you" until typed in by hand, though the email itself almost always
+// says who sent it and when. Those gaps are filled from the email, and named
+// in `filledFromEmail` so the receipt is shown for a check rather than filed
+// unseen — an invoice can be dated before the day it was mailed.
+function fillFromEmail(draft, source) {
+  const filled = [];
+  if (!draft.vendor.trim()) {
+    const vendor = emailSenderName(source.from);
+    if (vendor) { draft.vendor = vendor; filled.push('vendor'); }
+  }
+  if (!draft.date) {
+    const day = emailDay(source.date);
+    if (day) { draft.date = day; filled.push('date'); }
+  }
+  if (filled.length) { draft.filledFromEmail = filled; draft.selected = false; }
+  return draft;
 }
 
 export function receiptProblems(draft) {
@@ -178,7 +226,7 @@ export function receiptDuplicate(draft, expenses) {
 export function receiptReviewStatus(draft, expenses = []) {
   if (['imported', 'queued', 'ignored'].includes(draft.status)) return draft.status;
   if (receiptDuplicate(draft, expenses)) return 'duplicate';
-  if (receiptProblems(draft).length || (!draft.reviewed && draft.confidence < 0.85)) return 'review';
+  if (receiptProblems(draft).length || (!draft.reviewed && (draft.confidence < 0.85 || draft.filledFromEmail?.length))) return 'review';
   return 'ready';
 }
 
