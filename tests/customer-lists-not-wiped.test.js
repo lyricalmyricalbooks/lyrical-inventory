@@ -15,7 +15,7 @@ beforeAll(async () => {
   app = await loadApp({ books: [makeBook({ id: 'bk' })] });
   const realLoad = window._fbLoadSettings;
   window._fbLoadSettings = async (key, opts) => {
-    if (offline && (key === 'customerSuppress' || key === 'mailingList')) {
+    if (offline && ['customerSuppress', 'mailingList', 'campaigns', 'openCalls'].includes(key)) {
       if (opts && opts.strict) throw new Error('offline');
       return null;
     }
@@ -27,6 +27,8 @@ beforeEach(() => {
   offline = false;
   localStorage.removeItem('lm-customer-suppress');
   localStorage.removeItem('lm-mailing-list');
+  localStorage.removeItem('lm-campaigns');
+  localStorage.removeItem('lm-opencalls');
 });
 
 const enc = (e) => encodeURIComponent(e);
@@ -84,5 +86,55 @@ describe('mailing list', () => {
     await window._persistMailingList();
     expect(Object.keys(app.cloud.settings.mailingList.subs).sort()).toEqual(['a@x.com', 'b@x.com', 'n@x.com']);
     expect(window.mailingListHas('a@x.com')).toBe(true);
+  });
+});
+
+// Saved newsletters and Open Call projects had no such guard: a blank start
+// (Open Call even makes a fresh "General Open Call") was saved over the cloud.
+describe('saved newsletters', () => {
+  it('are not saved over the cloud copy while the cloud cannot be read', async () => {
+    app.cloud.settings.campaigns = [{ id: 'c1', subject: 'Spring' }];
+    offline = true;
+    await window.loadCampaigns();
+    await window._persistCampaigns();
+    expect(app.cloud.settings.campaigns).toEqual([{ id: 'c1', subject: 'Spring' }]);
+  });
+
+  it('keep the cloud\'s newsletters once it can be read', async () => {
+    app.cloud.settings.campaigns = [{ id: 'c1', subject: 'Spring' }];
+    offline = true;
+    await window.loadCampaigns();
+    offline = false;
+    await window._persistCampaigns();
+    expect(app.cloud.settings.campaigns.map(c => c.id)).toEqual(['c1']);
+  });
+});
+
+describe('open calls', () => {
+  const cloudCalls = () => ({
+    activeProjectId: 'p1',
+    projects: { p1: { id: 'p1', title: 'Zine call', contributors: [{ id: 'oc_a', name: 'Ann' }, { id: 'oc_b', name: 'Bo' }] } },
+  });
+
+  it('are not saved over the cloud copy while the cloud cannot be read', async () => {
+    const oc = await import('../src/features/opencall.js');
+    app.cloud.settings.openCalls = cloudCalls();
+    offline = true;
+    await oc.loadOpenCalls();
+    await oc._persistOpenCalls();
+    expect(Object.keys(app.cloud.settings.openCalls.projects)).toEqual(['p1']);
+    expect(app.cloud.settings.openCalls.projects.p1.contributors).toHaveLength(2);
+  });
+
+  it('keep every cloud project and contributor once the cloud can be read', async () => {
+    const oc = await import('../src/features/opencall.js');
+    app.cloud.settings.openCalls = cloudCalls();
+    offline = true;
+    await oc.loadOpenCalls();
+    offline = false;
+    await oc._persistOpenCalls();
+    const saved = app.cloud.settings.openCalls;
+    expect(saved.projects.p1.contributors.map(c => c.id)).toEqual(['oc_a', 'oc_b']);
+    expect(saved.activeProjectId).toBe('p1');
   });
 });
