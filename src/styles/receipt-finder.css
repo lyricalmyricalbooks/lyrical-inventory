@@ -629,3 +629,56 @@
   .finder-piles { grid-template-columns: 1fr; }
   .finder-pile { min-height: 56px; }
 }
+
+/* ── Live reading line, scan report, reader test ───────────────────── */
+.finder-progress-now {
+  margin: var(--space-2) 0 0;
+  color: var(--content-secondary);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  white-space: pre-line;
+}
+.finder-progress-now:empty { display: none; }
+.finder-test-btn { min-height: 44px; }
+.finder-report {
+  margin-block-start: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--r2);
+  background: var(--surface-card, var(--surface-raised));
+}
+.finder-report > summary {
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  min-height: 44px;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+.finder-report-sum { font-weight: 700; color: var(--content-primary); }
+.finder-report-when { font-weight: 400; color: var(--content-muted); margin-inline-start: var(--space-2); }
+.finder-report-tally { color: var(--content-secondary); font-size: var(--text-xs); }
+.finder-report-list { list-style: none; margin: 0; padding: 0; border-block-start: 1px solid var(--border-default); }
+.finder-report-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+.finder-report-row + .finder-report-row { border-block-start: 1px solid var(--border-default); }
+.finder-report-what { min-width: 0; overflow-wrap: anywhere; }
+.finder-report-what strong { font-weight: 600; color: var(--content-primary); }
+.finder-report-what small { display: block; color: var(--content-muted); font-size: var(--text-xs); }
+.finder-report-outcome { font-size: var(--text-xs); color: var(--content-secondary); white-space: nowrap; }
+.finder-report-row.is-ok .finder-report-outcome { color: var(--green); font-weight: 600; }
+.finder-report-row.is-bad .finder-report-outcome { color: var(--red); font-weight: 600; }
+.finder-report-open { min-height: 44px; display: inline-flex; align-items: center; font-size: var(--text-xs); font-weight: 600; color: var(--content-primary); text-underline-offset: 2px; }
+@container (max-width: 560px) {
+  .finder-report-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .finder-report-outcome { grid-row: 2; grid-column: 1; white-space: normal; }
+  .finder-report-open { grid-row: 1 / span 2; grid-column: 2; }
+}

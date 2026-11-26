@@ -448,7 +448,62 @@ describe('receipt finder UI', () => {
     expect(mocks.extract).not.toHaveBeenCalled();
     // Not marked as read: if that expense is deleted, the next scan finds it.
     expect(mocks.saved.scans['publisher@example.com:m2']).toBeUndefined();
-    expect(document.querySelector('[data-finder-status]').textContent).toContain('1 was already in your expenses');
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('1 was already found or filed');
+    // The report names what happened to it, instead of a scan that looks empty.
+    const row = document.querySelector('.finder-report-row');
+    expect(row.textContent).toContain('Already in your expenses');
+  });
+  it('lists what the scan did with every email, failures first', async () => {
+    mocks.list.mockResolvedValue({ messages: [{ id: 'quiet' }, { id: 'broken' }, { id: 'paid' }] });
+    mocks.message.mockImplementation(async id => id === 'quiet'
+      ? { ...source, id, subject: 'Newsletter', body: 'Nothing to see', fileParts: [] }
+      : { ...source, id, subject: id === 'paid' ? 'Figma receipt' : 'Broken one' });
+    mocks.extract.mockImplementation(async ({ email }) => {
+      if (email.id === 'broken') throw new Error('The AI could not read this one');
+      return { receipts: [{ vendor: 'Figma', amount: 30.51, currency: 'CAD', date: '2026-11-19', confidence: 0.95 }] };
+    });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    const rows = [...document.querySelectorAll('.finder-report-row')].map(row => row.textContent.replace(/\s+/g, ' '));
+    expect(rows[0]).toContain('Broken one');
+    expect(rows[0]).toContain('Couldn’t be read');
+    expect(rows[1]).toContain('Figma receipt');
+    expect(rows[1]).toContain('New receipt found');
+    expect(rows[2]).toContain('Newsletter');
+    expect(rows[2]).toContain('no price found in it');
+    expect(document.querySelector('.finder-report-tally').textContent).toContain('1 couldn’t be read');
+    expect(mocks.saved.lastReport.rows).toHaveLength(3);
+  });
+  it('moves on when the AI never answers, instead of freezing the scan', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mocks.list.mockResolvedValue({ messages: [{ id: 'slow' }] });
+      mocks.message.mockImplementation(async id => ({ ...source, id, subject: 'Slow one' }));
+      mocks.extract.mockImplementation(() => new Promise(() => {}));
+      await mount();
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+      document.querySelector('[data-action="connect"]').click(); await settle();
+      document.querySelector('[data-action="scan"]').click(); await settle();
+      // While it waits, the line under the bar says which email and what step.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(document.querySelector('[data-progress-now]').textContent).toMatch(/“Slow one”: the AI is reading it|“Slow one”: your Sheet script’s AI is reading it/);
+      await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
+      await settle(); await settle();
+      expect(mocks.saved.scans['publisher@example.com:slow'].error).toContain('more than 2 minutes');
+      expect(document.querySelector('[data-action="scan"]').disabled).toBe(false);
+    } finally { vi.useRealTimers(); }
+  });
+  it('tests the reader with a sample receipt and says whether it worked', async () => {
+    mocks.extract.mockResolvedValue({ receipts: [{ vendor: 'Sample Paper Co', amount: '22.60', currency: 'CAD' }] });
+    await mount();
+    document.querySelector('[data-action="test-reader"]').click(); await settle(); await settle();
+    expect(mocks.extract.mock.calls[0][0].email.subject).toBe('Your receipt from Sample Paper Co');
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('The reader works');
+    mocks.extract.mockRejectedValue(new Error('Google would not accept the AI key'));
+    document.querySelector('[data-action="test-reader"]').click(); await settle(); await settle();
+    expect(document.querySelector('[data-finder-status]').textContent).toContain('The reader is not working: Google would not accept the AI key');
   });
   it('finds invoices and shipping costs together when both chips are on', async () => {
     await mount();
