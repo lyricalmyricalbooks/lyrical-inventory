@@ -9,7 +9,8 @@
 // weeks later, by which time a claim is harder and the customer is annoyed.
 //
 // This module decides which shipped orders are worth asking about, how to read
-// Canada Post's answer, and what to tell the publisher. Pure — no network, no
+// the carrier's answer (Canada Post directly, every other carrier through
+// Shippo's tracking), and what to tell the publisher. Pure — no network, no
 // DOM, no ledger — so the rules can be tested directly. shipping.js asks.
 
 import { DAY, dayMs, localDay } from './calendar-day.js';
@@ -25,37 +26,69 @@ export const DELIVERY_RECHECK_MS = 12 * 60 * 60 * 1000;
 export const DELIVERY_BATCH = 10;
 
 /**
- * The shipped orders to ask Canada Post about this run.
+ * Whether a shipped row is still worth following at all, whatever the carrier:
+ * shipped, not voided, not delivered, not on its way back, shipped recently
+ * enough to matter, and not asked about recently. Returns the last-checked
+ * time (0 when never) for a row that is, or null.
+ */
+function followable(entry, now) {
+  if (!entry || entry.voided || !entry.shipped || entry.deliveredDate) return null;
+  // A parcel handed back to the shop is finished, however recent.
+  if (entry.deliveryState === 'returning') return null;
+  // A Shippo test label never scans.
+  if (entry.trackingSimulated) return null;
+  const shipped = dayMs(entry.shippedDate || entry.date);
+  if (Number.isFinite(shipped) && now - shipped > DELIVERY_FOLLOW_DAYS * DAY) return null;
+  const checked = Date.parse(entry.deliveryCheckedAt || '');
+  if (Number.isFinite(checked) && now - checked < DELIVERY_RECHECK_MS) return null;
+  return Number.isFinite(checked) ? checked : 0;
+}
+
+/** True when this row's tracking number is a Canada Post one. */
+function isCanadaPostRow(entry, raw, pin) {
+  // Letters mean another carrier (UPS's 1Z…, for one): stripping them would
+  // leave a digit run that merely looks like a Canada Post number.
+  return entry.carrier === 'canadapost' || (/^\d+$/.test(raw) && looksLikeCanadaPostPin(pin));
+}
+
+/**
+ * The shipped orders to ask about this run.
  *
  * `rows` are `{ bookId, entry }` pairs, so the caller can write the answer back
- * onto the ledger row it came from. A row qualifies when it is shipped, not
- * voided, not already delivered, carries a Canada Post tracking number, shipped
- * recently enough to still matter, and was not asked about recently. The ones
- * asked about longest ago go first, so every parcel gets its turn.
+ * onto the ledger row it came from. Canada Post numbers are asked of Canada
+ * Post (source 'canadapost'). Any other carrier is asked of Shippo (source
+ * 'shippo'), when `shippoCarrierFor(entry)` names its Shippo carrier token —
+ * Shippo tracks every carrier it sells labels for. The ones asked about
+ * longest ago go first, so every parcel gets its turn.
+ *
+ * `canadaPost` / `shippoCarrierFor` switch each source on; a source left off
+ * contributes nothing, so a shop with only one of the two set up still works.
  */
-export function shipmentsToFollow(rows = [], { now = Date.now(), batch = DELIVERY_BATCH } = {}) {
+export function shipmentsToFollow(rows = [], {
+  now = Date.now(), batch = DELIVERY_BATCH, canadaPost = true, shippoCarrierFor = null,
+} = {}) {
   const seen = new Set();
   const picked = [];
   (Array.isArray(rows) ? rows : []).forEach(row => {
     const entry = row?.entry;
-    if (!entry || entry.voided || !entry.shipped || entry.deliveredDate) return;
+    const checkedAt = followable(entry, now);
+    if (checkedAt === null) return;
     const raw = String(entry.trackingNumber || entry.trackingPin || '').replace(/[\s-]/g, '');
     const pin = normalizeTrackingPin(raw);
     if (!pin || seen.has(pin)) return;
-    // Letters mean another carrier (UPS's 1Z…, for one): stripping them would
-    // leave a digit run that merely looks like a Canada Post number.
-    if (entry.carrier !== 'canadapost' && !(/^\d+$/.test(raw) && looksLikeCanadaPostPin(pin))) return;
-    // A parcel handed back to the shop is finished, however recent.
-    if (entry.deliveryState === 'returning') return;
 
-    const shipped = dayMs(entry.shippedDate || entry.date);
-    if (Number.isFinite(shipped) && now - shipped > DELIVERY_FOLLOW_DAYS * DAY) return;
-
-    const checked = Date.parse(entry.deliveryCheckedAt || '');
-    if (Number.isFinite(checked) && now - checked < DELIVERY_RECHECK_MS) return;
-
+    const viaShippo = typeof shippoCarrierFor === 'function';
+    const isCanadaPost = isCanadaPostRow(entry, raw, pin);
+    if (isCanadaPost && canadaPost) {
+      seen.add(pin);
+      picked.push({ ...row, pin, source: 'canadapost', checkedAt });
+      return;
+    }
+    // Without Canada Post's own API, Shippo can still track a Canada Post parcel.
+    const carrier = viaShippo ? (shippoCarrierFor(entry) || (isCanadaPost ? 'canada_post' : '')) : '';
+    if (!carrier) return;
     seen.add(pin);
-    picked.push({ ...row, pin, checkedAt: Number.isFinite(checked) ? checked : 0 });
+    picked.push({ ...row, pin: isCanadaPost ? pin : raw.toUpperCase(), source: 'shippo', carrier, checkedAt });
   });
   picked.sort((a, b) => a.checkedAt - b.checkedAt);
   return picked.slice(0, Math.max(0, batch));
@@ -84,16 +117,23 @@ const PICKUP = /notice card|ready for pick ?up|available for pick ?up|attempted|
 export function readDelivery(result, { now = Date.now(), shippedDate = '' } = {}) {
   if (!result || !result.found) return null;
   const status = String(result.status || '').trim();
+  // A carrier-neutral answer (Shippo's) carries a `state` key naming its state
+  // outright — possibly '' for "nothing to report". Its words are then never
+  // matched: "will be delivered Tuesday" is not a delivery. Answers without
+  // the key (Canada Post's) carry nothing but words, so those are read.
+  const structured = Object.prototype.hasOwnProperty.call(result, 'state');
+  const hinted = structured && ['delivered', 'returning', 'pickup'].includes(result.state) ? result.state : '';
+  const words = structured ? '' : status;
   const eventDate = String(result.eventDateTime || '').slice(0, 10);
   const place = String(result.eventLocation || '').trim();
   const base = { status, eventDate, place };
 
   const actual = String(result.actualDeliveryDate || '').slice(0, 10);
-  if (actual || (DELIVERED.test(status) && !NOT_DELIVERED.test(status))) {
+  if (hinted === 'delivered' || actual || (DELIVERED.test(words) && !NOT_DELIVERED.test(words))) {
     return { ...base, state: 'delivered', deliveredDate: actual || eventDate || localDay(now) };
   }
-  if (RETURNING.test(status)) return { ...base, state: 'returning' };
-  if (PICKUP.test(status) || result.attemptedDate) return { ...base, state: 'pickup' };
+  if (hinted === 'returning' || RETURNING.test(words)) return { ...base, state: 'returning' };
+  if (hinted === 'pickup' || PICKUP.test(words) || result.attemptedDate) return { ...base, state: 'pickup' };
 
   const lastMove = dayMs(eventDate || shippedDate);
   if (Number.isFinite(lastMove) && now - lastMove >= DELIVERY_STUCK_DAYS * DAY) {
