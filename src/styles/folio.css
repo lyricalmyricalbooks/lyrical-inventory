@@ -506,3 +506,159 @@ svg.ic { stroke-width:1.75; }
   .settings-sub-nav { display:flex !important; flex-wrap:nowrap; }
   .tab-panel .settings-sub-nav.has-phone-picker { display:none !important; }
 }
+
+/* ===== Folio round four (2026-11-26): calm labels, white fields and cards, black side menu kept ===== */
+/* Sentence-case labels */
+:is(.sk-l,.be-stat-label,.sec-kicker,.tc-form-label,.bsk-label,.tc-opt,.kpi-label,.web-stat-label,.ledger-filter-label,.analytics-kpi-label,.bc-detail-label,.bm-metric-label,.shipping-pnl-eyebrow,.shipping-pnl-kpi-label,.con-stat-label,.metric-banner-label,.tc-tile-label,.hist-kpi-label,.toolbar-label,.order-preview-label,.panel-label,.st-balance-label,.rwo-section-label,.pos-confirm-meta-label,.ch-summary-label,.consignment-kicker,.ledger-label,.dash-context-meta,.today-date),:is(.tab-panel,.modal) th{text-transform:none !important;letter-spacing:0 !important;font-family:var(--font-ui) !important;}
+:is(.sk-l,.be-stat-label,.sec-kicker,.tc-form-label,.bsk-label,.tc-opt,.kpi-label,.web-stat-label,.ledger-filter-label,.analytics-kpi-label,.bc-detail-label,.bm-metric-label,.shipping-pnl-eyebrow,.shipping-pnl-kpi-label,.con-stat-label,.metric-banner-label,.tc-tile-label,.hist-kpi-label,.toolbar-label,.order-preview-label,.panel-label,.st-balance-label,.rwo-section-label,.pos-confirm-meta-label,.ch-summary-label,.consignment-kicker,.ledger-label,.dash-context-meta,.today-date)::first-letter{text-transform:uppercase;}
+:is(:is(.tab-panel,.modal) th,:is(.sk-l,.be-stat-label,.sec-kicker,.tc-form-label,.bsk-label,.tc-opt,.kpi-label,.web-stat-label,.ledger-filter-label,.analytics-kpi-label,.bc-detail-label,.bm-metric-label,.shipping-pnl-eyebrow,.shipping-pnl-kpi-label,.con-stat-label,.metric-banner-label,.tc-tile-label,.hist-kpi-label,.toolbar-label,.order-preview-label,.panel-label,.st-balance-label,.rwo-section-label,.pos-confirm-meta-label,.ch-summary-label,.consignment-kicker,.ledger-label,.dash-context-meta,.today-date)){font-weight:600 !important;}
+:is(.tab-panel,.modal) th{font-size:12.5px !important;color:var(--text2) !important;}
+/* Table headers: quiet, no sand band */
+table thead th{background:transparent !important;border-bottom:1px solid var(--border2) !important;}
+table thead{background:transparent !important;}
+table{border-radius:12px;}
+/* Book heading strip: no tinted box, just the dot and words */
+.book-context{background:transparent !important;border:0 !important;border-left:0 !important;padding:0 2px !important;box-shadow:none !important;}
+.book-context-title{font-weight:600 !important;font-size:16px !important;}
+/* Inputs and selects: white, hairline, soft corners, accent halo on focus */
+.tab-panel :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea),
+.modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){
+  background:var(--surface-card) !important;border:1px solid var(--folio-line-btn) !important;border-radius:10px !important;box-shadow:0 1px 0 rgba(23,20,15,.03) !important;}
+.tab-panel :is(input,select,textarea):focus,.modal :is(input,select,textarea):focus{border-color:var(--folio-accent) !important;box-shadow:var(--folio-halo) !important;outline:none !important;}
+/* Consignment numbers: soft grey tiles, no ink side bars */
+.con-stat,[class*="con-stat-box"],#tab-consignment [class*="store-stat"],#tab-consignment .cs-num{background:var(--cream2) !important;border:0 !important;border-left:0 !important;border-radius:10px !important;box-shadow:none !important;}
+.con-stat-val{font-weight:500 !important;}
+/* Sand panels become white cards with a hairline */
+.form-section,.sand,.panel-sand,.recon-search,.hist-search,.web-stat,.webl-stat,.web-link-stat{background:var(--surface-card) !important;border:1px solid var(--border2) !important;border-radius:12px !important;}
+/* Pop-ups: softer corners, quieter header */
+.modal{border-radius:18px !important;}
+.modal .modal-title{font-weight:600 !important;letter-spacing:-.01em !important;}
+.modal .modal-title-badge{background:var(--cream2) !important;border:0 !important;border-radius:8px !important;}
+.modal-close-btn{border-radius:999px !important;background:transparent !important;border:1px solid var(--border2) !important;}
+/* Phone: section tabs as a soft strip, picker label quiet */
+@media (max-width:768px){
+  .con-section-tabs{display:flex !important;gap:2px;background:var(--cream2);border-radius:12px;padding:4px;border:0 !important;}
+  .con-section-tab{border:0 !important;border-radius:9px !important;text-transform:none !important;letter-spacing:0 !important;font:600 13.5px var(--font-ui) !important;color:var(--text2) !important;background:transparent !important;box-shadow:none !important;padding:8px 12px !important;flex:1;justify-content:center;}
+  .con-section-tab[aria-selected="true"]{background:var(--surface-card) !important;color:var(--text) !important;box-shadow:0 1px 2px rgba(23,20,15,.1),0 0 0 1px var(--border2) !important;}
+  .con-section-tab::after,.con-section-tab::before{display:none !important;}
+  .phone-section-picker,.phone-section-select{border-radius:12px !important;}
+}
+/* table headings: kill the wide tracking even where folio.css forces it */
+:is(.tab-panel,.modal) th{letter-spacing:0 !important;text-transform:none !important;}
+/* store number tiles: soft fill, no side bar; the owed figure keeps its colour */
+.sk{background:var(--cream2) !important;border:0 !important;border-radius:10px !important;}
+.sk:has(.sk-v.warn){box-shadow:none !important;background:color-mix(in srgb,var(--amber-bg) 70%,var(--cream2)) !important;}
+.sk:has(.sk-v.is-off){box-shadow:none !important;background:var(--red-bg) !important;}
+.sk-v{font-size:19px !important;}
+/* website: link tiles and storage list as white cards */
+.web-stat{background:var(--surface-card) !important;border:1px solid var(--border2) !important;border-radius:12px !important;box-shadow:none !important;}
+.wl-item{background:var(--surface-card) !important;border:1px solid var(--border2) !important;border-radius:12px !important;box-shadow:none !important;}
+/* add-store quick picks: sentence case names, softer panel */
+.store-quick-chip{border-radius:10px !important;}
+.store-quick-chip, .store-quick-chip *{text-transform:none !important;letter-spacing:0 !important;}
+.add-store-chips-wrap,.add-store-picker,.add-store-catalog{border-radius:12px !important;}
+.add-store-chips-label{text-transform:none !important;letter-spacing:0 !important;font-weight:600 !important;}
+/* dashboard "author submissions": calm amber card, no thick side bar */
+.author-subs-card{border-left:1px solid var(--border2) !important;border-radius:14px !important;box-shadow:none !important;}
+.add-store-preset-box{background:var(--cream2) !important;border:0 !important;border-radius:14px !important;box-shadow:none !important;}
+:is(.sk-l,.be-stat-label,.sec-kicker,.tc-form-label,.bsk-label,.tc-opt,.kpi-label,.web-stat-label,.ledger-filter-label,.analytics-kpi-label,.bc-detail-label,.bm-metric-label,.shipping-pnl-eyebrow,.shipping-pnl-kpi-label,.con-stat-label,.metric-banner-label,.tc-tile-label,.hist-kpi-label,.toolbar-label,.order-preview-label,.panel-label,.st-balance-label,.rwo-section-label,.pos-confirm-meta-label,.ch-summary-label,.consignment-kicker,.ledger-label,.dash-context-meta,.today-date){font-size:12px !important;color:var(--text3);}
+
+/* ===== Round 4, deeper (2026-11-26) ===== */
+/* Side menu stays black (Julian, 2026-11-26); Folio details inside it */
+.pub-shell #pub-sidebar .snav{border-radius:9px !important;}
+.pub-shell #pub-sidebar .snav:hover{background:rgba(255,255,255,.06) !important;}
+.pub-shell #pub-sidebar .snav.active{background:rgba(255,255,255,.10) !important;box-shadow:none !important;}
+.pub-shell #pub-sidebar .snav.active::before{display:none !important;}
+.pub-shell #pub-sidebar .snav.active .snav-ic{color:var(--folio-accent) !important;}
+.pub-shell #pub-sidebar .app-switch{background:rgba(255,255,255,.07) !important;border:0 !important;border-radius:10px !important;padding:3px !important;}
+.pub-shell #pub-sidebar .app-switch-seg{background:transparent !important;border:0 !important;border-radius:8px !important;}
+.pub-shell #pub-sidebar .app-switch-seg.is-current{background:rgba(255,255,255,.14) !important;box-shadow:none !important;}
+.pub-shell #pub-sidebar .nav-badge{border-radius:999px !important;}
+/* Page headings: Geist semibold, calmer size; eyebrows lose the tracking */
+.pub-shell .tab-panel :is(h1,.today-title,.phone-sell-head h1,.sec-title,.page-title){font-family:var(--font-ui) !important;font-weight:650 !important;letter-spacing:-.025em !important;text-transform:none !important;}
+@media (max-width:768px){
+  .pub-shell .tab-panel :is(h1,.today-title,.phone-sell-head h1){font-size:34px !important;line-height:1.08 !important;}
+  .pub-shell .tab-panel .phone-eyebrow{letter-spacing:0 !important;text-transform:none !important;font-weight:600 !important;}
+  .pub-shell .tab-panel .phone-eyebrow::before{border-radius:999px !important;}
+  /* Sell screen tabs as a soft strip */
+  .pos-subtab-nav{display:flex !important;gap:2px;background:var(--cream2);border-radius:12px;padding:4px;border:0 !important;}
+  .pos-subtab-btn{border:0 !important;border-radius:9px !important;background:transparent !important;color:var(--text2) !important;box-shadow:none !important;flex:1;justify-content:center;font-weight:600 !important;}
+  .pos-subtab-btn.active{background:var(--surface-card) !important;color:var(--text) !important;box-shadow:0 1px 2px rgba(23,20,15,.1),0 0 0 1px var(--border2) !important;}
+  .pos-subtab-btn::after,.pos-subtab-btn::before{display:none !important;}
+  #tab-website .web-stat,#tab-website #web-orders-status .web-stat{background:var(--surface-card) !important;}
+}
+/* Square red dots become round */
+.sec-kicker-dot,.book-context-dot,.phone-eyebrow::before{border-radius:999px !important;}
+/* Lead figure tile: no red top bar; accent shows in the number only */
+.kpi.is-lead,.tab-panel .kpi.is-lead,.pub-shell .kpi-grid > .kpi.is-lead{border-top:1px solid var(--border2) !important;}
+.kpi,.hist-kpi-card{border-radius:14px !important;}
+/* Sell screen: quantity steppers as one rounded pill; sand panels become soft white */
+.pos-qty-btn{border-radius:999px !important;box-shadow:none !important;}
+#tab-pos :is(.pos-cart-empty,.cart-empty,.pos-fx-box,.pos-currency-row,.pos-subtotal){border-radius:12px !important;}
+/* History: pending rows marked by a small amber dot strip, not a thick bar */
+#tab-history tr[class*="pending"],#tab-history tr[class*="submitted"]{box-shadow:inset 3px 0 0 var(--amber) !important;}
+/* Focus ring: soft halo instead of a hard red ring */
+.modal-close-btn:focus-visible,.btn:focus-visible{outline:none !important;box-shadow:var(--folio-halo) !important;}
+/* Cards: one consistent radius and shadow across screens */
+.tab-panel .card{border-radius:16px !important;border:1px solid var(--border2) !important;box-shadow:var(--folio-shadow-card) !important;}
+@media (max-width:768px){
+  .pub-shell .tab-panel > .book-context:not(#book-context-dash):not(#book-context-con) .book-context-meta,.pub-shell #book-context-con .book-context-title{font-family:var(--font-ui) !important;font-weight:650 !important;letter-spacing:-.025em !important;text-transform:none !important;font-size:34px !important;line-height:1.08 !important;}
+  .pub-shell #tab-pos .pos-subtab-nav{display:flex !important;gap:2px !important;margin:14px 0 16px !important;padding:4px !important;background:var(--cream2) !important;border:0 !important;border-radius:12px !important;}
+  .pub-shell #tab-pos .pos-subtab-btn,.pub-shell #tab-pos .pos-subtab-btn.active{flex:1 !important;justify-content:center;min-height:38px !important;border-radius:9px !important;text-transform:none !important;letter-spacing:0 !important;font:600 13.5px var(--font-ui) !important;color:var(--text2) !important;}
+  .pub-shell #tab-pos .pos-subtab-btn.active{background:var(--surface-card) !important;color:var(--text) !important;box-shadow:0 1px 2px rgba(23,20,15,.1),0 0 0 1px var(--border2) !important;}
+  .pub-shell .kpi-grid > .kpi,.pub-shell .kpi-grid > .kpi.is-lead,.pub-shell .tab-panel :is(.kpi-grid,.recon-kpis) > .kpi.is-lead{padding:14px 16px !important;background:var(--surface-card) !important;border:1px solid var(--border2) !important;border-radius:14px !important;}
+}
+/* Sell checkout plates: white with a hairline instead of sand */
+.pos-checkout-plate,#tab-pos .pos-cart-scroll{background:var(--surface-card) !important;border:1px solid var(--border2) !important;border-radius:12px !important;box-shadow:none !important;}
+
+/* ===== Round 4, more details (2026-11-26 b) ===== */
+/* Badges and status tags: soft rounded pills, no outline */
+.tab-panel :is(.badge,.tag,.status-pill,[class*="-badge"]:not(.modal-title-badge)){border-radius:999px !important;border-width:0 !important;box-shadow:none !important;letter-spacing:0 !important;text-transform:none !important;font-weight:600 !important;}
+/* Quiet buttons: hairline, white */
+.tab-panel .btn:not(.btn-primary):not(.primary):not(.btn-danger){background:var(--surface-card) !important;border:1px solid var(--folio-line-btn) !important;box-shadow:none !important;}
+/* Ticks and radios take the accent */
+input[type=checkbox],input[type=radio],input[type=range]{accent-color:var(--folio-accent);}
+/* Progress bars and meters: rounded tracks */
+.tab-panel :is(progress,[class*="progress"],[class*="-bar-track"],[class*="meter"]){border-radius:999px !important;overflow:hidden;}
+/* Dividers: hairline */
+.tab-panel hr{border:0 !important;border-top:1px solid var(--border2) !important;}
+/* Table rows: soft hover, hairline rows, figures right-aligned stay mono */
+.tab-panel table tbody tr{border-bottom:1px solid var(--border2) !important;}
+.tab-panel table tbody tr:hover{background:var(--cream2) !important;}
+.tab-panel table td{border-color:var(--border2) !important;}
+/* Empty states: calmer, centred, grey icon */
+.tab-panel [class*="empty"]{border-style:dashed !important;border-color:var(--border2) !important;border-radius:14px !important;color:var(--text3) !important;}
+/* Toast: dark pill with soft shadow */
+#toast{border-radius:999px !important;border:0 !important;box-shadow:0 8px 24px rgba(23,20,15,.18) !important;}
+/* Drop zones: dashed hairline, rounded */
+.tab-panel :is(.dz,.drop-zone,[class*="dropzone"]){border:1.5px dashed var(--border2) !important;border-radius:14px !important;background:var(--surface-card) !important;}
+/* Section titles inside cards: no caps, no rule */
+.tab-panel .card :is(h2,h3,.card-title){letter-spacing:-.01em !important;text-transform:none !important;font-family:var(--font-ui) !important;font-weight:600 !important;}/* ===== Round 4, bigger redesigns (2026-11-26 c) ===== */
+.pub-shell #pub-sidebar .app-switch-seg.is-current{color:#fff !important;}
+/* Today figures: one white card, split into four by hairlines (was ink rules) */
+@media (max-width:768px){
+  .pub-shell #tab-today .phone-ledger{gap:0 !important;background:var(--surface-card);border:1px solid var(--border2);border-radius:18px;overflow:hidden;box-shadow:var(--folio-shadow-card);}
+  .pub-shell #tab-today .ledger-fig{padding:16px 18px !important;border-top:0 !important;border-radius:0 !important;}
+  .pub-shell #tab-today .ledger-fig:nth-child(odd){border-right:1px solid var(--border2) !important;}
+  .pub-shell #tab-today .ledger-fig:nth-child(n+3){border-top:1px solid var(--border2) !important;}
+  .pub-shell .ledger-value{font:650 28px/1.15 var(--font-ui) !important;letter-spacing:-.03em !important;font-variant-numeric:tabular-nums;}
+  .pub-shell .ledger-sub{font-family:var(--font-ui) !important;}
+  /* Sell card: rounder, flat, white icon tile */
+  .pub-shell #tab-today .today-card-ink{border-radius:20px !important;border:0 !important;box-shadow:0 10px 24px -12px color-mix(in srgb,var(--folio-accent) 70%,transparent) !important;}
+  .pub-shell #tab-today .today-card-ink .today-card-ic{background:rgba(255,255,255,.18) !important;border-radius:14px !important;}
+  /* Shortcut tiles: icon sits in a soft rounded square */
+  .pub-shell #tab-today .today-card:not(.today-card-ink){border-radius:18px !important;}
+  .pub-shell #tab-today .today-card:not(.today-card-ink) .today-card-ic{background:var(--cream2);border-radius:12px;padding:8px;box-sizing:content-box;}
+  .pub-shell #tab-today .today-sync::before,.pub-shell .sync-dot{border-radius:999px !important;}
+}
+/* Table headings: no sand band anywhere */
+.pub-shell .tab-panel table thead tr,.pub-shell .tab-panel table thead th,.pub-shell .tab-panel table tr:first-child th{background:transparent !important;}
+/* Dashboard figures: ink numbers; only the lead figure keeps the accent */
+.pub-shell .kpi:not(.is-lead) .kpi-val,.pub-shell .kpi:not(.is-lead) .kpi-value{color:var(--text) !important;}
+.pub-shell :is(.kpi-val,.kpi-value){font-family:var(--font-ui) !important;font-weight:650 !important;letter-spacing:-.03em !important;}
+/* Attention banner: white card with an amber icon tile instead of a full amber box */
+.pub-shell .pab,.pub-shell .publisher-action-banner{background:var(--surface-card) !important;border:1px solid var(--border2) !important;border-radius:16px !important;box-shadow:var(--folio-shadow-card) !important;}
+.pub-shell :is(.pab,.publisher-action-banner) .pab-icon{background:var(--amber-bg);border-radius:12px;padding:8px;color:var(--amber) !important;}
+/* Big money figure on dashboard: Geist, not condensed */
+.pub-shell .tab-panel :is(.owed-amount,.money-card-amount,[class*="owed-val"],[class*="big-figure"]){font-family:var(--font-ui) !important;font-weight:650 !important;letter-spacing:-.035em !important;}
+
