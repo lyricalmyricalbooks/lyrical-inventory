@@ -4868,18 +4868,18 @@ function renderSaveBookPresetPreview() {
   const formattedWeight = singleWeight ? (singleWeight >= 10 ? (Math.round(singleWeight * 100) / 100) : (Math.round(singleWeight * 10000) / 10000)) : '—';
 
   const scalingNote = qty > 1
-    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:var(--text-xs);color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${dimUnit}</strong> and weight is <strong>${formattedWeight} ${weightUnit}</strong>.</div>`
+    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:var(--text-xs);color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${escapeHtml(dimUnit)}</strong> and weight is <strong>${formattedWeight} ${escapeHtml(weightUnit)}</strong>.</div>`
     : '';
 
   preview.innerHTML = `
     <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);padding:10px 12px;">
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
-        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${escapeHtml(dimUnit)}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Weight (Per Copy)</label>
-        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${formattedWeight} ${weightUnit}</span>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${formattedWeight} ${escapeHtml(weightUnit)}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
