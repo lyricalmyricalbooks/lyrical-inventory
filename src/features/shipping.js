@@ -3067,9 +3067,9 @@ async function importShippoShippingFromApi({
   }
 }
 
-let shippoBaseSpecs = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+let shippoBaseSpecs = { length: 25, width: 20, height: 2.5, dim_unit: 'cm', weight: 0.5, weight_unit: 'kg' };
 
-const GENERIC_SHIP_SPECS = { length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' };
+const GENERIC_SHIP_SPECS = { length: 25, width: 20, height: 2.5, dim_unit: 'cm', weight: 0.5, weight_unit: 'kg' };
 
 // Measured specs for the catalog's own titles, keyed by book id. Keyed by id
 // rather than matched against the title, because a rename used to drop a book
@@ -3077,12 +3077,12 @@ const GENERIC_SHIP_SPECS = { length: 10, width: 8, height: 1, dim_unit: 'in', we
 // visible sign. Anything saved on the book record itself still wins over this;
 // this is only the fallback for books whose ship fields were never filled in.
 const BOOK_SHIP_PRESETS = {
-  altrove: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.1, weight_unit: 'lb' },
-  hound: { length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb' },
-  archaeology: { length: 9, width: 7, height: 0.6, dim_unit: 'in', weight: 0.9, weight_unit: 'lb' },
-  sistema: { length: 8, width: 6, height: 0.5, dim_unit: 'in', weight: 0.7, weight_unit: 'lb' },
-  nobody: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.0, weight_unit: 'lb' },
-  collective: { length: 10, width: 8, height: 0.8, dim_unit: 'in', weight: 1.2, weight_unit: 'lb' },
+  altrove: { length: 25.4, width: 20.3, height: 2, dim_unit: 'cm', weight: 0.5, weight_unit: 'kg' },
+  hound: { length: 30.5, width: 22.9, height: 3, dim_unit: 'cm', weight: 1, weight_unit: 'kg' },
+  archaeology: { length: 22.9, width: 17.8, height: 1.5, dim_unit: 'cm', weight: 0.4, weight_unit: 'kg' },
+  sistema: { length: 20.3, width: 15.2, height: 1.3, dim_unit: 'cm', weight: 0.3, weight_unit: 'kg' },
+  nobody: { length: 25.4, width: 20.3, height: 2, dim_unit: 'cm', weight: 0.45, weight_unit: 'kg' },
+  collective: { length: 25.4, width: 20.3, height: 2, dim_unit: 'cm', weight: 0.55, weight_unit: 'kg' },
 };
 
 // Legacy title matching, kept only as a tertiary hop so a book copied to a new
@@ -3102,9 +3102,9 @@ function resolveBookPresetSpecs(book) {
         length: book.shipLength,
         width: book.shipWidth,
         height: book.shipHeight,
-        dim_unit: book.shipDimUnit || 'in',
+        dim_unit: book.shipDimUnit || 'cm',
         weight: book.shipWeight,
-        weight_unit: book.shipWeightUnit || 'lb'
+        weight_unit: book.shipWeightUnit || 'kg'
       },
     };
   }
@@ -3352,12 +3352,12 @@ function initShippingTab() {
   const qtyInput = $('sp-qty');
   if (qtyInput) qtyInput.value = '1';
   shippoBaseSpecs = {
-    length: parseFloat($('sp-length').value) || 10,
-    width: parseFloat($('sp-width').value) || 8,
-    height: parseFloat($('sp-height').value) || 1,
-    dim_unit: $('sp-dim-unit').value || 'in',
-    weight: parseFloat($('sp-weight').value) || 1.2,
-    weight_unit: $('sp-weight-unit').value || 'lb'
+    length: parseFloat($('sp-length').value) || 25,
+    width: parseFloat($('sp-width').value) || 20,
+    height: parseFloat($('sp-height').value) || 2.5,
+    dim_unit: $('sp-dim-unit').value || 'cm',
+    weight: parseFloat($('sp-weight').value) || 0.5,
+    weight_unit: $('sp-weight-unit').value || 'kg'
   };
   renderCustomShippoDestPicker();
   // Ask Big Cartel for anything new so the "Ready to ship" queue is current.
@@ -4819,7 +4819,7 @@ function onShippoBookPresetChange({ silent = false } = {}) {
 
   if (!silent) {
     if (source === 'generic') {
-      showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 10×8×1 in / 1.2 lb. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
+      showToast(`⚠ ${book.title} has no shipping specs — quoting on generic 25×20×2.5 cm / 0.5 kg. Set its dimensions in the book editor or click "Save to Book Preset".`, 'warn', 6000);
     } else {
       showToast(`✓ Package preset loaded: ${book.title}`);
     }
@@ -4853,9 +4853,9 @@ function renderSaveBookPresetPreview() {
   const length = parseFloat($('sp-length')?.value || '0');
   const width = parseFloat($('sp-width')?.value || '0');
   const totalHeight = parseFloat($('sp-height')?.value || '0');
-  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
   const totalWeight = parseFloat($('sp-weight')?.value || '0');
-  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
   const customsVal = parseFloat($('sp-customs-value')?.value || '0');
   const customsDesc = $('sp-customs-description')?.value?.trim() || '';
   const hsCode = $('sp-customs-hs')?.value?.trim() || '';
@@ -4868,18 +4868,18 @@ function renderSaveBookPresetPreview() {
   const formattedWeight = singleWeight ? (singleWeight >= 10 ? (Math.round(singleWeight * 100) / 100) : (Math.round(singleWeight * 10000) / 10000)) : '—';
 
   const scalingNote = qty > 1
-    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:var(--text-xs);color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${dimUnit}</strong> and weight is <strong>${formattedWeight} ${weightUnit}</strong>.</div>`
+    ? `<div class="sbp-scale-note" style="margin-top:10px;padding:8px 10px;background:var(--gold-bg);border-radius:var(--r);font-size:var(--text-xs);color:var(--gold-text);line-height:1.45;">ℹ Automatically normalized per copy from total quantity of <strong>${qty}</strong>: single-copy height is <strong>${formattedHeight} ${escapeHtml(dimUnit)}</strong> and weight is <strong>${formattedWeight} ${escapeHtml(weightUnit)}</strong>.</div>`
     : '';
 
   preview.innerHTML = `
     <div class="sbp-spec-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;background:var(--surface-card);border:var(--stroke-hair) solid var(--border);border-radius:var(--r2);padding:10px 12px;">
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Dimensions (Per Copy)</label>
-        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${dimUnit}</span>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${length} × ${width} × ${formattedHeight} ${escapeHtml(dimUnit)}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Weight (Per Copy)</label>
-        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${formattedWeight} ${weightUnit}</span>
+        <span style="font-family:var(--font-mono);font-size:var(--text-base);font-weight:700;color:var(--text);">${formattedWeight} ${escapeHtml(weightUnit)}</span>
       </div>
       <div class="sbp-spec-item" style="display:flex;flex-direction:column;gap:2px;">
         <label style="font-size:var(--text-3xs);font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);">Customs Value (CAD)</label>
@@ -4917,9 +4917,9 @@ async function confirmSaveBookPreset() {
   const length = parseFloat($('sp-length')?.value || '0');
   const width = parseFloat($('sp-width')?.value || '0');
   const totalHeight = parseFloat($('sp-height')?.value || '0');
-  const dimUnit = $('sp-dim-unit')?.value || 'in';
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
   const totalWeight = parseFloat($('sp-weight')?.value || '0');
-  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
   const customsVal = parseFloat($('sp-customs-value')?.value || '0');
   const customsDesc = $('sp-customs-description')?.value?.trim() || '';
   const hsCode = $('sp-customs-hs')?.value?.trim() || '';
@@ -5658,12 +5658,12 @@ async function calculateZonosDutiesHandler({ shippingAmount, carrierName } = {})
   const unitValue = Math.max(0.01, parseFloat($('sp-customs-value')?.value) || 25);
   const hsCode = ($('sp-customs-hs')?.value || '490199').trim();
   const description = $('sp-customs-description')?.value || 'Printed books';
-  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 10);
-  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 8);
-  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 1);
-  const dimUnit = $('sp-dim-unit')?.value || 'in';
-  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 1.2);
-  const weightUnit = $('sp-weight-unit')?.value || 'lb';
+  const length = Math.max(0.1, parseFloat($('sp-length')?.value) || 25);
+  const width = Math.max(0.1, parseFloat($('sp-width')?.value) || 20);
+  const height = Math.max(0.1, parseFloat($('sp-height')?.value) || 2.5);
+  const dimUnit = $('sp-dim-unit')?.value || 'cm';
+  const weight = Math.max(0.01, parseFloat($('sp-weight')?.value) || 0.5);
+  const weightUnit = $('sp-weight-unit')?.value || 'kg';
   const incoterm = resolveShippoIncoterm(stCountryCode);
 
   const zonosApiKey = TAX_CENTER.settings?.zonosApiKey || DEFAULT_ZONOS_API_KEY;
@@ -11508,7 +11508,7 @@ function buildShippingInsightsHtml(allOrders, shippoExpenses, carrierTableHtml, 
 
   let bookOptionsHtml = '';
   BOOK_LIST.forEach(b => {
-    const wStr = b.shipWeight ? `${b.shipWeight} ${b.shipWeightUnit || 'lb'}` : 'unknown';
+    const wStr = b.shipWeight ? `${b.shipWeight} ${b.shipWeightUnit || 'kg'}` : 'unknown';
     bookOptionsHtml += `<option value="${escapeHtml(b.id)}">${escapeHtml(b.title)} (${wStr})</option>`;
   });
 
@@ -12088,7 +12088,7 @@ function guessCarrier(trackingNumber, trackingUrl, parsedCarrier) {
 function getWeightInLbs(qty, book) {
   if (!book || !book.shipWeight) return 1.2 * qty;
   const w = parseFloat(book.shipWeight) || 0;
-  const unit = (book.shipWeightUnit || 'lb').toLowerCase();
+  const unit = (book.shipWeightUnit || 'kg').toLowerCase();
   let weightInLbs = w * qty;
   if (unit === 'oz') weightInLbs = weightInLbs / 16;
   else if (unit === 'kg') weightInLbs = weightInLbs * 2.20462;

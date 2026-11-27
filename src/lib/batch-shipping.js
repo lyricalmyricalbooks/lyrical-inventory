@@ -55,9 +55,9 @@ export function scaledParcel(specs, qty) {
     length: Number(specs.length),
     width: Number(specs.width),
     height: round(specs.height),
-    distance_unit: specs.dim_unit || 'in',
+    distance_unit: specs.dim_unit || 'cm',
     weight: round(specs.weight),
-    mass_unit: specs.weight_unit || 'lb',
+    mass_unit: specs.weight_unit || 'kg',
   };
 }
 
