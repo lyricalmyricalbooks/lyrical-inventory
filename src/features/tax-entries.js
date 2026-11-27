@@ -812,6 +812,31 @@ async function snapReceiptChosen(input) {
   $('tc-exp-desc')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
+/**
+ * The one way a business expense enters the Tax Centre: the expense form and
+ * Quick log ("spent 18 dollars on postage") both come through here. The CAD
+ * value is worked out at the rate for the expense's own date; with no rate to
+ * be had (offline) it is left empty and flagged, and the Tax Centre fills it in
+ * the next time it's online. It used to fall back to 1:1, so US$100 went in as
+ * CA$100 for good. Saves unless `save: false` (the form clears a pending note
+ * first, then saves both in one write); callers repaint. Returns the entry and
+ * the rate used.
+ */
+async function recordBusinessExpense({ desc, cat, currency = 'CAD', amount, date, receipt = '', receiptStorage = 'none', trip = '' }, { save = true } = {}) {
+  date = date || today();
+  const fxRate = await resolveExpenseRate(currency, date);
+  const baseAmount = fxRate ? roundCents(amount * fxRate) : null;
+  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
+  const entry = { id: Date.now(), desc, cat, currency, amount, fxRate: fxRate || null, baseAmount, date, ref: '', receipt, trip };
+  if (!fxRate) entry.fxMissing = true;
+  // Stamped only on the cloud path, and it is what tells the Tax Centre how
+  // long this receipt has been waiting to come home.
+  if (receiptStorage === 'cloud') entry.receiptCloudAt = new Date().toISOString();
+  TAX_CENTER.businessExpenses.unshift(entry);
+  if (save) saveTaxCenter();
+  return { entry, fxRate };
+}
+
 async function submitTaxExpense() {
   const desc = ($('tc-exp-desc').value || '').trim();
   const cat = $('tc-exp-cat').value;
@@ -862,17 +887,8 @@ async function submitTaxExpense() {
   // rate to be had (offline), the expense is logged without a CAD value and
   // flagged; the Tax Centre fills it in the next time it's online. It used to
   // fall back to 1:1, so US$100 went in as CA$100 for good.
-  const fxRate = await resolveExpenseRate(currency, date);
-  const baseAmount = fxRate ? roundCents(amount * fxRate) : null;
-
-  if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   const trip = ($('tc-exp-trip')?.value || '').trim();
-  const entry = { id: Date.now(), desc, cat, currency, amount, fxRate: fxRate || null, baseAmount, date, ref: '', receipt: receiptUrl, trip };
-  if (!fxRate) entry.fxMissing = true;
-  // Stamped only on the cloud path, and it is what tells the Tax Centre how
-  // long this receipt has been waiting to come home.
-  if (receiptStorage === 'cloud') entry.receiptCloudAt = new Date().toISOString();
-  TAX_CENTER.businessExpenses.unshift(entry);
+  const { fxRate } = await recordBusinessExpense({ desc, cat, currency, amount, date, receipt: receiptUrl, receiptStorage, trip }, { save: false });
 
   // If this submit came from "Confirm & log" on a pending note, that note's
   // job is done — clear it so the reminder doesn't fire again for an expense
@@ -927,6 +943,7 @@ const TAX_CATEGORIES = {
   'royal mail': 'Shipping & Postage',
   'post office': 'Shipping & Postage',
   'stamps': 'Shipping & Postage',
+  'postage': 'Shipping & Postage',
   'paper': 'Office Supplies',
   'ink': 'Office Supplies',
   'boxes': 'Office Supplies',
@@ -1385,6 +1402,8 @@ function initTaxEntries() {
 }
 
 export {
+  recordBusinessExpense,
+  _tcGuessCategory,
   TC_CATEGORIES,
   changeExpenseCategory,
   removeLedgerEntry,

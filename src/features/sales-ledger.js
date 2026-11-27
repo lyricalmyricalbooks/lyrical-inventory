@@ -25,6 +25,7 @@ import {
   isAuthor,
   recomputeAfters,
   renderHist,
+  resolveExpenseRate,
   saveState,
   sheetsUrl,
   syncHistRowToSheets,
@@ -35,7 +36,7 @@ import { notesWithInvoiceDiscount } from '../lib/consignment.js';
 import { bookCurrencyCode } from '../lib/currency-migration.js';
 import { authorStockToReturn, deductSaleFromStockBreakdown, noteAuthorTaken, stockToReturn, takeSaleStock } from '../lib/inventory.js';
 import { channelStats, hasOwnChannel } from '../lib/channel-mix.js';
-import { cadEquivalentForSale, getBookCurrencyCode, heldTransferIndexForSale, normalizeCurrencyCode } from '../lib/money.js';
+import { cadEquivalentForSale, getBookCurrencyCode, heldTransferIndexForSale, normalizeCurrencyCode, roundCents } from '../lib/money.js';
 import { updateDash } from './dashboard.js';
 import { makeEventId, syncToSheets } from './sheets-bridge.js';
 import { invalidateAppliedIds } from './website-orders.js';
@@ -189,6 +190,68 @@ function syncHistoryVoidDeletion(h, isVoided, book = getBook()) {
 }
 
 /**
+ * The one way a gratuity (copies given away) enters a book's history: the Log
+ * Gratuity form and Quick log ("gratuity for the Hound") both come through
+ * here, so they land as the same row. Stock goes down; nothing counts as sold
+ * or as income. With `expenseEach` above zero the copies are also booked as a
+ * marketing expense at the gift date's exchange rate (none to hand, offline:
+ * the CAD value is left empty and flagged for healExpenseRates, never 1:1).
+ *
+ * The book is named, not taken from the screen: the rate lookup can take a
+ * moment, and switching books meanwhile once saved the gift to the wrong one.
+ * Callers repaint. Returns `{ ok: false, reason: 'stock' }` when there are not
+ * enough copies on hand, and then nothing is changed.
+ */
+async function recordGratuity(bookId, { qty = 1, ref = '', notes = '', date, gratSource = 'publisher', expenseEach = 0 } = {}) {
+  const s = states[bookId], book = BOOKS[bookId];
+  if (!s || !book) throw new Error('Unknown book');
+  qty = Math.max(1, parseInt(qty, 10) || 1);
+  date = date || today();
+  if (qty > s.stock) return { ok: false, reason: 'stock' };
+  const currency = getBookCurrencyCode(book);
+  const expVal = Number(expenseEach) > 0 ? Number(expenseEach) : 0;
+  // Looked up before anything changes, so a slow lookup can't leave half a gift.
+  const cadRate = expVal ? await resolveExpenseRate(currency, date) : null;
+  // Checked again: a sale may have taken the last copies during the lookup.
+  if (qty > s.stock) return { ok: false, reason: 'stock' };
+  const num = 'GRAT-' + Date.now().toString().slice(-6);
+  s.stock = Math.max(0, s.stock - qty);
+  if (!s.chStats['Gratuity']) s.chStats['Gratuity'] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats['Gratuity'].txns++; s.chStats['Gratuity'].units += qty;
+  const sheetsId = makeEventId();
+  const rowNotes = (ref ? (ref + (notes ? ' · ' + notes : '')) : notes) || '';
+  const row = { num, chan: 'Gratuity', qty, price: 0, after: s.stock, notes: rowNotes, date, gratuity: true, gratSource, sheetsId };
+  s.hist.unshift(row);
+
+  let expense = null;
+  if (expVal) {
+    if (!s.expenses) s.expenses = [];
+    const totalExp = qty * expVal;
+    expense = {
+      id: Date.now(),
+      desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
+      cat: 'Marketing & Advertising',
+      amount: totalExp,
+      currency,
+      origAmount: totalExp,
+      origCurrency: currency,
+      baseAmount: cadRate ? roundCents(totalExp * cadRate) : null,
+      ...(cadRate ? {} : { fxMissing: true }),
+      date,
+      ref: num,
+      received: false,
+      gratuity: true,
+    };
+    s.expenses.unshift(expense);
+  }
+
+  recomputeAfters(s, book);
+  saveState(bookId);
+  syncToSheets({ type: 'order', book: book.title, date, num, chan: 'Gratuity', qty, price: 0, total: 0, stockAfter: s.stock, notes: (ref ? ref + ' · ' : '') + notes + (notes || ref ? ' · ' : '') + gratSource + ' pile', sheetsId, currency });
+  return { ok: true, row, expense };
+}
+
+/**
  * Void one sale in a book's history: stock back, revenue and channel totals
  * out, the Sheets row queued for deletion. Shared by the Void button and the
  * Stripe refund alert, so a refunded sale is reversed exactly the way a
@@ -267,6 +330,7 @@ function unvoidHistEntry(s, book, h) {
 
 export {
   addSaleToState,
+  recordGratuity,
   recordOrder,
   writeOrderToLedger,
   voidHistEntry,

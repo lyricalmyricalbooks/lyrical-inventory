@@ -8160,7 +8160,18 @@ function calcExpenseFx() {
   resultSpan.style.color = 'var(--gold)';
 }
 
+/**
+ * Ask whichever AI the publisher set up (Claude, Gemini, then the OpenRouter
+ * backup, in the order Settings › AI and receipts says) for one JSON answer.
+ * Shared with Quick log, so a spoken sentence is read by the same chain and
+ * with the same free-tier rules as a receipt.
+ */
+function readWithAppAi(parts, opts = {}) {
+  return _callAiForReceipts(TAX_CENTER.settings?.geminiKey || '', parts, opts);
+}
+
 export {
+  readWithAppAi,
   applyBatchScanFix,
   clearReceiptScanReview,
   reviewableReceiptDrafts,

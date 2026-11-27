@@ -371,6 +371,7 @@
   <symbol id="ic-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
   <symbol id="ic-bell" viewBox="0 0 24 24"><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.41 13.96 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.41 5.96-2.74 7.33"/></symbol>
   <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="ic-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
   <symbol id="ic-inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></symbol>
   <symbol id="ic-contrast" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/></symbol>
   <symbol id="ic-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></symbol>
@@ -670,6 +671,12 @@
             onclick="openNotificationsPanel()" title="Notifications" aria-label="Notifications">
       <span class="ttb-ico" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-bell"/></svg></span>
       <span class="nav-badge notif-unread-badge hdr-notif-badge" aria-label="unread notifications" hidden></span>
+    </button>
+
+    <!-- Quick log: say or type what happened, check it, log it (src/features/quick-log.js). -->
+    <button type="button" class="theme-toggle-btn hdr-quicklog-btn" id="quick-log-header-btn"
+            data-action="quickLog.open" title="Quick log: say what happened" aria-label="Quick log: say what happened" aria-haspopup="dialog">
+      <span class="ttb-ico" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-mic"/></svg></span>
     </button>
 
     <!-- One search box: this app's books and the website's (src/features/app-search.js). -->
@@ -6770,6 +6777,34 @@
       <span class="as-keys" aria-hidden="true">↑ ↓ to move · Enter to open · Esc to close</span>
       <button type="button" class="btn" data-action="search.close">Close</button>
     </div>
+  </div>
+</div>
+
+<!-- QUICK LOG (src/features/quick-log.js). The card is drawn by the feature;
+     nothing here is saved until Log it is pressed. -->
+<div class="overlay" id="m-quick-log" style="display:none;z-index:1150;">
+  <div class="modal ql-modal" role="dialog" aria-modal="true" aria-labelledby="ql-title">
+    <div class="modal-title">
+      <div class="modal-title-left">
+        <span class="modal-title-badge" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-mic"/></svg></span>
+        <span id="ql-title">Quick log</span>
+      </div>
+      <button type="button" class="btn tx modal-close-btn" data-action="ql.close" aria-label="Close quick log" title="Close (Esc)">✕</button>
+    </div>
+    <div class="ql-input" data-autosave>
+      <div class="ql-input-row" id="ql-input-row">
+        <label class="sr-only" for="ql-text">What happened</label>
+        <textarea id="ql-text" rows="2" maxlength="600" enterkeyhint="go" autocomplete="off"
+                  placeholder="Say or type it: gratuity for the Hound"></textarea>
+        <button type="button" class="ql-mic" id="ql-mic" data-action="ql.listen" aria-pressed="false" aria-label="Speak" title="Speak">
+          <svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-mic"/></svg>
+        </button>
+        <button type="button" class="btn ql-read" id="ql-read" data-action="ql.read">Read it</button>
+      </div>
+      <p class="ql-note" id="ql-note" role="status" aria-live="polite" hidden></p>
+    </div>
+    <div class="ql-body" id="ql-body" data-autosave aria-live="polite"></div>
+    <div class="modal-footer" id="ql-foot"></div>
   </div>
 </div>
 

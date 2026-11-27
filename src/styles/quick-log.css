@@ -1,0 +1,77 @@
+/* Quick log (src/features/quick-log.js): a dialog with the sentence box on top
+   and one calm card per entry under it. Loaded with the feature on first use;
+   the header button's own placement lives in folio.css, which loads at start. */
+.ql-modal { max-width: 620px; width: 100%; display: flex; flex-direction: column; }
+.ql-input { display: flex; flex-direction: column; gap: var(--space-2); padding-bottom: var(--space-3); }
+.ql-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--space-2); align-items: stretch; }
+.ql-input-row[hidden] { display: none; }
+.ql-input-row textarea {
+  width: 100%; min-height: var(--target-min); resize: vertical;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-base); line-height: 1.4;
+}
+.ql-mic {
+  display: grid; place-items: center;
+  width: var(--target-min); min-height: var(--target-min);
+  border: var(--stroke-hair) solid var(--border-default); border-radius: 999px;
+  background: var(--surface-card); color: var(--content-primary); cursor: pointer;
+}
+.ql-mic[hidden] { display: none; }
+.ql-mic .ic { width: 22px; height: 22px; }
+.ql-mic:hover { background: var(--surface-sunken); }
+.ql-mic:active { transform: scale(0.94); }
+.ql-mic:focus-visible { outline: 2px solid var(--folio-accent, var(--gold)); outline-offset: 2px; }
+.ql-mic.is-listening { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+@media (prefers-reduced-motion: no-preference) {
+  .ql-mic.is-listening { animation: qlPulse 1.4s ease-in-out infinite; }
+}
+@keyframes qlPulse { 50% { box-shadow: 0 0 0 6px var(--red-bg); } }
+.ql-read { align-self: stretch; }
+.ql-note { margin: 0; font-size: var(--text-sm); color: var(--content-secondary); text-wrap: pretty; }
+.ql-note[hidden] { display: none; }
+
+.ql-body { display: flex; flex-direction: column; gap: var(--space-3); padding-bottom: var(--space-3); min-height: 0; }
+.ql-empty { color: var(--content-secondary); font-size: var(--text-sm); }
+.ql-empty p { margin: 0 0 var(--space-2); }
+.ql-examples { margin: 0 0 var(--space-3); padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); color: var(--content-primary); }
+.ql-empty-foot { color: var(--content-muted); }
+
+.ql-entry {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-card);
+  border: var(--stroke-hair) solid var(--border-default);
+  border-radius: var(--r3);
+  box-shadow: inset 3px 0 0 var(--status-active);
+}
+.ql-entry.needs-you { box-shadow: inset 3px 0 0 var(--red); }
+.ql-entry.is-skipped { box-shadow: inset 3px 0 0 var(--border-strong); }
+.ql-entry.is-skipped .ql-entry-line { color: var(--content-muted); text-decoration: line-through; }
+.ql-entry-head { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.ql-entry-line { flex: 1 1 14rem; min-width: 0; font-size: var(--text-sm); font-weight: 600; color: var(--content-primary); }
+.ql-include { display: inline-flex; align-items: center; gap: var(--space-1); min-height: var(--target-min); font-size: var(--text-sm); color: var(--content-secondary); cursor: pointer; }
+.ql-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--space-2) var(--space-3); }
+.ql-field { margin: 0; }
+.ql-field :is(input, select) { width: 100%; }
+.ql-toggle { grid-column: 1 / -1; margin: 0; }
+.ql-check { margin: 0; font-size: var(--text-sm); color: var(--amber); text-wrap: pretty; }
+.ql-check.is-block { color: var(--red); font-weight: 600; }
+.ql-check.is-money { color: var(--content-secondary); }
+
+.ql-done { display: flex; flex-direction: column; gap: var(--space-2); }
+.ql-done-head { margin: 0; font-size: var(--text-base); font-weight: 700; color: var(--green); }
+.ql-done-list { margin: 0; padding-left: var(--space-5); display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--text-sm); color: var(--content-primary); }
+.ql-done-hint { margin: 0; font-size: var(--text-sm); color: var(--content-secondary); }
+
+#ql-foot { flex-wrap: wrap; }
+#ql-foot .ql-full { margin-right: auto; }
+
+@media (max-width: 768px) {
+  .ql-input-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .ql-read { grid-column: 1 / -1; min-height: var(--target-min); }
+  .ql-fields { grid-template-columns: 1fr 1fr; }
+  .ql-fields .ql-field:has(select[data-f="bookId"]),
+  .ql-fields .ql-field:has(input[data-f="description"]) { grid-column: 1 / -1; }
+  #ql-foot .btn { min-height: var(--target-min); }
+  #ql-foot .ql-full { flex-basis: 100%; margin-right: 0; order: 3; }
+}

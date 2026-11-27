@@ -180,7 +180,9 @@ const MAIN_IMPORT_BUDGET = {
   // plus today / sheetsUrl.
   // 8 -> 7 when the Website orders screen moved out: invalidateAppliedIds
   // comes from website-orders.js, which owns the cache.
-  'sales-ledger.js': 7,
+  // 7 -> 8: recordGratuity moved here from main.js (shared by the gratuity
+  // form and Quick log) and books its expense at resolveExpenseRate's rate.
+  'sales-ledger.js': 8,
   // Set at extraction: the Gmail scan and its queue read the Sheets URL,
   // write through saveState and recomputeAfters, log to the scan log, and
   // refuse to revert a sale the website owns (WEBSITE_SALE_LOCKED); plus
@@ -362,6 +364,10 @@ const MIN_EXPORTS = {
   // Cartel bridge share, the recovered-order write path, and the relative time
   // the activity feed borrows. Its parsing helpers stay private.
   'website-orders.js': 15,
+  // Written as a feature module from the start: open and close the card,
+  // read a sentence, log what is on it and undo that, plus the card's state
+  // for tests.
+  'quick-log.js': 6,
 };
 
 describe('feature modules are the only home of what they own', () => {
