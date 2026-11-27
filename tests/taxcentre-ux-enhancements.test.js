@@ -23,14 +23,20 @@ describe('Tax Centre UX Enhancements Suite (#2, #3, #10, #15, #18, #19)', () => 
 
     it('sets role="tab", aria-selected, aria-controls and tabindex on subtabs', () => {
       expect(html).toContain('id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger"');
-      expect(html).toContain('id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts"');
-      expect(html).toContain('id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations"');
+      expect(html).toContain('id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions"');
+      expect(html).toContain('id="btn-recptab-vault" role="tab" aria-selected="true" aria-controls="recp-sec-vault"');
+      expect(html).toContain('id="btn-recptab-email-import" role="tab" aria-selected="false" aria-controls="recp-sec-email-import"');
+      expect(html).toContain('id="btn-stripetab-payments" role="tab" aria-selected="true" aria-controls="stripe-sec-payments"');
+      expect(html).toContain('id="btn-stripetab-fees" role="tab" aria-selected="false" aria-controls="stripe-sec-fees"');
     });
 
     it('sets role="tabpanel" and aria-labelledby on sub-sections', () => {
       expect(html).toContain('id="tc-sec-ledger" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-ledger"');
-      expect(html).toContain('id="tc-sec-receipts" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-receipts"');
-      expect(html).toContain('id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations"');
+      expect(html).toContain('id="tc-sec-deductions" role="tabpanel" aria-labelledby="btn-tctab-deductions"');
+      expect(html).toContain('id="recp-sec-vault" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-recptab-vault"');
+      expect(html).toContain('id="recp-sec-email-import" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-recptab-email-import"');
+      expect(html).toContain('id="stripe-sec-payments" class="stripe-section settings-section" role="tabpanel" aria-labelledby="btn-stripetab-payments"');
+      expect(html).toContain('id="stripe-sec-fees" class="stripe-section settings-section" role="tabpanel" aria-labelledby="btn-stripetab-fees"');
     });
 
     it('exports and handles tcSubNavKeydown in taxcentre.js and main.js', () => {

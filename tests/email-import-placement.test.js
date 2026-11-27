@@ -7,21 +7,20 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const html = readFileSync(path.join(root, 'index.html'), 'utf8');
 const styles = readFileSync(path.join(root, 'src/style.css'), 'utf8');
 
-test('email receipt import is a dedicated Tax Centre sub-tab beside integrations', () => {
-  const nav = html.match(/<div class="settings-sub-nav tc-sub-nav"[\s\S]*?<\/div>/)?.[0];
+test('email receipt import is a dedicated Receipts sub-tab beside Receipts Vault', () => {
+  const nav = html.match(/<div class="settings-sub-nav receipts-sub-nav"[\s\S]*?<\/div>/)?.[0];
   expect(nav).toBeTruthy();
-  expect(nav).toMatch(/btn-tctab-integrations/);
-  expect(nav).toMatch(/btn-tctab-email-import/);
-  expect(nav.indexOf('btn-tctab-email-import')).toBeGreaterThan(nav.indexOf('btn-tctab-integrations'));
-  expect(html).toMatch(/id="tc-sec-email-import"[^>]*role="tabpanel"/);
+  expect(nav).toMatch(/btn-recptab-vault/);
+  expect(nav).toMatch(/btn-recptab-email-import/);
+  expect(nav.indexOf('btn-recptab-email-import')).toBeGreaterThan(nav.indexOf('btn-recptab-vault'));
+  expect(html).toMatch(/id="recp-sec-email-import"[^>]*role="tabpanel"/);
   expect(html).not.toMatch(/onclick="openEmailReceiptImportModal\(\)" title="Import expenses from forwarded receipt emails"/);
 });
 
 test('email import renders inline in its sub-tab instead of as a floating dialog', () => {
-  // It lives inside #tc-sec-email-import as ordinary page content, styled
-  // with the same card chrome as the Integrations sub-page right next to it —
-  // not as an `.overlay`/`.modal` dialog that pops up over the app.
-  const section = html.match(/<div id="tc-sec-email-import"[\s\S]*?<\/div>\s*<!-- \/#tc-sec-email-import -->/)?.[0];
+  // It lives inside #recp-sec-email-import as ordinary page content, styled
+  // with the same card chrome — not as an `.overlay`/`.modal` dialog that pops up over the app.
+  const section = html.match(/<div id="recp-sec-email-import"[\s\S]*?<\/div>\s*<!-- \/#recp-sec-email-import -->/)?.[0];
   expect(section).toBeTruthy();
   expect(section).toMatch(/class="card tc-integrations-card email-import-workspace" id="m-email-receipt-import-modal"/);
   expect(section).not.toContain('class="overlay"');

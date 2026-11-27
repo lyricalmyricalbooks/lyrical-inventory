@@ -745,8 +745,8 @@ function showStripeFeeAlert(said) {
     title: said.title,
     detail: said.detail,
     tone: '',
-    actionLabel: 'Open Tax Centre',
-    action: "switchTab('taxcenter')",
+    actionLabel: 'Open Stripe',
+    action: "switchTab('reconcile');switchStripeSubTab('fees');",
   });
 }
 

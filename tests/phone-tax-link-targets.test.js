@@ -15,8 +15,8 @@ describe('phone Tax Centre link tap targets', () => {
   });
 });
 
-describe('phone Tax Centre card titles', () => {
-  const rule = css.match(/#tab-taxcenter \.rec-card-title\s*\{[^}]*\}/)?.[0] ?? '';
+describe('phone Tax Centre & Receipts card titles', () => {
+  const rule = css.match(/#tab-taxcenter \.rec-card-title,\s*#tab-receipts \.rec-card-title\s*\{[^}]*\}/)?.[0] ?? '';
 
   it('leads in the Anton display face, capitals, no faked bold', () => {
     expect(rule).toMatch(/font-family:\s*'Anton'/);

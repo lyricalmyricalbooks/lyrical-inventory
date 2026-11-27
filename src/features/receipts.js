@@ -101,7 +101,7 @@ import {
   refreshRecurringCharges,
   renderTaxCenter,
   saveTaxCenter,
-  switchTaxCenterSubTab,
+  switchReceiptsSubTab,
   tcExpenseRowDrop,
 } from './taxcentre.js';
 import {
@@ -2492,8 +2492,8 @@ function openEmailReceiptImportModal({ review = false } = {}) {
     closeM('notifications');
     const notifications = $('m-notifications');
     if (notifications) notifications.style.display = 'none';
-    switchTab('taxcenter');
-    switchTaxCenterSubTab('email-import');
+    switchTab('receipts');
+    switchReceiptsSubTab('email-import');
 
     openM('email-receipt-import-modal');
     if ($('email-receipt-results')) $('email-receipt-results').innerHTML = '';
@@ -2710,7 +2710,7 @@ function startEmailInboxWatcher() {
 // dialog that gets dismissed) — so the section's own display, not the
 // workspace div inside it, is what says whether the owner is looking at it.
 function _emailImportTabVisible() {
-  const sec = $('tc-sec-email-import');
+  const sec = $('recp-sec-email-import');
   return !!sec && sec.style.display !== 'none';
 }
 

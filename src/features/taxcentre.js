@@ -491,6 +491,9 @@ function tcClearLedgerFilters() {
 function tcFilterLedgerByReceiptStorage(storageType) {
   _tcLedgerSpecialFilter = (_tcLedgerSpecialFilter === storageType) ? '' : storageType;
   _tcLedgerPage = 0;
+  if (typeof window.switchTab === 'function' && !$('tab-taxcenter')?.classList.contains('active')) {
+    window.switchTab('taxcenter');
+  }
   switchTaxCenterSubTab('ledger');
   renderTaxCenter();
   const target = $('tc-ledger-search') || $('tc-sec-ledger');
@@ -3154,9 +3157,8 @@ function restoreDeductionGaps() {
 }
 
 function switchTaxCenterSubTab(subTabName) {
-  const leavingEmailImport = activeTaxCenterSubTab === 'email-import' && subTabName !== 'email-import';
-  activeTaxCenterSubTab = subTabName || 'ledger';
-  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations', 'email-import'];
+  const subTabs = ['ledger', 'deductions'];
+  activeTaxCenterSubTab = subTabs.includes(subTabName) ? subTabName : 'ledger';
   subTabs.forEach(tab => {
     const btn = document.getElementById('btn-tctab-' + tab);
     const sec = document.getElementById('tc-sec-' + tab);
@@ -3175,22 +3177,10 @@ function switchTaxCenterSubTab(subTabName) {
     }
   });
   if (activeTaxCenterSubTab === 'deductions') renderDeductionGaps();
-  if (activeTaxCenterSubTab === 'receipts') {
-    if (_tcVaultViewMode === 'gallery') {
-      _tcRenderReceiptGallery();
-    } else {
-      _tcRenderReceiptStorage();
-    }
-  }
-  // Navigating away must actually stop an in-flight Gmail search/extraction,
-  // the same cleanup that used to fire when the old dialog was dismissed —
-  // otherwise it keeps running against a tab the owner can no longer see.
-  if (leavingEmailImport) window.closeEmailReceiptImportModal();
-  if (activeTaxCenterSubTab === 'email-import') window.openEmailReceiptImportModal();
 }
 
 function tcSubNavKeydown(e) {
-  const subTabs = ['ledger', 'receipts', 'deductions', 'integrations', 'email-import'];
+  const subTabs = ['ledger', 'deductions'];
   const currentIdx = subTabs.indexOf(activeTaxCenterSubTab);
   if (currentIdx === -1) return;
 
@@ -3212,6 +3202,77 @@ function tcSubNavKeydown(e) {
     const targetBtn = document.getElementById('btn-tctab-' + nextTab);
     if (targetBtn) targetBtn.focus();
   }
+}
+
+let activeReceiptsSubTab = 'vault';
+
+function switchReceiptsSubTab(subTabName) {
+  const subTabs = ['vault', 'email-import'];
+  const leavingEmailImport = activeReceiptsSubTab === 'email-import' && subTabName !== 'email-import';
+  activeReceiptsSubTab = subTabs.includes(subTabName) ? subTabName : 'vault';
+  subTabs.forEach(tab => {
+    const btn = document.getElementById('btn-recptab-' + tab);
+    const sec = document.getElementById('recp-sec-' + tab);
+    if (btn && sec) {
+      if (tab === activeReceiptsSubTab) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        btn.setAttribute('tabindex', '0');
+        sec.style.display = '';
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+        btn.setAttribute('tabindex', '-1');
+        sec.style.display = 'none';
+      }
+    }
+  });
+  if (activeReceiptsSubTab === 'vault') {
+    if (_tcVaultViewMode === 'gallery') {
+      _tcRenderReceiptGallery();
+    } else {
+      _tcRenderReceiptStorage();
+    }
+  }
+  // Navigating away must actually stop an in-flight Gmail search/extraction,
+  // otherwise it keeps running against a tab the owner can no longer see.
+  if (leavingEmailImport && typeof window.closeEmailReceiptImportModal === 'function') {
+    window.closeEmailReceiptImportModal();
+  }
+  if (activeReceiptsSubTab === 'email-import' && typeof window.openEmailReceiptImportModal === 'function') {
+    window.openEmailReceiptImportModal();
+  }
+}
+
+function receiptsSubNavKeydown(e) {
+  const subTabs = ['vault', 'email-import'];
+  const currentIdx = subTabs.indexOf(activeReceiptsSubTab);
+  if (currentIdx === -1) return;
+
+  let nextIdx = -1;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    nextIdx = (currentIdx + 1) % subTabs.length;
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    nextIdx = (currentIdx - 1 + subTabs.length) % subTabs.length;
+  } else if (e.key === 'Home') {
+    nextIdx = 0;
+  } else if (e.key === 'End') {
+    nextIdx = subTabs.length - 1;
+  }
+
+  if (nextIdx !== -1) {
+    e.preventDefault();
+    const nextTab = subTabs[nextIdx];
+    switchReceiptsSubTab(nextTab);
+    const targetBtn = document.getElementById('btn-recptab-' + nextTab);
+    if (targetBtn) targetBtn.focus();
+  }
+}
+
+function renderReceiptsPage() {
+  if (isAuthor()) return;
+  if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
+  switchReceiptsSubTab(activeReceiptsSubTab);
 }
 
 // ── Tax Season Pre-Flight Audit Modal ───────────────────────────────────────
@@ -3699,6 +3760,10 @@ function renderTaxCenter() {
   if (TAX_CENTER?.settings?.geminiKey) _warmGeminiModelCache(TAX_CENTER.settings.geminiKey);
   // Preserve active subtab state
   switchTaxCenterSubTab(activeTaxCenterSubTab);
+  if ($('tab-receipts')?.classList.contains('active') && activeReceiptsSubTab === 'vault') {
+    if (_tcVaultViewMode === 'gallery') _tcRenderReceiptGallery();
+    else _tcRenderReceiptStorage();
+  }
   // Populate years before restoring a saved selection such as next year.
   _tcRefreshYearOptions();
   // Restore the saved ledger view (year + search + type) before reading the year.
@@ -5236,6 +5301,9 @@ export {
   setTcLedgerPage,
   snoozePendingExpense,
   switchTaxCenterSubTab,
+  switchReceiptsSubTab,
+  receiptsSubNavKeydown,
+  renderReceiptsPage,
   tcClearCashFlowBucket,
   tcClearLedgerFilters,
   tcClearSelectedTrip,
