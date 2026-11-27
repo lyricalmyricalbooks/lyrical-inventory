@@ -753,7 +753,7 @@ function render() {
     const openIds = new Set(Array.from(host.querySelectorAll('details[data-draft][open]'), el => el.dataset.draft));
     // On a wide screen the panel beside the list is never left blank while
     // there is something to look at: it opens the first receipt in the pile.
-    if (autoPick && wide() && drafts.length && !drafts.some(draft => openIds.has(draft.id))) openIds.add(drafts[0].id);
+    if (autoPick && wide() && (pile === 'needs' || pile === 'ready') && drafts.length && !drafts.some(draft => openIds.has(draft.id))) openIds.add(drafts[0].id);
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
@@ -1036,6 +1036,7 @@ function syncSheet(row) {
 
 function onToggle(event) {
   const row = event.target;
+  if (row instanceof HTMLElement && row.matches('details[data-aside]')) { asideOpen = row.open; return; }
   if (!(row instanceof HTMLElement) || !row.matches('details[data-draft]')) return;
   const empty = host?.querySelector('[data-rf-pane-empty]');
   syncSheet(row);
@@ -1109,6 +1110,13 @@ async function onClick(event) {
       draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); autoPick = true; await persist(); render(); return;
     }
     if (button.dataset.reread) { await rereadSetAside(button.dataset.reread); return; }
+    if (button.dataset.asideClear) { await clearSetAside([button.dataset.asideClear]); return; }
+    if (button.hasAttribute('data-aside-more')) { asideAll = !asideAll; render(); return; }
+    if (button.hasAttribute('data-aside-clear-all')) {
+      const keys = setAsideEmails().map(row => row.key);
+      if (deps.confirm && !(await deps.confirm(`Remove all ${keys.length} emails from this list? They stay in Gmail and are never read again. Your receipts are not touched.`))) return;
+      await clearSetAside(keys); return;
+    }
     if (button.dataset.retryReason) { await retryFailedEmails(button.dataset.retryReason); return; }
     switch (button.dataset.action) {
       case 'connect': await toggleConnection(); break;
@@ -1661,6 +1669,8 @@ async function retryFailedEmails(reason = '') {
 // Either judgement can be wrong, and without a way back a real receipt that was
 // wrongly set aside stayed missing for good.
 const SET_ASIDE_SHOWN = 30;
+const SET_ASIDE_FOLDED = 5;
+let asideOpen = false, asideAll = false;
 const SET_ASIDE_WHY = {
   'no-amount': 'no price found in it',
   notification: 'looked like a shipping or account notice',
@@ -1677,7 +1687,7 @@ const gmailLink = key => {
 function setAsideEmails() {
   const prefix = state.account + ':';
   return Object.entries(state.scans)
-    .filter(([key, scan]) => scan.done && !scan.error && !scan.count && key.startsWith(prefix))
+    .filter(([key, scan]) => scan.done && !scan.error && !scan.count && !scan.cleared && key.startsWith(prefix))
     .map(([key, scan]) => ({ key, subject: scan.subject || '', from: senderOnly(scan.from), date: scan.date || '',
       why: SET_ASIDE_WHY[scan.skipped] || 'read, but no receipt found in it' }));
 }
@@ -1688,18 +1698,24 @@ function renderSetAside() {
   const all = setAsideEmails();
   // The sender lists belong to this pile even before any email is set aside.
   if (!all.length) return renderSenderLists();
-  const rows = all.slice(-SET_ASIDE_SHOWN).reverse();
+  const latest = all.slice(-SET_ASIDE_SHOWN).reverse();
+  // Folded to a few rows: a long list of emails that are not receipts is
+  // rarely what the publisher came for, so it never fills the page.
+  const rows = asideAll ? latest : latest.slice(0, SET_ASIDE_FOLDED);
   const canRetry = !busy && tokenLive();
   const dismissed = dismissedCount();
   // The pile's count includes receipts the publisher dismissed, which are
   // listed under this block. Saying only "24 emails" beside a tile reading 26
   // looked like two emails had gone missing.
   const heading = `${all.length} email${all.length === 1 ? '' : 's'} set aside as not receipts`;
-  return `<details class="finder-failures finder-setaside" open>
+  return `<details class="finder-failures finder-setaside" data-aside ${asideOpen ? 'open' : ''}>
     <summary><span class="finder-failures-sum">${heading}</span>
-      <span class="finder-failures-hint">${dismissed ? `plus ${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed, below` : 'Missing one? Read it again'}</span></summary>
-    ${tokenLive() ? '' : `<div class="finder-setaside-gate"><p>Reconnect Gmail to read any of these again. You can still open them in Gmail to check.</p>
-      <button type="button" class="btn sm gold" data-action="connect">Reconnect Gmail</button></div>`}
+      <span class="finder-failures-hint">${dismissed ? `plus ${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed, below` : asideOpen ? 'Missing one? Read it again' : 'Show them'}</span></summary>
+    <div class="finder-setaside-bar">
+      <p>${tokenLive() ? 'Missing a receipt? Read that email again. Remove the rest to clear the list.' : 'Reconnect Gmail to read any of these again. You can still open them in Gmail, or remove them from this list.'}</p>
+      ${tokenLive() ? '' : '<button type="button" class="btn sm gold" data-action="connect">Reconnect Gmail</button>'}
+      <button type="button" class="btn sm" data-aside-clear-all>Clear all ${all.length}</button>
+    </div>
     <ul class="finder-failures-list">${rows.map(row => {
       const title = row.subject || 'Subject not saved';
       const day = row.date ? new Date(row.date + 'T12:00:00') : null;
@@ -1710,10 +1726,24 @@ function renderSetAside() {
         <p><strong class="${row.subject ? '' : 'finder-setaside-nosubject'}">${esc(title.slice(0, 120))}</strong><br><span class="finder-setaside-why">${esc(meta)}</span></p>
         <a class="btn sm finder-setaside-open" href="${esc(gmailLink(row.key))}" target="_blank" rel="noopener noreferrer" aria-label="Open in Gmail: ${esc(title.slice(0, 80))}">Open in Gmail</a>
         ${canRetry ? `<button type="button" class="btn sm" data-reread="${esc(row.key)}" aria-label="Read this email again: ${esc(title.slice(0, 80))}">Read again</button>` : ''}
+        <button type="button" class="btn sm finder-setaside-x" data-aside-clear="${esc(row.key)}" aria-label="Remove from this list: ${esc(title.slice(0, 80))}" title="Remove from this list">✕</button>
       </li>`;
     }).join('')}</ul>
-    <p class="finder-failures-foot">${all.length > SET_ASIDE_SHOWN ? `Showing the latest ${SET_ASIDE_SHOWN}. ` : ''}Reading again uses the AI once for that email; anything it finds appears above for your approval.</p>
+    <p class="finder-failures-foot">${latest.length > rows.length ? `<button type="button" class="btn sm" data-aside-more>Show all ${latest.length}</button> ` : asideAll && latest.length > SET_ASIDE_FOLDED ? '<button type="button" class="btn sm" data-aside-more>Show fewer</button> ' : ''}${all.length > SET_ASIDE_SHOWN && asideAll ? `Showing the latest ${SET_ASIDE_SHOWN}. ` : ''}Removing an email only takes it off this list. It stays in Gmail and is never read again.</p>
   </details>${renderSenderLists()}${dismissed ? `<h4 class="finder-dismissed-head">${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed</h4>` : ''}`;
+}
+
+// Takes set-aside emails off the list. The scan record stays, marked cleared,
+// so the email still counts as checked and is never paid for again.
+async function clearSetAside(keys) {
+  let changed = 0;
+  for (const key of keys) {
+    const scan = state.scans[key];
+    if (scan?.done && !scan.cleared) { state.scans[key] = { ...scan, cleared: true }; changed++; }
+  }
+  if (!changed) return;
+  await persist(); render();
+  announce(changed === 1 ? 'Removed from the list.' : `${changed} emails removed from the list.`);
 }
 
 // Senders whose receipts keep being dismissed are offered as "never read",
