@@ -322,3 +322,34 @@ export function mergeFinderSnapshot(previous, incoming) {
   }
   return { ...previous, ...next, drafts: [...drafts.values()], emails, scans };
 }
+
+// The few words on a receipt's row saying why it is waiting, taken from the
+// first thing that holds it back. The full list is in the receipt's panel.
+const WAIT_WORDS = [
+  [/GST\/HST/, 'No GST/HST number'],
+  [/line items do not add up/i, 'Line items don’t add up'],
+  [/order details say the total/i, 'Two different totals'],
+  [/subtotal|tax lines|tax is more/i, 'Totals don’t match'],
+  [/Vendor is missing/, 'Shop name missing'],
+  [/date/i, 'Check the date'],
+  [/currency/i, 'Choose the currency'],
+  [/Enter the total/, 'Total missing'],
+  [/description of what was bought/i, 'No description'],
+  [/Spot check/, 'Spot check'],
+];
+const STATUS_WORDS = { ready: 'Ready', queued: 'Waiting to file', imported: 'Filed', ignored: 'Dismissed', duplicate: 'Same order as another' };
+
+/** {text, tone} for a receipt's row; tone is green, amber, red, blue or gray. */
+export function receiptWaitReason(draft, status) {
+  if (status === 'duplicate') return { text: STATUS_WORDS.duplicate, tone: 'red' };
+  if (status !== 'review') {
+    return { text: STATUS_WORDS[status] || 'Ready', tone: status === 'ignored' ? 'gray' : status === 'queued' ? 'amber' : 'green' };
+  }
+  const first = [...receiptProblems(draft), ...receiptReviewReasons(draft)][0] || '';
+  const hit = WAIT_WORDS.find(([pattern]) => pattern.test(first));
+  if (hit) return { text: hit[1], tone: hit[1] === 'Choose the currency' ? 'blue' : 'amber' };
+  if (draft.filledFromEmail?.length) return { text: 'Check the shop or date', tone: 'amber' };
+  if (draft.currency && draft.currency !== 'CAD') return { text: 'Confirm the currency', tone: 'blue' };
+  if (typeof draft.confidence === 'number' && draft.confidence < 0.85) return { text: 'Reader wasn’t sure', tone: 'amber' };
+  return { text: 'Worth a check', tone: 'amber' };
+}

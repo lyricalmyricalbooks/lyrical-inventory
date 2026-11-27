@@ -285,3 +285,33 @@ export function describeBankCheck({ matched, missing }) {
   parts.push(missing.length ? `${missing.length} with no receipt yet` : 'none missing a receipt');
   return parts.join(', ') + '.';
 }
+
+/** Where a copy of the bank check is kept on this device, per publisher. */
+export const BANK_LOCAL_KEY = 'lyrical-bank-check-v1';
+
+/** "RBC Royal Bank" for a connected bank, "rbc-nov.csv" for a statement file. */
+export function bankSourceName(source) {
+  const text = String(source || '');
+  if (text.startsWith('bank:')) return text.slice(5) || 'your bank';
+  if (text.startsWith('file:')) return text.slice(5) || 'your statement';
+  return 'your statement';
+}
+
+/**
+ * Receipts waiting in the finder, matched against the bank alongside the ones
+ * already filed, so a charge is never offered to both. Returns
+ * {byDraft: Map(draftId → {line, sure, why}), missing: [line]}: what each
+ * waiting receipt was paid with, and the charges no receipt explains yet.
+ */
+export function matchDraftsToBank(lines, expenses, drafts, { links = {}, from = '', to = '' } = {}) {
+  const prefix = 'finder-draft:';
+  const waiting = (drafts || []).filter(d => d && !['imported', 'ignored'].includes(d.status) && cents(Number(d.amount)) > 0)
+    .map(d => ({ id: prefix + d.id, date: d.date, vendor: d.vendor, desc: d.description, amount: d.amount, currency: d.currency }));
+  const result = matchBankLines(lines, [...(expenses || []), ...waiting], { links, from, to });
+  const byDraft = new Map();
+  for (const m of result.matched) {
+    const id = String(m.expense.id);
+    if (id.startsWith(prefix)) byDraft.set(id.slice(prefix.length), { line: m.line, sure: m.sure, why: m.why });
+  }
+  return { byDraft, missing: result.missing };
+}

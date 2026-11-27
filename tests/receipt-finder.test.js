@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { receiptQuery, receiptMoney, receiptDate, normalizeFoundReceipt, receiptProblems, receiptDuplicate, receiptReviewStatus, receiptExpense, mergeFinderSnapshot, receiptSkipReason, emailSenderName, emailDay } from '../src/lib/receipt-finder.js';
+import { receiptQuery, receiptMoney, receiptDate, normalizeFoundReceipt, receiptProblems, receiptDuplicate, receiptReviewStatus, receiptExpense, mergeFinderSnapshot, receiptSkipReason, emailSenderName, emailDay, receiptWaitReason } from '../src/lib/receipt-finder.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, gmailMessage } from '../src/lib/receipt-finder-client.js';
 import { flushReceiptOutbox } from '../src/lib/receipt-finder-outbox.js';
 
@@ -260,3 +260,18 @@ describe('receipt finder — a date that has not happened yet', () => {
   });
 });
 
+
+describe('why a receipt waits', () => {
+  const base = { vendor: 'Paper Supply Co', date: '2026-11-20', currency: 'CAD', amount: 169.5, subtotal: 150, tax: 19.5, confidence: 0.95, lineItems: [] };
+  it('names the first thing holding it back in a few words', () => {
+    expect(receiptWaitReason({ ...base }, 'review')).toEqual({ text: 'No GST/HST number', tone: 'amber' });
+    expect(receiptWaitReason({ ...base, supplierTaxNumber: '123456789RT0001', lineItems: [{ description: 'Paper', amount: 140 }] }, 'review').text).toBe('Line items don’t add up');
+    expect(receiptWaitReason({ ...base, vendor: '' }, 'review').text).toBe('Shop name missing');
+    expect(receiptWaitReason({ ...base, supplierTaxNumber: 'x', currency: 'USD', tax: null, subtotal: null }, 'review')).toEqual({ text: 'Confirm the currency', tone: 'blue' });
+  });
+  it('uses the status itself once nothing is in the way', () => {
+    expect(receiptWaitReason(base, 'duplicate')).toEqual({ text: 'Same order as another', tone: 'red' });
+    expect(receiptWaitReason(base, 'ready').text).toBe('Ready');
+    expect(receiptWaitReason(base, 'ignored')).toEqual({ text: 'Dismissed', tone: 'gray' });
+  });
+});
