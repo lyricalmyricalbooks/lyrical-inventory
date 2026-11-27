@@ -272,7 +272,7 @@ export function readQuickLog(text, ctx = {}) {
   // nothing else to go on, is for that book — but it is still flagged, so the
   // card shows which book it picked rather than quietly assuming.
   for (const e of entries) {
-    if ((e.type === 'gratuity' || e.type === 'sale') && !e.bookId && activeBookId && books[activeBookId]) {
+    if ((e.type === 'gratuity' || e.type === 'sale') && !e.bookId && activeBookId && Object.hasOwn(books, activeBookId)) {
       e.bookId = activeBookId;
       e.assumedBook = true;
       e.missing = [];
@@ -321,8 +321,9 @@ export function checkQuickLogEntry(entry, { books = {}, states = {}, today = '',
     if (Number(entry.amount) >= 1000) notes.push('That is a large amount. Worth a second look.');
     return { blocking, notes };
   }
-  const book = books[entry.bookId];
-  const s = states[entry.bookId];
+  const own = Object.hasOwn(books, String(entry.bookId ?? '')) && Object.hasOwn(states, String(entry.bookId ?? ''));
+  const book = own ? books[entry.bookId] : null;
+  const s = own ? states[entry.bookId] : null;
   if (!book || !s) { blocking.push('Pick the book.'); return { blocking, notes }; }
   if (entry.assumedBook) notes.push(`No book was named, so this is for ${book.title}, the book on screen.`);
   const qty = Math.max(1, Number(entry.qty) || 1);
@@ -380,7 +381,7 @@ export function entriesFromAi(answer, { books = {}, today, baseCurrency = 'CAD',
       out.push(e);
       continue;
     }
-    const bookId = books[a.bookId] ? a.bookId : '';
+    const bookId = Object.hasOwn(books, String(a.bookId ?? '')) ? String(a.bookId) : '';
     const qty = Math.max(1, Math.min(999, parseInt(a.qty, 10) || 1));
     if (type === 'gratuity') {
       out.push({ type, date, bookId, qty, pile: a.pile === 'author' ? 'author' : 'publisher', recipient: String(a.recipient || '').trim().slice(0, 60), expense: a.expense === true, said: '', fromAi: true, missing: bookId ? [] : ['book'] });

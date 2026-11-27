@@ -167,6 +167,12 @@ describe('the AI reader', () => {
     expect(out[2]).toMatchObject({ type: 'expense', amount: 10, category: 'Office Supplies', date: today });
   });
 
+  it('never takes "__proto__" or another inherited name for a book', () => {
+    const out = entriesFromAi({ entries: [{ type: 'gratuity', bookId: '__proto__' }, { type: 'sale', bookId: 'toString' }] }, { books, today });
+    expect(out.map(e => e.bookId)).toEqual(['', '']);
+    expect(checkQuickLogEntry({ type: 'gratuity', bookId: '__proto__', qty: 1 }, { books, states: {}, today }).blocking).toEqual(['Pick the book.']);
+  });
+
   it('gives the AI the catalogue and today', () => {
     const p = quickLogAiPrompt('gift the hound', { books, today, categories: ['Other'] });
     expect(p).toContain('hound: The Hound of Heaven');

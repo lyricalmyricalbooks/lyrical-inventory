@@ -203,6 +203,9 @@ function syncHistoryVoidDeletion(h, isVoided, book = getBook()) {
  * enough copies on hand, and then nothing is changed.
  */
 async function recordGratuity(bookId, { qty = 1, ref = '', notes = '', date, gratSource = 'publisher', expenseEach = 0 } = {}) {
+  // Own keys only: a book id is a picked or spoken value, and "__proto__"
+  // must name no book rather than the object every state inherits from.
+  if (!Object.hasOwn(states, bookId) || !Object.hasOwn(BOOKS, bookId)) throw new Error('Unknown book');
   const s = states[bookId], book = BOOKS[bookId];
   if (!s || !book) throw new Error('Unknown book');
   qty = Math.max(1, parseInt(qty, 10) || 1);
