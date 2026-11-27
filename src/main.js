@@ -712,12 +712,17 @@ export const intelScreen = lazyFeature(() => import('./features/intel.js'), INTE
 export const inventoryValuationTools = lazyFeature(() => import('./features/inventory-valuation.js'), INVENTORY_VALUATION_WINDOW_NAMES, {
   onError: lazyLoadFailed('Stock valuation'),
 });
+// Quick log (the header's microphone) loads on its first tap.
+export const quickLogFeature = lazyFeature(() => import('./features/quick-log.js'), [], {
+  onError: lazyLoadFailed('Quick log'),
+});
 const intelActionStubs = Object.fromEntries(INTEL_ACTION_NAMES.map(name => [
   name, (el, event) => intelScreen.get().then(m => m.intelActions[name](el, event), () => undefined),
 ]));
 
 registerActions({
   ...intelActionStubs, ...bigCartelActions, ...claudeSettingsActions,
+  'quickLog.open': () => quickLogFeature.call('openQuickLog'),
   // Phone navigation: the bottom bar, the Today tiles and rows, the All Books list.
   'nav.tab': el => switchTab(el.dataset.go),
   'nav.book': el => switchBook(el.dataset.book),
@@ -1070,6 +1075,7 @@ import {
 } from './features/dashboard.js';
 import {
   addSaleToState,
+  recordGratuity,
   recordOrder,
   recordOrderPendingTransfer,
   syncHistoryVoidDeletion,
@@ -11129,61 +11135,21 @@ async function submitGratuity(ev) {
     const book = getBook(), qty = parseInt($('g-qty').value) || 1, ref = $('g-ref').value.trim(), notes = $('g-notes').value.trim(), date = $('g-date').value || today();
     const gratSource = ($('g-source') && $('g-source').value) || 'publisher';
     const expenseIt = $('g-expense-cb') && $('g-expense-cb').checked;
-    let expVal = 0;
-    if (expenseIt) expVal = parseFloat($('g-exp-val').value) || 0;
-
-    // The book is fixed now. The exchange-rate lookup below can take a moment,
-    // and switching books meanwhile used to save the gift to the book switched
-    // to (and leave it unsaved on its own). The rate is looked up before
-    // anything is changed, and the save names this book.
+    const expenseEach = expenseIt ? (parseFloat($('g-exp-val').value) || 0) : 0;
+    // The save itself (stock, history row, optional expense, Sheet row) is
+    // recordGratuity in features/sales-ledger.js, shared with Quick log.
     const bookId = activeBook;
-    const s = getState();
-    if (qty > s.stock) { showToast('⚠ Not enough stock on hand', 'warn'); return; }
-    const currency = getBookCurrencyCode(book);
-    // The rate for the gift's own date; with none to hand (offline) the CAD
-    // value is left empty and flagged for healExpenseRates — never 1:1.
-    const cadRate = (expenseIt && expVal > 0) ? await resolveExpenseRate(currency, date) : null;
-    const num = 'GRAT-' + Date.now().toString().slice(-6);
-    // Reduce stock only — no revenue, no sold count
-    s.stock = Math.max(0, s.stock - qty);
-    if (!s.chStats['Gratuity']) s.chStats['Gratuity'] = { txns: 0, units: 0, revenue: 0 };
-    s.chStats['Gratuity'].txns++; s.chStats['Gratuity'].units += qty;
-    const sheetsId = makeEventId();
-    s.hist.unshift({ num, chan: 'Gratuity', qty, price: 0, after: s.stock, notes: (ref ? (ref + (notes ? ' · ' + notes : '')) : notes) || '', date, gratuity: true, gratSource, sheetsId });
-
-    if (expenseIt && expVal > 0) {
-      if (!s.expenses) s.expenses = [];
-      const totalExp = qty * expVal;
-      const baseAmount = cadRate ? roundCents(totalExp * cadRate) : null;
-
-      s.expenses.unshift({
-        id: Date.now(),
-        desc: `Gratuity: ${ref || notes || 'Gifted copy'}`,
-        cat: 'Marketing & Advertising',
-        amount: totalExp,
-        currency: currency,
-        origAmount: totalExp,
-        origCurrency: currency,
-        baseAmount: baseAmount,
-        ...(cadRate ? {} : { fxMissing: true }),
-        date: date,
-        ref: num,
-        received: false,
-        gratuity: true
-      });
-    }
-
-    recomputeAfters(s, book);
-    // Save first, then repaint: a screen failing to draw must never stop the
-    // gift being saved (and a retry would then take the stock off twice).
-    saveState(bookId);
+    const done = await recordGratuity(bookId, { qty, ref, notes, date, gratSource, expenseEach });
+    if (!done.ok) { showToast('⚠ Not enough stock on hand', 'warn'); return; }
+    const s = states[bookId];
+    // Saved already: a screen failing to draw must never stop the gift being
+    // saved (and a retry would then take the stock off twice).
     guardScreen('after-gratuity', () => {
       renderHist();
-      if (expenseIt) renderExpenses();
+      if (done.expense) renderExpenses();
       updateDash();
     });
-    syncToSheets({ type: 'order', book: book.title, date, num, chan: 'Gratuity', qty, price: 0, total: 0, stockAfter: s.stock, notes: (ref ? ref + ' · ' : '') + notes + (notes || ref ? ' · ' : '') + gratSource + ' pile', sheetsId, currency: getBookCurrencyCode(book) });
-    addLog('log-gratuity', `${num}: ${qty} gifted → ${s.stock} remaining`, 'ok');
+    addLog('log-gratuity', `${done.row.num}: ${qty} gifted → ${s.stock} remaining`, 'ok');
     if (s.stock <= book.threshold) addLog('log-gratuity', '⚠ Below threshold!', 'warn');
     $('g-ref').value = ''; $('g-qty').value = '1'; $('g-notes').value = ''; $('g-date').value = today();
     if ($('g-expense-cb')) {
@@ -11191,7 +11157,7 @@ async function submitGratuity(ev) {
       window.toggleGratuityExpense();
     }
     if (typeof window.updateGratuitySourceHint === 'function') window.updateGratuitySourceHint();
-    showToast('✓ Gratuity logged' + (expenseIt && expVal > 0 ? ' and expensed' : ''));
+    showToast('✓ Gratuity logged' + (done.expense ? ' and expensed' : ''));
   });
 }
 
