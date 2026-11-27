@@ -2999,6 +2999,21 @@ function switchEmailImportTab(tab) {
   if (panelManual) panelManual.style.display = tab === 'manual' ? 'block' : 'none';
   if (panelDirect) panelDirect.style.display = tab === 'direct' ? 'block' : 'none';
   if (tab === 'direct' && !$('email-direct-chips')?.childElementCount) renderDirectGmailChips();
+  const tabBank = $('email-tab-bank');
+  const panelBank = $('email-panel-bank');
+  tabBank?.setAttribute('aria-selected', String(tab === 'bank'));
+  tabBank?.classList.toggle('active', tab === 'bank');
+  if (panelBank) panelBank.style.display = tab === 'bank' ? 'block' : 'none';
+  if (tab === 'bank' && panelBank) {
+    if ($('email-receipt-scan-btn')) $('email-receipt-scan-btn').hidden = true;
+    // Loaded on first use: most visits to this window never open it.
+    import('./bank-check.js').then(({ mountBankCheck }) => mountBankCheck(panelBank, {
+      ...receiptFinderDependencies(), confirm: confirmDialog,
+    })).catch(error => {
+      console.error('[bank-check] Could not open', error);
+      showToast('Could not open the bank check: ' + error.message, 'err');
+    });
+  }
   _updateEmailExtractButtonLabel();
 }
 

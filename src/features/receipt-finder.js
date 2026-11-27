@@ -1,7 +1,7 @@
 import { escapeHtml as esc } from '../lib/html.js';
 import { emailDay, emailSenderName as senderName, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptReviewReasons, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
 import { senderDomain, senderRule, normalizeSenderRules, withSenderRule, senderSuggestions, craRecordGaps, spotCheckAccuracy, sameOrderElsewhere } from '../lib/receipt-signals.js';
-import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
+import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep, fetchReceiptLink } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
@@ -937,11 +937,12 @@ async function toggleConnection() {
 async function loadDailySweep(endpoint, report) {
   if (report && !report.capabilities?.receiptDailySweep) { dailySweep = null; return; }
   try {
-    dailySweep = await receiptDailySchedule({ endpoint, op: 'status' });
+    const idToken = await deps.user()?.getIdToken?.();
+    dailySweep = await receiptDailySchedule({ endpoint, idToken, op: 'status' });
     // The publisher asked for an hourly check (2026-11-26). A script new enough
     // to report how often it runs, still set to once a day, is moved over.
     if (dailySweep?.enabled && dailySweep.every === 'day') {
-      dailySweep = await receiptDailySchedule({ endpoint, op: 'set', enabled: true, hour: dailySweep.hour ?? 5, every: 'hour' });
+      dailySweep = await receiptDailySchedule({ endpoint, idToken, op: 'set', enabled: true, hour: dailySweep.hour ?? 5, every: 'hour' });
     }
   } catch { dailySweep = null; }
   loadSenderRules().catch(() => {});
@@ -972,7 +973,8 @@ async function setSenderRule(domain, kind) {
 async function setDailySweep(enabled) {
   const endpoint = activeEndpoint();
   if (!endpoint) throw new Error('Connect your Google Sheet script first');
-  dailySweep = await receiptDailySchedule({ endpoint, op: 'set', enabled, hour: dailySweep?.hour ?? 5, every: 'hour' });
+  const idToken = await deps.user()?.getIdToken?.();
+  dailySweep = await receiptDailySchedule({ endpoint, idToken, op: 'set', enabled, hour: dailySweep?.hour ?? 5, every: 'hour' });
   render();
   announce(enabled
     ? 'Gmail is now checked every hour, even with the app closed. Anything found waits in Tax Centre › Import from Email for your review.'
@@ -1218,9 +1220,34 @@ async function readCandidate(id, signal, endpoint, force = false) {
     const useAppAi = deps.hasAppAi?.();
     stage(key, useAppAi ? 'the AI is reading it' : 'your Sheet script’s AI is reading it', label);
     const idToken = useAppAi ? undefined : await deps.user().getIdToken();
-    const result = await withTimeLimit(AI_LIMIT_MS, signal, TOO_SLOW_AI, child => extractFoundReceipts({ endpoint,
+    let result = await withTimeLimit(AI_LIMIT_MS, signal, TOO_SLOW_AI, child => extractFoundReceipts({ endpoint,
       idToken, email, signal: child, readAi: useAppAi ? deps.readAi : undefined }));
     if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
+    // Nothing in the email but a "view your receipt" link: download what the
+    // link points at through the Sheet script and read that. Only a link that
+    // cannot be had (a sign-in page) is left on the list to open by hand.
+    let linkMiss = '';
+    if (!result.receipts.length && !email.fileParts.length && email.receiptLink && endpoint) {
+      stage(key, 'downloading the receipt from its link', label);
+      const linked = await withTimeLimit(GMAIL_LIMIT_MS * 2, signal, TOO_SLOW_GMAIL, async child => fetchReceiptLink({ endpoint,
+        idToken: idToken || await deps.user().getIdToken(), link: email.receiptLink, signal: child }));
+      if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
+      if (linked.reason) linkMiss = linked.reason;
+      else {
+        const withLink = linked.file
+          ? { ...email, fileParts: [linked.file] }
+          : { ...email, body: `${String(email.body || '').slice(0, 8000)}\n\nReceipt page linked from this email:\n${linked.text}` };
+        stage(key, 'the AI is reading the linked receipt', label);
+        const again = await withTimeLimit(AI_LIMIT_MS, signal, TOO_SLOW_AI, child => extractFoundReceipts({ endpoint,
+          idToken, email: withLink, signal: child, readAi: useAppAi ? deps.readAi : undefined }));
+        if (signal.aborted || !active() || owner !== uid) throw new DOMException('Stopped', 'AbortError');
+        if (again.receipts.length) {
+          result = { ...again, receipts: again.receipts.map(raw => ({ ...raw, fromLink: email.receiptLink })) };
+          // The file is kept with the email so it is filed with the receipt.
+          if (linked.file) email.fileParts = [{ ...linked.file, fromLink: true }];
+        } else linkMiss = 'the downloaded page had no receipt on it';
+      }
+    }
     result.receipts.forEach((raw, index) => {
       const draft = normalizeFoundReceipt(raw, email, index);
       // The owner's sorting rules win, then how this shop has been filed
@@ -1241,7 +1268,7 @@ async function readCandidate(id, signal, endpoint, force = false) {
     state.scans[key] = { done: true, ...emailLabel(email), count: result.receipts.length, reader: READER_VERSION, ...(linkOnly ? { receiptLink: linkOnly } : {}) };
     note(key, result.receipts.length ? 'found' : linkOnly ? 'link-only' : 'aside', label, result.receipts.length
       ? result.receipts.map(raw => [raw.vendor, raw.amount != null && raw.currency ? `${raw.currency} ${raw.amount}` : ''].filter(Boolean).join(' ')).join('; ')
-      : linkOnly ? 'the receipt is behind a link in the email; it is listed above to download' : 'the AI read it and found no receipt');
+      : linkOnly ? `the receipt is behind a link that could not be downloaded (${linkMiss || 'no Sheet script'}); it is listed above to open` : 'the AI read it and found no receipt');
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
@@ -1483,7 +1510,7 @@ function renderLinkOnly() {
   if (!rows.length) { slot.replaceChildren(); return; }
   slot.innerHTML = `<details class="finder-failures finder-links" open>
     <summary><span class="finder-failures-sum">${rows.length === 1 ? 'One receipt needs downloading' : `${rows.length} receipts need downloading`}</span>
-      <span class="finder-failures-hint">The email only links to it</span></summary>
+      <span class="finder-failures-hint">The link needs you to sign in, so it could not be downloaded for you</span></summary>
     <ul class="finder-failures-list">${rows.map(row => `<li class="finder-failure">
       <p><strong>${esc((row.subject || 'Subject not saved').slice(0, 120))}</strong><br><span class="finder-setaside-why">${esc([row.from, row.day].filter(Boolean).join(' · '))}</span></p>
       <a class="btn sm gold" href="${esc(row.link)}" target="_blank" rel="noopener noreferrer">Open the receipt</a>

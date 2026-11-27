@@ -4,7 +4,7 @@ import { normalizeFoundReceipt, mergeFinderSnapshot } from '../src/lib/receipt-f
 
 const mocks = vi.hoisted(() => ({ saved: null, token: null, save: vi.fn(), load: vi.fn(), clear: vi.fn(),
   loadToken: vi.fn(), saveToken: vi.fn(), clearToken: vi.fn(), aiTest: vi.fn(),
-  extract: vi.fn(), list: vi.fn(), message: vi.fn(), headers: vi.fn(), check: vi.fn() }));
+  extract: vi.fn(), list: vi.fn(), message: vi.fn(), headers: vi.fn(), check: vi.fn(), fetchLink: vi.fn() }));
 vi.mock('../src/lib/receipt-finder-store.js', () => ({ createReceiptFinderStore: () => ({
   load: mocks.load, save: mocks.save, clear: mocks.clear,
   loadToken: mocks.loadToken, saveToken: mocks.saveToken, clearToken: mocks.clearToken,
@@ -22,6 +22,7 @@ vi.mock('../src/lib/receipt-finder-client.js', () => ({
       : { level: 'error', headline: 'Google would not accept the AI key in your script.', steps: ['Use a key that starts with AIza.'], blocksScan: true },
   systemicReceiptFailure: error => error?.stopsScan ? error.message : /\(429\)/.test(String(error?.message ?? error))
     ? 'Google’s AI allowance for your key is used up for now. Wait a few minutes.' : null,
+  fetchReceiptLink: mocks.fetchLink,
   FINDER_ENDPOINT_PATTERN: /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/,
 }));
 
@@ -731,8 +732,27 @@ describe('receipt finder: senders, duplicates, links and accuracy', () => {
     expect(mocks.saved.scans['publisher@example.com:m2']).toMatchObject({ done: true, skipped: 'sender' });
   });
 
+  it('downloads the receipt behind a link and reads it', async () => {
+    mocks.extract.mockResolvedValueOnce({ receipts: [] })
+      .mockResolvedValueOnce({ receipts: [{ vendor: 'Pay Co', amount: 12, currency: 'CAD', date: '2026-09-02', confidence: 0.9 }] });
+    mocks.fetchLink.mockResolvedValue({ file: { name: 'linked-receipt.pdf', mime: 'application/pdf', base64: 'JVBERi0=', size: 5, attachmentId: '', partId: '' } });
+    mocks.message.mockResolvedValue({ ...source, id: 'm3', subject: 'Payment received', receiptLink: 'https://pay.example.com/r/3' });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle(); await settle();
+    expect(mocks.fetchLink).toHaveBeenCalledWith(expect.objectContaining({ link: 'https://pay.example.com/r/3' }));
+    // The second read carries the downloaded file.
+    expect(mocks.extract.mock.calls[1][0].email.fileParts[0].mime).toBe('application/pdf');
+    const draft = mocks.saved.drafts.find(d => d.messageId === 'm3');
+    expect(draft).toMatchObject({ vendor: 'Pay Co', receiptLink: 'https://pay.example.com/r/3' });
+    expect(draft.attachments[0].name).toBe('linked-receipt.pdf');
+    expect(document.querySelector('[data-finder-links]').textContent).toBe('');
+  });
+
   it('lists an email whose receipt is only behind a link, until marked done', async () => {
     mocks.extract.mockResolvedValue({ receipts: [] });
+    mocks.fetchLink.mockResolvedValue({ reason: 'The link needs you to sign in' });
     mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Payment received', receiptLink: 'https://pay.example.com/r/1' });
     await mount();
     Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
