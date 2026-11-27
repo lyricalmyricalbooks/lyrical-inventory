@@ -1,11 +1,12 @@
 import { escapeHtml as esc } from '../lib/html.js';
-import { emailDay, emailSenderName as senderName, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptReviewReasons, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { emailDay, emailSenderName as senderName, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptReviewReasons, receiptMoney, receiptSkipReason, receiptWaitReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
 import { senderDomain, senderRule, normalizeSenderRules, withSenderRule, senderSuggestions, craRecordGaps, spotCheckAccuracy, sameOrderElsewhere } from '../lib/receipt-signals.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep, fetchReceiptLink } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
 import { downloadBlob } from '../lib/download.js';
 import { localDayPlus } from '../lib/calendar-day.js';
+import { matchDraftsToBank, bankSourceName, BANK_LOCAL_KEY } from '../lib/bank-match.js';
 import { withTimeLimit } from '../lib/time-limit.js';
 import '../styles/receipt-finder.css';
 
@@ -45,6 +46,9 @@ let knownMessages = null;
 let filter = 'auto', resultQuery = '', saveChain = Promise.resolve(), saveScheduled = false;
 let initialized = false, restore = Promise.resolve(), serviceReadyFor = '', serviceProblem = null;
 let statusCache = null, cachedExpenses = null, renderTimer = 0, haltReason = '', dailySweep = null;
+// Inbox or settings; which receipt fills the panel; whether the panel may pick
+// the first receipt itself (until the publisher closes one on purpose).
+let view = 'inbox', autoPick = true, bankMatches = null;
 // Keys deleted since the last write. The saved copy is merged rather than
 // replaced (two open tabs must not undo each other), so a deletion has to be
 // named to reach storage — see mergeFinderSnapshot.
@@ -144,17 +148,14 @@ function connectionLabel() {
   return 'Disconnect Gmail';
 }
 
-// "Last checked Sep 22, 2:27 PM" reads at a glance; the full locale string with
-// seconds did not.
-function lastScanText() {
+// The header already says when Gmail was last checked. Weeks without a scan
+// while Gmail sat disconnected means receipts are piling up unread, so that
+// one case is spelled out, with the click that fixes it.
+function staleScanNote() {
   const when = new Date(state.lastScan);
-  if (!Number.isFinite(when.getTime())) return '';
-  const text = `Last checked ${when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`;
-  // Weeks without a scan while Gmail sat disconnected means receipts are piling
-  // up unread; say so, and what one click starts.
+  if (!Number.isFinite(when.getTime()) || tokenLive()) return '';
   const days = Math.floor((Date.now() - when.getTime()) / 86400000);
-  if (days >= 7 && !tokenLive()) return `${text} That was ${days} days ago, so newer receipts haven’t been looked at yet. Reconnect Gmail, then scan.`;
-  return text;
+  return days >= 7 ? `Gmail was last checked ${days} days ago, so newer receipts haven’t been looked at yet. Reconnect Gmail, then check again.` : '';
 }
 
 function renderConnection() {
@@ -250,7 +251,26 @@ async function mountReceiptFinder(element, dependencies) {
   host = element;
   host.removeEventListener('click', onClick);
   host.removeEventListener('change', onChange);
+  host.removeEventListener('toggle', onToggle, true);
   host.innerHTML = `
+    <div class="rf" data-rf data-rf-view="${view}">
+    <header class="rf-head">
+      <div class="rf-head-text">
+        <p class="rf-crumb" data-rf-crumb><button type="button" class="rf-crumb-link" data-rf-view-btn="inbox">Receipts</button> <span aria-hidden="true">›</span> Settings</p>
+        <h3 class="rf-title" data-rf-title tabindex="-1">Receipts</h3>
+        <p class="rf-statusline"><span class="finder-dot is-ok" data-rf-dot aria-hidden="true"></span><span data-rf-statusline></span></p>
+      </div>
+      <div class="rf-head-actions">
+        <label class="rf-search"><span class="sr-only">Search found receipts</span>
+          <svg class="rf-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>
+          <input type="search" class="ledger-filter-input" data-result-search placeholder="Search shop, invoice number or note"></label>
+        <button type="button" class="btn rf-settings-btn" data-rf-view-btn="settings" aria-label="Receipt finder settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+          <span class="rf-settings-word">Settings</span></button>
+        <button type="button" class="btn finder-stop-btn" data-action="cancel" hidden>Stop</button>
+        <button type="button" class="btn gold finder-day-btn" data-action="scan-day">Check yesterday’s mail</button>
+      </div>
+    </header>
     <div class="finder-conn-bar" data-conn-bar>
       <span class="finder-conn-dot" aria-hidden="true"></span>
       <div class="finder-conn-text">
@@ -261,76 +281,102 @@ async function mountReceiptFinder(element, dependencies) {
     </div>
     <div class="finder-gate finder-next" data-finder-gate hidden></div>
     <div data-finder-alert></div>
-    <section class="finder-search" aria-label="Scan your mailbox">
-      <div class="finder-scanrow">
-        <button type="button" class="btn gold finder-day-btn" data-action="scan-day">Scan yesterday</button>
-        <span class="finder-or" aria-hidden="true">or</span>
-        <div class="finder-period" role="group" aria-label="Scan a longer period">
-          <button type="button" class="finder-period-btn" data-preset="0" aria-pressed="false">Today</button>
-          <button type="button" class="finder-period-btn" data-preset="7" aria-pressed="false">7 days</button>
-          <button type="button" class="finder-period-btn" data-preset="30" aria-pressed="true">30 days</button>
-          <button type="button" class="finder-period-btn" data-preset="90" aria-pressed="false">3 months</button>
-          <button type="button" class="finder-period-btn" data-preset="custom" aria-pressed="false">Pick dates…</button>
-        </div>
-        <button type="button" class="btn finder-stop-btn" data-action="cancel" hidden>Stop</button>
-      </div>
-      <details class="finder-more" data-more-filters>
-        <summary>Narrow it down — keyword, sender, exact dates, PDFs only</summary>
-        <div class="finder-narrow">
-          <label class="finder-query-wrap" for="finder-query">
-            <span class="finder-query-icon" aria-hidden="true">🔍</span>
-            <span class="sr-only">Shop, supplier or keyword</span>
-            <input type="search" id="finder-query" autocomplete="off" placeholder="Shop, supplier or keyword — leave blank for every receipt">
-          </label>
-          <div class="finder-presets" role="group" aria-label="Only look for">
-            <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false"><span aria-hidden="true">📎</span> Has a PDF or photo</button>
-            <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false"><span aria-hidden="true">🧾</span> Invoices &amp; bills</button>
-            <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false"><span aria-hidden="true">📦</span> Shipping costs</button>
-          </div>
-          <div class="finder-filters">
-            <div class="form-group finder-sender"><label for="finder-sender">Only from this sender</label>
-              <input type="text" id="finder-sender" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>
-            <div class="form-group finder-date-from"><label for="finder-from">From</label>
-              <input type="date" id="finder-from" value="${localDayPlus(-30)}"></div>
-            <div class="form-group finder-date-to"><label for="finder-to">Through</label>
-              <input type="date" id="finder-to"></div>
-          </div>
-          <button type="button" class="btn gold finder-scan-btn" data-action="scan">Find receipts</button>
-        </div>
-      </details>
+    <div class="rf-progress-wrap">
       <div class="finder-progress" data-finder-progress hidden>
         <div class="finder-progress-track"><div class="finder-progress-fill" data-progress-fill style="width:0%"></div></div>
         <span class="finder-progress-text" data-progress-text></span>
       </div>
       <p class="finder-progress-now" data-progress-now aria-live="off"></p>
-      <p class="finder-status" data-finder-status role="status" aria-live="polite">${state.lastScan ? esc(lastScanText()) : 'Scan yesterday’s mail, or pick a longer period. Nothing is filed until you approve it.'}</p>
+      <p class="finder-status" data-finder-status role="status" aria-live="polite">${state.lastScan ? esc(staleScanNote()) : 'Check yesterday’s mail, or search a longer period in Settings. Nothing is filed until you approve it.'}</p>
       <div data-finder-report></div>
-      <div class="finder-health" data-finder-health>
-        <span class="finder-health-item" data-health-reader></span>
-        <button type="button" class="btn sm finder-test-btn" data-action="test-reader">Test the reader</button>
-        <label class="finder-auto finder-health-item"><input type="checkbox" data-daily-toggle> Check Gmail every hour <span class="finder-auto-note" data-daily-note>Checking…</span></label>
-        <span class="finder-health-item finder-accuracy" data-health-accuracy hidden></span>
+    </div>
+    <div class="rf-inbox" data-rf-inbox>
+      <div class="rf-tiles" data-rf-tiles></div>
+      <div class="finder-results-head" data-finder-results-head>
+        <div class="finder-tabs finder-piles rf-tabs" data-finder-tabs role="group" aria-label="Show receipts by pile"></div>
+        <div data-finder-errors></div>
+        <div class="finder-listbar" data-finder-listbar>
+          <label class="finder-select"><input type="checkbox" data-select-all> Select all ready</label>
+          <button type="button" class="btn sm" data-action="retry">Retry pending imports</button>
+        </div>
       </div>
-      <div data-finder-links></div>
-    </section>
-    <div class="finder-results-head" data-finder-results-head>
-      <div class="finder-tabs finder-piles" data-finder-tabs role="group" aria-label="Show receipts by pile"></div>
-      <div data-finder-errors></div>
-      <div class="finder-listbar" data-finder-listbar>
-        <label class="finder-select"><input type="checkbox" data-select-all> Select all ready</label>
-        <label class="finder-result-search"><span class="sr-only">Search found receipts</span>
-          <input type="search" class="ledger-filter-input" data-result-search placeholder="Filter by vendor, invoice number or description"></label>
-        <button type="button" class="btn sm" data-action="retry">Retry pending imports</button>
+      <div class="rf-work" data-rf-work>
+        <div class="rf-colhead" aria-hidden="true"><span></span><span>Shop</span><span>Date</span><span class="rf-num">Total</span><span>Why it waits</span><span></span></div>
+        <div class="finder-list" data-finder-list></div>
+        <div class="rf-pane-empty" data-rf-pane-empty><p>Pick a receipt to see it here.</p></div>
+      </div>
+      <div class="finder-actionbar" data-finder-actionbar>
+        <button type="button" class="btn" data-action="next" hidden>Check the next 25 emails</button>
+        <span data-selected-count class="finder-count"></span>
+        <button type="button" class="btn gold" data-action="import">File selected</button>
       </div>
     </div>
-    <div class="finder-list" data-finder-list></div>
-    <div class="finder-actionbar" data-finder-actionbar>
-      <button type="button" class="btn" data-action="next" hidden>Check the next 25 emails</button>
-      <span data-selected-count class="finder-count"></span>
-      <button type="button" class="btn gold" data-action="import">File selected</button>
+    <div class="rf-settings" data-rf-settings>
+      <p class="rf-settings-lede">Everything that runs on its own, in one place. Nothing here needs looking at day to day.</p>
+      <div class="rf-cards">
+        <section class="rf-card" aria-labelledby="rf-s-gmail">
+          <h4 id="rf-s-gmail">Gmail</h4>
+          <div class="rf-line finder-auto"><p>Check Gmail every hour, even with the app closed<br><span class="rf-muted finder-auto-note" data-daily-note>Checking…</span></p>
+            <label class="rf-switch"><input type="checkbox" role="switch" data-daily-toggle><span class="sr-only">Check Gmail every hour</span><span class="rf-switch-ui" aria-hidden="true"></span></label></div>
+          <div class="rf-line"><p>Receipts behind a “view your receipt” link<br><span class="rf-muted">Downloaded for you. Sign-in pages are left for you below.</span></p></div>
+          <div data-finder-links></div>
+        </section>
+        <section class="rf-card finder-search" aria-labelledby="rf-s-scan">
+          <h4 id="rf-s-scan">Search old mail</h4>
+          <p class="rf-muted">Pick a period. Mail already read is skipped, so a long period costs nothing extra.</p>
+          <div class="finder-period" role="group" aria-label="Search a longer period">
+            <button type="button" class="finder-period-btn" data-preset="0" aria-pressed="false">Today</button>
+            <button type="button" class="finder-period-btn" data-preset="7" aria-pressed="false">7 days</button>
+            <button type="button" class="finder-period-btn" data-preset="30" aria-pressed="true">30 days</button>
+            <button type="button" class="finder-period-btn" data-preset="90" aria-pressed="false">3 months</button>
+            <button type="button" class="finder-period-btn" data-preset="custom" aria-pressed="false">Pick dates…</button>
+          </div>
+          <details class="finder-more" data-more-filters>
+            <summary>Narrow it down: keyword, sender, exact dates, PDFs only</summary>
+            <div class="finder-narrow">
+              <label class="finder-query-wrap" for="finder-query">
+                <span class="sr-only">Shop, supplier or keyword</span>
+                <input type="search" id="finder-query" autocomplete="off" placeholder="Shop, supplier or keyword (blank for every receipt)">
+              </label>
+              <div class="finder-presets" role="group" aria-label="Only look for">
+                <button type="button" class="filter-chip" data-toggle="attachments" aria-pressed="false">Has a PDF or photo</button>
+                <button type="button" class="filter-chip" data-toggle="invoices" aria-pressed="false">Invoices and bills</button>
+                <button type="button" class="filter-chip" data-toggle="shipping" aria-pressed="false">Shipping costs</button>
+              </div>
+              <div class="finder-filters">
+                <div class="form-group finder-sender"><label for="finder-sender">Only from this sender</label>
+                  <input type="text" id="finder-sender" inputmode="email" autocomplete="off" placeholder="supplier@example.com"></div>
+                <div class="form-group finder-date-from"><label for="finder-from">From</label>
+                  <input type="date" id="finder-from" value="${localDayPlus(-30)}"></div>
+                <div class="form-group finder-date-to"><label for="finder-to">Through</label>
+                  <input type="date" id="finder-to"></div>
+              </div>
+              <button type="button" class="btn gold finder-scan-btn" data-action="scan">Find receipts</button>
+            </div>
+          </details>
+        </section>
+        <section class="rf-card" aria-labelledby="rf-s-senders">
+          <h4 id="rf-s-senders">Senders</h4>
+          <p class="rf-muted">The hourly check and your own searches follow these lists.</p>
+          <div data-rf-senders></div>
+        </section>
+        <section class="rf-card finder-health" data-finder-health aria-labelledby="rf-s-health">
+          <h4 id="rf-s-health">How well it reads</h4>
+          <div class="rf-line"><p class="finder-health-item" data-health-reader></p>
+            <button type="button" class="btn sm finder-test-btn" data-action="test-reader">Test the reader</button></div>
+          <p class="rf-muted finder-health-item finder-accuracy" data-health-accuracy hidden></p>
+        </section>
+      </div>
+    </div>
     </div>`;
   host.addEventListener('click', onClick);
   host.addEventListener('change', onChange);
+  host.addEventListener('toggle', onToggle, true);
+  host.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    const row = event.target.closest?.('details[data-draft][open]');
+    if (row?.querySelector(':scope > .finder-review:popover-open')) { row.open = false; row.querySelector('summary')?.focus(); }
+  });
   host.querySelector('[data-result-search]').addEventListener('input', event => {
     resultQuery = event.target.value.toLowerCase(); render();
   });
@@ -464,7 +510,7 @@ function renderPiles(counts, pile) {
     aside: 'Missing a receipt? It will be here',
     filed: 'Already in your expenses',
   };
-  return ['ready', 'needs', 'aside', 'filed'].filter(key => key !== 'filed' || counts.filed).map(key => `<button type="button" class="finder-pile tone-${key}${pile === key ? ' active' : ''}${counts[key] ? '' : ' is-zero'}" data-status="${key}" aria-pressed="${pile === key}">
+  return ['needs', 'ready', 'filed', 'aside'].filter(key => key !== 'filed' || counts.filed).map(key => `<button type="button" class="finder-pile tone-${key}${pile === key ? ' active' : ''}${counts[key] ? '' : ' is-zero'}" data-status="${key}" aria-pressed="${pile === key}">
       <span class="finder-pile-top"><span class="finder-pile-name">${PILES[key].label}</span><span class="finder-pile-count">${counts[key]}</span></span>
       <span class="finder-pile-hint">${hints[key]}</span></button>`).join('');
 }
@@ -599,6 +645,82 @@ function renderAlert(counts) {
   }
 }
 
+// The receipt panel sits beside the list only when there is room for both.
+const wide = () => (host?.clientWidth || 0) >= 900;
+
+// The bank check keeps a copy of its charges on this device. Matching the
+// waiting receipts against it shows what each was paid with, and how many
+// charges still have no receipt at all. Nothing here reaches the network.
+function loadBankMatches() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(`${BANK_LOCAL_KEY}:${uid}`) || 'null'); } catch { saved = null; }
+  const lines = Array.isArray(saved?.lines) ? saved.lines : [];
+  if (!lines.length) return null;
+  const from = localDayPlus(-90);
+  const result = matchDraftsToBank(lines, cachedExpenses || deps.expenses(), state.drafts, { links: saved.links || {}, from });
+  return { ...result, lines: lines.length };
+}
+
+function setView(next) {
+  view = next === 'settings' ? 'settings' : 'inbox';
+  const root = host?.querySelector('[data-rf]');
+  if (root) root.dataset.rfView = view;
+}
+
+function statusLine() {
+  if (busy) return 'Reading your mail now…';
+  const parts = [];
+  if (dailySweep?.enabled) parts.push('Gmail checked every hour');
+  else if (tokenLive()) parts.push('Gmail connected');
+  else parts.push(state.account ? 'Gmail needs a reconnect' : 'Gmail not connected');
+  const when = new Date(state.lastScan);
+  if (state.lastScan && Number.isFinite(when.getTime())) parts.push(`last ${when.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`);
+  return parts.join(' · ');
+}
+
+function tile(label, value, sub, tone = '', action = '') {
+  return `<div class="rf-tile${tone ? ` is-${tone}` : ''}"><span class="rf-tile-label">${esc(label)}</span>
+    <strong class="rf-tile-value">${esc(String(value))}</strong><span class="rf-tile-sub">${action || esc(sub)}</span></div>`;
+}
+
+function sumText(drafts) {
+  const byCurrency = new Map();
+  drafts.forEach(draft => { if (typeof draft.amount === 'number') byCurrency.set(draft.currency || 'CAD', (byCurrency.get(draft.currency || 'CAD') || 0) + draft.amount); });
+  if (!byCurrency.size) return 'nothing yet';
+  const [first] = [...byCurrency.entries()].sort((a, b) => b[1] - a[1]);
+  return `${money(Math.round(first[1] * 100) / 100, first[0])}${byCurrency.size > 1 ? ` + ${byCurrency.size - 1} more currenc${byCurrency.size === 2 ? 'y' : 'ies'}` : ''}`;
+}
+
+function renderView(piles) {
+  setView(view);
+  const settings = view === 'settings';
+  host.querySelector('[data-rf-title]').textContent = settings ? 'Where receipts come from' : 'Receipts';
+  host.querySelector('[data-rf-crumb]').hidden = !settings;
+  host.querySelector('[data-rf-statusline]').textContent = statusLine();
+  host.querySelector('[data-rf-dot]').className = `finder-dot is-${tokenLive() ? 'ok' : state.account ? 'warn' : 'off'}`;
+  const settingsButton = host.querySelector('.rf-settings-btn');
+  settingsButton.setAttribute('aria-pressed', String(settings));
+  settingsButton.querySelector('.rf-settings-word').textContent = settings ? 'Done' : 'Settings';
+  settingsButton.setAttribute('aria-label', settings ? 'Done with settings, back to receipts' : 'Receipt finder settings');
+  const senders = host.querySelector('[data-rf-senders]');
+  senders.innerHTML = renderSenderLists() || '<p class="rf-muted">No senders on either list yet. When you dismiss the same shop a few times, it is offered here.</p>';
+  const ready = state.drafts.filter(draft => PILES.ready.statuses.includes(statusOf(draft)));
+  const needs = state.drafts.filter(draft => PILES.needs.statuses.includes(statusOf(draft)));
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const filedNow = state.drafts.filter(draft => statusOf(draft) === 'imported' && (draft.updatedAt || 0) >= monthStart.getTime()).length;
+  const score = spotCheckAccuracy(state.drafts);
+  const bankTile = bankMatches
+    ? tile('No receipt yet', bankMatches.missing.length, '', bankMatches.missing.length ? 'red' : '',
+      `<button type="button" class="rf-tile-link" data-rf-bank>${bankMatches.missing.length ? 'See the bank charges' : 'Every charge has one'}</button>`)
+    : tile('No receipt yet', '—', '', '', '<button type="button" class="rf-tile-link" data-rf-bank>Add a bank statement</button>');
+  host.querySelector('[data-rf-tiles]').innerHTML = [
+    tile('Ready to file', ready.length, sumText(ready)),
+    tile('Needs you', piles.needs, needs.length ? sumText(needs) : piles.needs ? 'emails to read again' : 'all clear', piles.needs ? 'amber' : ''),
+    bankTile,
+    tile('Filed this month', filedNow, score.checked ? `${score.percent}% read right on spot checks` : 'by the finder'),
+  ].join('');
+}
+
 function render() {
   if (!host?.querySelector('[data-finder-list]') || !active()) return;
   if (renderTimer) { clearTimeout(renderTimer); renderTimer = 0; }
@@ -626,10 +748,18 @@ function render() {
     host.querySelector('[data-finder-listbar]').hidden = pile !== 'ready' && pile !== 'all';
     host.querySelector('[data-finder-tabs]').innerHTML = renderPiles(piles, pile);
     const drafts = visibleDrafts();
+    bankMatches = loadBankMatches();
+    renderView(piles);
     const openIds = new Set(Array.from(host.querySelectorAll('details[data-draft][open]'), el => el.dataset.draft));
+    // On a wide screen the panel beside the list is never left blank while
+    // there is something to look at: it opens the first receipt in the pile.
+    if (autoPick && wide() && drafts.length && !drafts.some(draft => openIds.has(draft.id))) openIds.add(drafts[0].id);
     host.querySelector('[data-finder-list]').innerHTML = drafts.length
       ? drafts.map(draft => renderDraft(draft, openIds.has(draft.id))).join('')
       : renderEmpty();
+    host.querySelector('[data-rf-pane-empty]').hidden = !drafts.length || drafts.some(draft => openIds.has(draft.id));
+    host.querySelectorAll('details[data-draft][open]').forEach(syncSheet);
+    host.querySelector('[data-rf-work]').classList.toggle('is-empty', !drafts.length);
     host.querySelector('[data-finder-errors]').innerHTML = pile === 'needs' ? renderFailures() : pile === 'aside' ? renderSetAside() : '';
     if (pile === 'aside') queueMicrotask(() => labelSetAside().catch(() => {}));
     const ready = drafts.filter(draft => statusOf(draft) === 'ready');
@@ -647,7 +777,7 @@ function render() {
     host.querySelector('[data-action="import"]').disabled = !selected || busy;
     host.querySelector('[data-action="scan"]').disabled = busy;
     host.querySelector('[data-action="test-reader"]').disabled = busy;
-    host.querySelector('[data-action="scan-day"]').disabled = busy;
+    host.querySelectorAll('[data-action="scan-day"]').forEach(button => { button.disabled = busy; });
     host.querySelectorAll('.finder-period [data-preset]').forEach(button => { button.disabled = busy; });
     host.querySelector('[data-action="cancel"]').hidden = !busy;
     host.querySelector('[data-action="next"]').hidden = !state.pageToken;
@@ -688,50 +818,112 @@ function renderEmpty() {
     <button type="button" class="btn gold" data-action="scan-day">Scan yesterday</button></div>`;
 }
 
+const shortDay = iso => {
+  const day = iso ? new Date(`${String(iso).slice(0, 10)}T12:00:00`) : null;
+  return day && Number.isFinite(day.getTime()) ? day.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+};
+function money(amount, currency) {
+  if (typeof amount !== 'number' || !Number.isFinite(amount)) return '—';
+  try { return new Intl.NumberFormat('en-CA', { style: 'currency', currency: currency || 'CAD' }).format(amount); } catch { return `${currency || '?'} ${amount.toFixed(2)}`; }
+}
+
+// Everything the receipt's panel asks the publisher to check, in one list.
+function checkList(draft, status, locked, source) {
+  const items = [...receiptProblems(draft)];
+  if (!locked && !draft.reviewed && status !== 'duplicate') items.push(...receiptReviewReasons(draft));
+  if (draft.filledFromEmail?.length && !draft.reviewed && !locked) items.push(filledNote(draft.filledFromEmail));
+  if (draft.error) items.push(draft.error);
+  (source?.fileParts || []).forEach(file => { if (file.skipped) items.push(file.skipped); });
+  // Held only because the reader was unsure: say so, or the panel would ask
+  // for a check without saying what to check.
+  if (!items.length && status === 'review' && !draft.reviewed) items.push('The reader wasn’t sure about this one. Compare the total, date and shop with the receipt.');
+  return [...new Set(items)];
+}
+
+function bankLine(draft) {
+  const hit = bankMatches?.byDraft.get(draft.id);
+  if (!hit) {
+    return bankMatches?.lines ? `<p class="rf-bank is-none"><span class="finder-dot is-off" aria-hidden="true"></span>No bank charge for this amount yet</p>` : '';
+  }
+  const where = bankSourceName(hit.line.source);
+  return `<p class="rf-bank ${hit.sure ? 'is-sure' : 'is-maybe'}">${hit.sure
+    ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>'
+    : '<span class="finder-dot is-warn" aria-hidden="true"></span>'}
+    <span>${hit.sure ? 'Paid' : 'Maybe paid'} ${esc(shortDay(hit.line.date))} on ${esc(where)}${hit.sure ? ', same amount' : ` (${esc(hit.why.toLowerCase())})`}</span></p>`;
+}
+
 function renderDraft(draft, open) {
   const status = statusOf(draft), locked = ['imported', 'queued', 'ignored'].includes(status);
   const source = state.emails[`${draft.account}:${draft.messageId}`];
-  const field = (key, label, type = 'text') => `<label>${label}<input data-field="${key}" type="${type}" ${type === 'number' ? 'step="0.01" inputmode="decimal"' : ''} value="${esc(String(draft[key] ?? ''))}" ${locked ? 'disabled' : ''}></label>`;
-  const problems = receiptProblems(draft);
-  const skipped = (source?.fileParts || []).filter(file => file.skipped);
-  return `<details class="finder-draft is-${status}" data-draft="${esc(draft.id)}" ${open ? 'open' : ''}>
-    <summary><span class="finder-vendor">${esc(draft.vendor || 'Vendor needs review')}<small>${esc(draft.reference || draft.description || 'Receipt details')}${draft.attachments?.length ? `<span class="finder-att" title="Attachments kept with this receipt"> · 📎 ${draft.attachments.length}</span>` : ''}</small></span>
-      <span class="finder-money">${draft.amount === null ? '—' : esc(`${draft.currency || '?'} ${draft.amount.toFixed(2)}`)}</span>
-      <span class="pill ${status === 'ready' || status === 'imported' ? 'green' : status === 'review' || status === 'duplicate' ? 'amber' : 'gray'}">${LABELS[status]}</span>
-      <span class="finder-date">${esc(draft.date || 'Date unknown')}</span>
+  const field = (key, label, type = 'text', wide = false) => {
+    const warn = !locked && ((key === 'supplierTaxNumber' && craRecordGaps(draft).some(gap => gap.review && /GST/.test(gap.text)))
+      || (key === 'amount' && (draft.amount === null || draft.amount === 0)) || (key === 'vendor' && !draft.vendor?.trim()));
+    return `<label class="${wide ? 'rf-wide' : ''}${type === 'number' ? ' rf-numfield' : ''}">${label}<input data-field="${key}" type="${type}" ${type === 'number' ? 'step="0.01" inputmode="decimal"' : ''} ${warn ? 'class="is-warn" aria-invalid="true"' : ''} value="${esc(String(draft[key] ?? ''))}" ${locked ? 'disabled' : ''}></label>`;
+  };
+  const checks = checkList(draft, status, locked, source);
+  const why = receiptWaitReason(draft, status);
+  const domain = senderDomain(draft.from);
+  const canNever = domain && senderRule(draft.from, senderRules()) !== 'never';
+  const files = (source?.fileParts || []).filter(file => file.base64);
+  const total = money(draft.amount, draft.currency);
+  const fileable = !locked && status !== 'duplicate' && !receiptProblems(draft).length;
+  const vendor = draft.vendor || 'Shop needs a name';
+  return `<details class="finder-draft is-${status}" name="rf-receipt" data-draft="${esc(draft.id)}" ${open ? 'open' : ''}>
+    <summary class="rf-row"><span class="rf-ini" aria-hidden="true">${esc((draft.vendor || '?').trim().charAt(0).toUpperCase() || '?')}</span>
+      <span class="finder-vendor">${esc(vendor)}<small>${esc(draft.reference || draft.description || 'Receipt details')}${draft.attachments?.length ? `<span class="finder-att" title="Attachments kept with this receipt"> · ${draft.attachments.length} file${draft.attachments.length === 1 ? '' : 's'}</span>` : ''}</small></span>
+      <span class="finder-date">${esc(shortDay(draft.date) || 'No date')}</span>
+      <span class="finder-money">${esc(total)}</span>
+      <span class="rf-why"><span class="pill ${why.tone}" title="${esc(why.text)}">${esc(why.text)}</span>${status !== 'review' && status !== 'duplicate' ? '' : `<span class="sr-only">${LABELS[status]}</span>`}</span>
       ${!locked ? '<button type="button" class="btn sm sys-target finder-draft-x" data-dismiss title="Not a receipt — dismiss it" aria-label="Dismiss this receipt">✕</button>' : '<span></span>'}</summary>
-    <div class="finder-review">
-      <div class="finder-toolbar"><label class="finder-select"><input type="checkbox" data-select ${draft.selected ? 'checked' : ''} ${status !== 'ready' ? 'disabled' : ''}> Include in import</label>
-        <span class="finder-meta">Confidence ${Math.round(draft.confidence * 100)}%</span>
-        <span class="finder-meta">${esc(draft.paymentStatus)} · ${esc(draft.documentType)}</span></div>
-      ${problems.length ? `<p class="finder-warning">${esc(problems.join('. '))}</p>` : ''}
-      ${draft.filledFromEmail?.length && !draft.reviewed && !locked ? `<p class="finder-warning">${esc(filledNote(draft.filledFromEmail))} Check ${draft.filledFromEmail.length === 1 ? 'it' : 'them'}, then tick “I reviewed” below.</p>` : ''}
-      ${draft.error ? `<p class="finder-warning">${esc(draft.error)}</p>` : ''}
-      ${skipped.length ? `<p class="finder-warning">${esc(skipped.map(file => file.skipped).join(' '))}</p>` : ''}
-      ${status === 'duplicate' ? duplicateNote(draft) : ''}
-      ${!locked && !draft.reviewed && status !== 'duplicate' ? reasonsNote(draft) : ''}
-      ${craReminders(draft)}
-      <div class="finder-edit-grid">${field('vendor', 'Vendor')}${field('reference', 'Invoice / receipt number')}${field('description', 'Description')}
-        ${field('date', 'Invoice date', 'date')}${field('dueDate', 'Due date', 'date')}${field('currency', 'Currency (ISO code)')}
-        ${field('amount', 'Total', 'number')}${field('subtotal', 'Subtotal', 'number')}${field('tax', 'Tax', 'number')}${field('shipping', 'Shipping', 'number')}
-        ${field('supplierTaxNumber', 'Seller’s GST/HST number')}
-        <label>Category<select data-field="category" ${locked ? 'disabled' : ''}>${deps.categories.map(category => `<option ${category === draft.category ? 'selected' : ''}>${esc(category)}</option>`).join('')}</select></label>
-        <label>Payment status<select data-field="paymentStatus" ${locked ? 'disabled' : ''}>${['unknown', 'paid', 'unpaid', 'refunded'].map(value => `<option ${value === draft.paymentStatus ? 'selected' : ''}>${value}</option>`).join('')}</select></label></div>
-      <details><summary>Line items (${draft.lineItems.length})</summary>
-        <div class="finder-items">${draft.lineItems.map((item, index) => `<div class="finder-item" data-line="${index}">
-          <label>Description<input data-line-field="description" value="${esc(item.description)}" ${locked ? 'disabled' : ''}></label>
-          ${[['quantity', 'Quantity'], ['unitPrice', 'Unit price'], ['amount', 'Line total']].map(([key, label]) => `<label>${label}<input type="number" step="any" inputmode="decimal" data-line-field="${key}" value="${esc(String(item[key] ?? ''))}" ${locked ? 'disabled' : ''}></label>`).join('')}
-          ${!locked ? '<button type="button" class="btn sm" data-remove-line>Remove line</button>' : ''}</div>`).join('')}</div>
-        ${!locked ? '<button type="button" class="btn sm" data-add-line>Add line item</button>' : ''}</details>
-      ${!locked ? `<label class="finder-select"><input type="checkbox" data-reviewed ${draft.reviewed ? 'checked' : ''}> I reviewed the source and corrected uncertain details</label>` : ''}
-      <details><summary>Original email and attachments</summary><p>${esc(source?.from || draft.account)} · ${esc(source?.subject || '')}</p>
-        <pre class="finder-email">${esc(source?.body || draft.sourceSnippet || 'Email not saved')}</pre>
-        <a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(draft.account)}#all/${encodeURIComponent(draft.messageId)}" target="_blank" rel="noopener noreferrer">Open original in Gmail</a>
-        <div class="finder-toolbar">${(source?.fileParts || []).map((file, index) => file.base64 ? `<button type="button" class="btn sm" data-download="${index}">Download ${esc(file.name)}</button>` : '').join('')}</div></details>
-      ${draft.taxLines?.length ? `<p class="finder-note">Tax charged: ${esc(draft.taxLines.map(line => `${line.name || 'Tax'}${line.rate != null ? ` ${line.rate}%` : ''} ${line.amount != null ? line.amount.toFixed(2) : '?'}`).join(' · '))}</p>` : ''}
-      ${draft.history?.length ? `<p class="finder-note">Changed by you: ${esc([...new Set(draft.history.map(h => FIELD_WORDS[h.field] || h.field))].join(', '))}</p>` : ''}
-      ${status === 'ignored' ? `<div class="finder-toolbar"><button type="button" class="btn sm" data-restore>Restore receipt</button>
-        ${senderDomain(draft.from) && senderRule(draft.from, senderRules()) !== 'never' ? `<button type="button" class="btn sm" data-never="${esc(senderDomain(draft.from))}">Never read emails from ${esc(senderDomain(draft.from))}</button>` : ''}</div>` : ''}
+    <div class="finder-review" popover="manual">
+      <div class="rf-detail-head">
+        <button type="button" class="rf-back" data-rf-close aria-label="Back to receipts"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg></button>
+        <div class="rf-detail-title"><h4>${esc(vendor)}</h4><p>${esc([shortDay(draft.date), draft.reference, LABELS[status]].filter(Boolean).join(' · '))}</p></div>
+        <strong class="rf-detail-total">${esc(total)}</strong>
+      </div>
+      <div class="rf-detail-body">
+        <div class="rf-doc">
+          <span class="rf-doc-thumb" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path></svg></span>
+          <span class="rf-doc-text"><strong>${esc(files[0]?.name || draft.attachments?.[0]?.name || 'The email itself')}</strong><span>${esc([draft.receiptLink ? 'From the receipt link' : source?.subject ? 'From the email' : '', shortDay(source?.date ? emailDay(source.date) : '')].filter(Boolean).join(' · ') || draft.account)}</span></span>
+          <span class="rf-doc-actions">${files.map(file => `<button type="button" class="btn sm" data-download="${(source.fileParts || []).indexOf(file)}">Download${files.length > 1 ? ` ${esc(file.name)}` : ''}</button>`).join('')}
+            <a class="btn sm" href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(draft.account)}#all/${encodeURIComponent(draft.messageId)}" target="_blank" rel="noopener noreferrer">Open in Gmail</a></span>
+        </div>
+        ${checks.length ? `<div class="rf-check finder-reasons" role="note"><strong>Check ${checks.length === 1 ? '1 thing' : `${checks.length} things`}</strong><ul>${checks.map(text => `<li>${esc(text)}</li>`).join('')}</ul></div>` : ''}
+        ${status === 'duplicate' ? duplicateNote(draft) : ''}
+        <div class="finder-edit-grid rf-fields">${field('vendor', 'Shop or supplier', 'text', true)}
+          ${field('supplierTaxNumber', 'Seller’s GST/HST number', 'text', true)}
+          ${field('amount', 'Total', 'number')}${field('currency', 'Currency')}
+          ${field('subtotal', 'Subtotal', 'number')}${field('tax', 'Tax', 'number')}
+          ${field('date', 'Invoice date', 'date')}
+          <label>Category<select data-field="category" ${locked ? 'disabled' : ''}>${deps.categories.map(category => `<option ${category === draft.category ? 'selected' : ''}>${esc(category)}</option>`).join('')}</select></label>
+          ${field('reference', 'Invoice or receipt number')}${field('shipping', 'Shipping', 'number')}
+          ${field('description', 'What was bought', 'text', true)}
+          ${field('dueDate', 'Due date', 'date')}
+          <label>Payment<select data-field="paymentStatus" ${locked ? 'disabled' : ''}>${['unknown', 'paid', 'unpaid', 'refunded'].map(value => `<option ${value === draft.paymentStatus ? 'selected' : ''}>${value}</option>`).join('')}</select></label></div>
+        ${bankLine(draft)}
+        ${craReminders(draft)}
+        <details class="rf-more"><summary>Line items (${draft.lineItems.length})</summary>
+          <div class="finder-items">${draft.lineItems.map((item, index) => `<div class="finder-item" data-line="${index}">
+            <label>Description<input data-line-field="description" value="${esc(item.description)}" ${locked ? 'disabled' : ''}></label>
+            ${[['quantity', 'Quantity'], ['unitPrice', 'Unit price'], ['amount', 'Line total']].map(([key, label]) => `<label>${label}<input type="number" step="any" inputmode="decimal" data-line-field="${key}" value="${esc(String(item[key] ?? ''))}" ${locked ? 'disabled' : ''}></label>`).join('')}
+            ${!locked ? '<button type="button" class="btn sm" data-remove-line>Remove line</button>' : ''}</div>`).join('')}</div>
+          ${!locked ? '<button type="button" class="btn sm" data-add-line>Add line item</button>' : ''}</details>
+        <details class="rf-more"><summary>Original email</summary><p class="rf-muted">${esc(source?.from || draft.account)} · ${esc(source?.subject || '')}</p>
+          <pre class="finder-email">${esc(source?.body || draft.sourceSnippet || 'Email not saved')}</pre></details>
+        ${draft.taxLines?.length ? `<p class="finder-note">Tax charged: ${esc(draft.taxLines.map(line => `${line.name || 'Tax'}${line.rate != null ? ` ${line.rate}%` : ''} ${line.amount != null ? line.amount.toFixed(2) : '?'}`).join(' · '))}</p>` : ''}
+        ${draft.history?.length ? `<p class="finder-note">Changed by you: ${esc([...new Set(draft.history.map(h => FIELD_WORDS[h.field] || h.field))].join(', '))}</p>` : ''}
+        <div class="finder-toolbar rf-meta">
+          ${!locked ? `<label class="finder-select"><input type="checkbox" data-reviewed ${draft.reviewed ? 'checked' : ''}> I checked it against the receipt</label>` : ''}
+          <label class="finder-select"><input type="checkbox" data-select ${draft.selected ? 'checked' : ''} ${status !== 'ready' ? 'disabled' : ''}> Include in “File selected”</label>
+          <span class="finder-meta">Read with ${Math.round(draft.confidence * 100)}% confidence · ${esc(draft.paymentStatus)} · ${esc(draft.documentType)}</span>
+        </div>
+      </div>
+      ${!locked ? `<div class="rf-detail-foot">
+        <button type="button" class="btn" data-dismiss>Not a receipt</button>
+        ${canNever ? `<button type="button" class="btn quiet rf-never" data-never="${esc(domain)}" title="Never read emails from ${esc(domain)}">Never read this shop</button>` : ''}
+        <button type="button" class="btn gold rf-file" data-file-one ${fileable && !busy ? '' : 'disabled'} title="${fileable ? 'File this receipt as an expense' : 'Fix what is listed above first'}">Looks right, file it</button>
+      </div>` : status === 'ignored' ? `<div class="rf-detail-foot"><button type="button" class="btn" data-restore>Restore receipt</button>
+        ${canNever ? `<button type="button" class="btn" data-never="${esc(domain)}">Never read emails from ${esc(domain)}</button>` : ''}</div>` : ''}
     </div></details>`;
 }
 
@@ -745,13 +937,6 @@ function duplicateNote(draft) {
     ? `Same order number as the receipt from ${esc(other.vendor || 'this store')}${other.date ? ` dated ${esc(other.date)}` : ''} in another email. Only one is filed.`
     : 'Matches a saved expense. This receipt will not be imported again.';
   return `<div class="finder-warning finder-dup"><p>${why}</p><button type="button" class="btn sm" data-not-duplicate>It’s a different purchase</button></div>`;
-}
-
-function reasonsNote(draft) {
-  const reasons = receiptReviewReasons(draft);
-  if (!reasons.length) return '';
-  return `<div class="finder-warning finder-reasons"><p>Check before filing:</p><ul>${reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
-    <p>Then tick “I reviewed” below.</p></div>`;
 }
 
 function craReminders(draft) {
@@ -836,14 +1021,50 @@ function applyPreset(preset) {
   host.querySelector('#finder-to').value = '';
 }
 
+// Opening a receipt fills the panel; closing the open one on purpose stops the
+// panel from picking another until the pile changes.
+// On a phone the open receipt covers the screen. The panel it sits in is a
+// size container, which would trap a fixed sheet inside it, so the receipt is
+// raised to the top layer as a popover instead, and lowered when it closes.
+function syncSheet(row) {
+  const sheet = row.querySelector(':scope > .finder-review');
+  if (!sheet?.showPopover) return;
+  const raised = sheet.matches(':popover-open');
+  if (row.open && !wide() && (host?.clientWidth || 0) < 640) { if (!raised) sheet.showPopover(); }
+  else if (raised) sheet.hidePopover();
+}
+
+function onToggle(event) {
+  const row = event.target;
+  if (!(row instanceof HTMLElement) || !row.matches('details[data-draft]')) return;
+  const empty = host?.querySelector('[data-rf-pane-empty]');
+  syncSheet(row);
+  if (row.open) { if (empty) empty.hidden = true; return; }
+  if (!host.querySelector('details[data-draft][open]')) {
+    autoPick = false;
+    if (empty) empty.hidden = !host.querySelector('details[data-draft]');
+  }
+}
+
 async function onClick(event) {
   const button = event.target.closest('button');
   if (!button) return;
   try {
     if (!active()) throw new Error('Publisher access required');
-    if (button.dataset.status) { filter = button.dataset.status; render(); return; }
+    if (button.dataset.status) { filter = button.dataset.status; autoPick = true; render(); return; }
+    if (button.dataset.rfViewBtn) {
+      setView(view === 'settings' && button.dataset.rfViewBtn === 'settings' ? 'inbox' : button.dataset.rfViewBtn);
+      render(); host.querySelector('[data-rf-title]')?.focus?.(); return;
+    }
+    if (button.hasAttribute('data-rf-bank')) { window.switchEmailImportTab?.('bank'); return; }
+    if (button.hasAttribute('data-rf-close')) {
+      const row = button.closest('details[data-draft]');
+      if (row) { row.open = false; autoPick = false; row.querySelector('summary')?.focus(); }
+      return;
+    }
     if (button.dataset.preset) {
       applyPreset(button.dataset.preset);
+      if (button.dataset.preset !== 'custom' && tokenLive()) setView('inbox');
       // A period button is a scan button: picking "7 days" means "look through
       // the last 7 days". Before Gmail is connected it only sets the period.
       if (button.dataset.preset !== 'custom' && tokenLive()) { await scan(false); return; }
@@ -859,7 +1080,13 @@ async function onClick(event) {
       draft.notDuplicate = true; draft.updatedAt = Date.now(); await persist(); render();
       announce('Kept as a separate purchase. It now waits with your other receipts.'); return;
     }
-    if (button.dataset.never) { await setSenderRule(button.dataset.never, 'never'); return; }
+    if (button.dataset.never) {
+      // From an open receipt it also sets this one aside, which is what
+      // "never read this shop" means for the receipt in front of you.
+      if (draft && !['queued', 'imported', 'ignored'].includes(draft.status)) { draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); autoPick = true; await persist(); }
+      await setSenderRule(button.dataset.never, 'never'); render(); return;
+    }
+    if (draft && button.hasAttribute('data-file-one')) { await fileOne(draft); return; }
     if (button.dataset.forgetSender) { await setSenderRule(button.dataset.forgetSender, ''); return; }
     if (button.dataset.linkDone) {
       state.linksDone = [...new Set([...(state.linksDone || []), button.dataset.linkDone])].slice(-200);
@@ -879,7 +1106,7 @@ async function onClick(event) {
       // would also toggle the row open — this is the one place that has to
       // be stopped explicitly.
       event.preventDefault();
-      draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); await persist(); render(); return;
+      draft.status = 'ignored'; draft.selected = false; draft.updatedAt = Date.now(); autoPick = true; await persist(); render(); return;
     }
     if (button.dataset.reread) { await rereadSetAside(button.dataset.reread); return; }
     if (button.dataset.retryReason) { await retryFailedEmails(button.dataset.retryReason); return; }
@@ -887,7 +1114,7 @@ async function onClick(event) {
       case 'connect': await toggleConnection(); break;
       case 'use-sheets': await useSheetsScript(); break;
       case 'clear-failures': await clearRecordedFailures(); break;
-      case 'scan': await scan(false); break;
+      case 'scan': setView('inbox'); await scan(false); break;
       case 'test-reader': await testReader(); break;
       case 'scan-day': await scanOneDay(-1); break;
       case 'next': await scan(true); break;
@@ -903,6 +1130,22 @@ async function onClick(event) {
       case 'show-all': filter = 'auto'; resultQuery = ''; host.querySelector('[data-result-search]').value = ''; render(); break;
     }
   } catch (error) { report(error); }
+}
+
+// "Looks right, file it": the publisher has checked this one receipt, so it
+// counts as reviewed and goes straight to filing, and the panel moves on to
+// the next receipt in the pile.
+async function fileOne(draft) {
+  if (['queued', 'imported', 'ignored'].includes(draft.status)) return;
+  draft.reviewed = true; draft.updatedAt = Date.now();
+  if (statusOf(draft) !== 'ready') {
+    await persist(); render();
+    throw new Error(receiptProblems(draft)[0] || 'This receipt can’t be filed yet. Check what is listed on it.');
+  }
+  draft.status = 'queued'; draft.selected = false; autoPick = true;
+  await persist(); render();
+  announce(`${draft.vendor || 'Receipt'} saved for filing. It syncs when you are connected.`);
+  await resumeReceiptImports();
 }
 
 async function toggleConnection() {

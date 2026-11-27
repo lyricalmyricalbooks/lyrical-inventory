@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { statementDate, statementAmount, parseStatement, plaidLines, applyPlaidSync, mergeLines, matchBankLines, shopWords, describeBankCheck } from '../src/lib/bank-match.js';
+import { statementDate, statementAmount, parseStatement, plaidLines, applyPlaidSync, mergeLines, matchBankLines, shopWords, describeBankCheck, matchDraftsToBank, bankSourceName } from '../src/lib/bank-match.js';
 import { plaidCall, syncBank } from '../src/lib/bank-link-client.js';
 import { fetchReceiptLink, receiptDailySchedule } from '../src/lib/receipt-finder-client.js';
 
@@ -157,5 +157,29 @@ describe('talking to the Sheet script', () => {
     expect(got.lines.map(l => l.id)).toEqual(['plaid:a', 'plaid:b']);
     expect(JSON.parse(fetchImpl.mock.calls[0][1].body).payload).toEqual({ op: 'sync', itemId: 'i1', cursor: 'c0' });
     await expect(plaidCall({ endpoint: ENDPOINT, op: 'status', fetchImpl: async () => reply({ ok: false, error: 'Plaid said INVALID' }) })).rejects.toThrow('Plaid said INVALID');
+  });
+});
+
+describe('waiting receipts against the bank', () => {
+  const lines = [
+    { id: 'a', date: '2026-11-20', description: 'SQ *PAPER SUPPLY CO', amount: 169.5, currency: 'CAD', source: 'bank:RBC Royal Bank' },
+    { id: 'b', date: '2026-11-14', description: 'UBER TRIP', amount: 13.93, currency: 'CAD', source: 'file:rbc.csv' },
+    { id: 'c', date: '2026-11-06', description: 'CANADA POST', amount: 18.4, currency: 'CAD', source: 'file:rbc.csv' },
+  ];
+  it('finds what a waiting receipt was paid with, and leaves filed ones to their expense', () => {
+    const drafts = [
+      { id: 'd1', date: '2026-11-19', vendor: 'Paper Supply Co', amount: 169.5, currency: 'CAD', status: 'draft' },
+      { id: 'd2', date: '2026-11-05', vendor: 'Canada Post', amount: 18.4, currency: 'CAD', status: 'ignored' },
+    ];
+    const expenses = [{ id: 'e1', date: '2026-11-05', vendor: 'Canada Post', amount: 18.4, currency: 'CAD' }];
+    const { byDraft, missing } = matchDraftsToBank(lines, expenses, drafts);
+    expect(byDraft.get('d1')).toMatchObject({ sure: true, line: { id: 'a' } });
+    expect(byDraft.has('d2')).toBe(false);
+    expect(missing.map(line => line.id)).toEqual(['b']);
+  });
+  it('names where a charge came from', () => {
+    expect(bankSourceName('bank:RBC Royal Bank')).toBe('RBC Royal Bank');
+    expect(bankSourceName('file:rbc.csv')).toBe('rbc.csv');
+    expect(bankSourceName('')).toBe('your statement');
   });
 });

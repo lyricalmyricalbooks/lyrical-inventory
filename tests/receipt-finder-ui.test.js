@@ -657,9 +657,9 @@ describe('receipt finder UI', () => {
   it('shows the three piles, and Filed only once something is filed', async () => {
     await mount();
     const chips = [...document.querySelectorAll('[data-finder-tabs] [data-status]')].map(chip => chip.dataset.status);
-    // Ready, Needs you and Not receipts are always offered; Filed appears only
+    // Needs you comes first, then Ready and Not receipts; Filed appears only
     // once something is in it.
-    expect(chips).toEqual(['ready', 'needs', 'aside']);
+    expect(chips).toEqual(['needs', 'ready', 'aside']);
     // It opens on the pile that needs the publisher, not on an empty one.
     expect(document.querySelector('[data-status="needs"]').getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('[data-action="retry"]').hidden).toBe(true);
@@ -778,6 +778,39 @@ describe('receipt finder: senders, duplicates, links and accuracy', () => {
     expect(mocks.saved.drafts.find(d => d.id === second.id).notDuplicate).toBe(true);
   });
 
+  it('files one checked receipt from its panel and says why the others wait', async () => {
+    await mount();
+    const row = document.querySelector('[data-draft]');
+    expect(row.querySelector('.rf-why').textContent).not.toBe('');
+    expect(row.querySelector('.rf-check')).not.toBeNull();
+    row.querySelector('[data-file-one]').click(); await settle();
+    expect(mocks.saved.drafts[0]).toMatchObject({ reviewed: true, status: 'queued' });
+  });
+  it('moves the searches and switches to Settings, and back', async () => {
+    await mount();
+    const root = document.querySelector('[data-rf]');
+    expect(root.dataset.rfView).toBe('inbox');
+    document.querySelector('[data-rf-view-btn="settings"]').click(); await settle();
+    expect(root.dataset.rfView).toBe('settings');
+    expect(document.querySelector('[data-rf-title]').textContent).toBe('Where receipts come from');
+    expect(root.querySelector('[data-rf-settings] [data-preset="7"]')).not.toBeNull();
+    document.querySelector('[data-rf-crumb] [data-rf-view-btn="inbox"]').click(); await settle();
+    expect(root.dataset.rfView).toBe('inbox');
+  });
+  it('shows the bank charge a waiting receipt was paid with', async () => {
+    const draft = mocks.saved.drafts[0];
+    const d = new Date(); d.setDate(d.getDate() - 3);
+    draft.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    localStorage.setItem('lyrical-bank-check-v1:publisher', JSON.stringify({ lines: [
+      { id: 'l1', date: draft.date, description: draft.vendor, amount: draft.amount, currency: draft.currency, source: 'bank:RBC Royal Bank' },
+      { id: 'l2', date: draft.date, description: 'UBER TRIP', amount: 13.93, currency: draft.currency, source: 'file:rbc.csv' },
+    ], links: {} }));
+    try {
+      await mount();
+      expect(document.querySelector('[data-draft] .rf-bank').textContent).toContain('RBC Royal Bank');
+      expect(document.querySelector('[data-rf-tiles]').textContent).toMatch(/No receipt yet\s*1/);
+    } finally { localStorage.removeItem('lyrical-bank-check-v1:publisher'); }
+  });
   it('records what was corrected and shows the spot-check accuracy', async () => {
     mocks.saved.drafts[0].spotCheck = true;
     await mount();

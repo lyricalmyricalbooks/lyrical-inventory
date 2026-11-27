@@ -8,11 +8,11 @@
 // No bank login or access token is ever in the app.
 
 import { escapeHtml as esc } from '../lib/html.js';
-import { parseStatement, mergeLines, matchBankLines, describeBankCheck } from '../lib/bank-match.js';
+import { parseStatement, mergeLines, matchBankLines, describeBankCheck, BANK_LOCAL_KEY } from '../lib/bank-match.js';
 import { plaidCall, syncBank, openPlaidLink } from '../lib/bank-link-client.js';
 import '../styles/bank-check.css';
 
-const LOCAL_KEY = 'lyrical-bank-check-v1';
+const LOCAL_KEY = BANK_LOCAL_KEY;
 const MAX_LINES = 3000;
 const PERIODS = [['30', '30 days'], ['90', '3 months'], ['year', 'This year'], ['all', 'Everything']];
 
