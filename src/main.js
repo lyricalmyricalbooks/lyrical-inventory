@@ -422,6 +422,9 @@ import {
   setTcLedgerPage,
   snoozePendingExpense,
   switchTaxCenterSubTab,
+  switchReceiptsSubTab,
+  receiptsSubNavKeydown,
+  renderReceiptsPage,
   tcClearCashFlowBucket,
   tcClearLedgerFilters,
   tcClearSelectedTrip,
@@ -5293,6 +5296,7 @@ function syncRoleUI() {
   // When switching TO author view — redirect away from publisher-only tabs
   const publisherOnlyActive = $('tab-website')?.classList.contains('active')
     || $('tab-taxcenter')?.classList.contains('active')
+    || $('tab-receipts')?.classList.contains('active')
     || $('tab-sheets')?.classList.contains('active')
     || $('tab-backups')?.classList.contains('active')
     || $('tab-qrcodes')?.classList.contains('active')
@@ -5746,7 +5750,7 @@ window.clearHistChanFilter = function () { histChanFilter = null; renderHist(); 
 const SHELL_TAB_LABELS = {
   dashboard: 'Dashboard', website: 'Website Orders', manual: 'Manual Entry',
   consignment: 'Consignment', history: 'History', expenses: 'Expenses',
-  pos: 'Event POS', taxcenter: 'Tax Centre', reconcile: 'Payments', qrcodes: 'QR Codes',
+  pos: 'Event POS', taxcenter: 'Tax Centre', receipts: 'Receipts', reconcile: 'Stripe', qrcodes: 'QR Codes',
   customers: 'Customers', opencall: 'Open Call', sheets: 'Settings', backups: 'Backups',
   myqr: 'My QR Code', webanalytics: 'Web Analytics', shipping: 'Shipping',
   bigcartel: 'Big Cartel', todo: 'To-do', intel: 'Intelligence', today: 'Today', help: 'Help'
@@ -6062,6 +6066,9 @@ export function switchTab(name) {
   const phoneScope = `${isAuthor() ? 'author' : 'publisher'}:${activeBook}:`;
   const previousPanel = document.querySelector('.tab-panel.active');
   phonePages.leave(previousPanel ? previousPanel.dataset.phoneViewKey || phoneScope + previousPanel.id : null);
+  if (previousPanel?.id === 'tab-receipts' && name !== 'receipts' && typeof window.closeEmailReceiptImportModal === 'function') {
+    window.closeEmailReceiptImportModal();
+  }
 
   // Dashboard in All books is the combined inventory overview, not a book panel.
   if (name === 'dashboard' && activeBook === 'all') {
@@ -6148,6 +6155,7 @@ export function switchTab(name) {
     if (name === 'opencall') openCallScreen.call('renderOpenCall');
     if (name === 'reconcile') renderReconcile();
     if (name === 'customers') renderCustomers();
+    if (name === 'receipts') renderReceiptsPage();
     if (name === 'taxcenter') { renderTaxCenter(); refreshTaxCentreRates(); }
     if (name === 'sheets') { loadGasCode(); renderSheetsLog(); renderProfitSettings(); switchSettingsSubTab(activeSettingsSubTab); updateSheetsTabUI(); }
     if (name === 'qrcodes') renderAllQRCodes();
@@ -15194,7 +15202,7 @@ function settingsHomeRows() {
     document.body.classList.contains('bc-off')
       ? { title: 'Big Cartel', sub: 'Switched off. Open it to connect a store again', status: 'Off', tone: 'plain', screen: 'bigcartel' }
       : { title: 'Big Cartel', sub: 'Shop orders and stock, on the Big Cartel screen', status: 'Open', tone: 'plain', screen: 'bigcartel' },
-    { title: 'Payments', sub: 'Stripe and the card reader, on the Payments screen', status: 'Open', tone: 'plain', screen: 'reconcile' },
+    { title: 'Stripe', sub: 'Payments, card reader & Stripe fees, on the Stripe screen', status: 'Open', tone: 'plain', screen: 'reconcile' },
     { title: 'Notifications', sub: 'What the app tells you about, on this device', status: 'Open', tone: 'plain', screen: 'notifications' },
     { title: 'Backups', sub: 'Download or restore everything', status: 'Open', tone: 'plain', screen: 'backups' },
   ];
@@ -16976,7 +16984,61 @@ function _reconWeekStats(matched) {
   return { done: week.length, recorded: top ? fmt(roundCents(top[1]), top[0]) : fmt(0, matched[0]?.p.currency || 'CAD') };
 }
 
+let activeStripeSubTab = 'payments';
+
+function switchStripeSubTab(subTabName) {
+  const subTabs = ['payments', 'fees'];
+  activeStripeSubTab = subTabs.includes(subTabName) ? subTabName : 'payments';
+  subTabs.forEach(tab => {
+    const btn = document.getElementById('btn-stripetab-' + tab);
+    const sec = document.getElementById('stripe-sec-' + tab);
+    if (btn && sec) {
+      if (tab === activeStripeSubTab) {
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        btn.setAttribute('tabindex', '0');
+        sec.style.display = '';
+      } else {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+        btn.setAttribute('tabindex', '-1');
+        sec.style.display = 'none';
+      }
+    }
+  });
+  if (activeStripeSubTab === 'fees') {
+    _tcRenderStatusHeaders();
+  }
+}
+
+function stripeSubNavKeydown(e) {
+  const subTabs = ['payments', 'fees'];
+  const currentIdx = subTabs.indexOf(activeStripeSubTab);
+  if (currentIdx === -1) return;
+
+  let nextIdx = -1;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    nextIdx = (currentIdx + 1) % subTabs.length;
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    nextIdx = (currentIdx - 1 + subTabs.length) % subTabs.length;
+  } else if (e.key === 'Home') {
+    nextIdx = 0;
+  } else if (e.key === 'End') {
+    nextIdx = subTabs.length - 1;
+  }
+
+  if (nextIdx !== -1) {
+    e.preventDefault();
+    const nextTab = subTabs[nextIdx];
+    switchStripeSubTab(nextTab);
+    const targetBtn = document.getElementById('btn-stripetab-' + nextTab);
+    if (targetBtn) targetBtn.focus();
+  }
+}
+
 export function renderReconcile() {
+  switchStripeSubTab(activeStripeSubTab);
+  _tcRenderStatusHeaders();
   const needsEl = document.getElementById('recon-needs');
   // Remember whether the user opened or shut Ready, across redraws.
   if (needsEl && !needsEl.dataset.readyWatch) {
@@ -19134,6 +19196,8 @@ Object.assign(window, {
   removeLedgerEntry, setupReceiptFolder, authorizeReceiptFolder, viewLocalReceipt, setTcLedgerPage,
   reclaimCloudReceiptsNow, cacheAllReceiptsNow, openCloudReceiptsModal, closeCloudReceiptsModal,
   dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab,
+  switchReceiptsSubTab, receiptsSubNavKeydown, renderReceiptsPage,
+  switchStripeSubTab, stripeSubNavKeydown,
   tcSubNavKeydown, tcFilterLedgerByReceiptStorage, openTaxSeasonPreflightModal, tcJumpToFixPreflightIssues, executeFullTaxSeasonExport,
   tcSetVaultView, tcGallerySearchInput, tcGalleryFilterChange, _tcRenderReceiptGallery, setTcGalleryPage,
   openReceiptLightbox, tcLightboxZoom, tcLightboxRotate, tcLightboxReset, tcLightboxNav,
@@ -20083,7 +20147,7 @@ function exposeLegacyInlineHandlers() {
     checkReceiptFolderHealth, receiptFolderReachable, backfillReceiptCache, cacheAllReceiptsNow,
     cloudReceiptQueue, receiptWaitingDays, openCloudReceiptsModal, closeCloudReceiptsModal,
     summarizeReceiptProblems, formatReceiptDiagnostic, renderReceiptProblemPanel, copyReceiptDiagnostic,
-    dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab, switchPOSSubTab, fairKitSearchFilter,
+    dismissReceiptNotice, resetDismissedReceiptNotices, switchTaxCenterSubTab, switchReceiptsSubTab, switchStripeSubTab, switchPOSSubTab, fairKitSearchFilter,
     receiptsForExport, receiptExportYears, readReceiptBytes, exportReceiptsZip,
     openExportReceiptsModal, closeExportReceiptsModal, runReceiptExport,
     listFilesRecursive, organizerCandidateExpenses, openReceiptOrganizer, closeReceiptOrganizer,

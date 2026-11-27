@@ -4,7 +4,7 @@
 // Tabs only the publisher can open. switchTab() sends an author (or the
 // publisher in Author view) back to the Dashboard if they try one of these.
 export const PUBLISHER_ONLY_TABS = new Set([
-  'website', 'backups', 'taxcenter', 'sheets', 'qrcodes', 'reconcile', 'customers',
+  'website', 'backups', 'taxcenter', 'receipts', 'sheets', 'qrcodes', 'reconcile', 'customers',
   'opencall', 'webanalytics', 'shipping', 'bigcartel', 'todo', 'intel', 'today',
 ]);
 

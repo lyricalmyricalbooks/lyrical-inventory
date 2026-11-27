@@ -509,9 +509,10 @@
 
   <div class="o3-grouplabel">Money</div>
   <nav class="pub-nav" aria-label="Money">
-    <button type="button" class="snav" title="Payments" onclick="switchTab('reconcile')"><span class="snav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-payments"/></svg></span><span class="snav-label">Payments</span></button>
+    <button type="button" class="snav" title="Stripe" onclick="switchTab('reconcile')"><span class="snav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-payments"/></svg></span><span class="snav-label">Stripe</span><span class="health-badge" data-health-badge="stripe-fees" aria-label="Stripe fees service is not answering" hidden></span></button>
     <button type="button" class="snav" title="Expenses" onclick="switchTab('expenses')"><span class="snav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-expenses"/></svg></span><span class="snav-label">Expenses</span></button>
-    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-tax"/></svg></span><span class="snav-label">Tax Centre</span><span class="health-badge" data-health-badge="stripe-fees,receipt-scan" aria-label="A Tax Centre service is not answering" hidden></span></button>
+    <button type="button" class="snav" title="Receipts" onclick="switchTab('receipts')"><span class="snav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-receipt"/></svg></span><span class="snav-label">Receipts</span><span class="health-badge" data-health-badge="receipt-scan" aria-label="Receipt scanner is not answering" hidden></span></button>
+    <button type="button" class="snav" title="Tax Centre" onclick="switchTab('taxcenter')"><span class="snav-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-tax"/></svg></span><span class="snav-label">Tax Centre</span></button>
   </nav>
 
   <div class="o3-grouplabel">People</div>
@@ -897,7 +898,7 @@
     </section>
     <section class="help-sec" id="help-press" data-audience="publisher">
       <h3 class="help-sec-title">Running the press</h3>
-      <details class="help-q"><summary>What can I see that artists can’t?</summary><div class="help-a"><p>Artists only see their own book and the everyday tabs: Dashboard, Manual entry, Consignment, History, Expenses and their QR code. You see every book, plus the business tabs — Website orders, Event POS, Payments, Tax Centre, Customers, Shipping, Big Cartel, Sheets and Backups.</p></div></details>
+      <details class="help-q"><summary>What can I see that artists can’t?</summary><div class="help-a"><p>Artists only see their own book and the everyday tabs: Dashboard, Manual entry, Consignment, History, Expenses and their QR code. You see every book, plus the business tabs — Website orders, Event POS, Stripe, Receipts, Tax Centre, Customers, Shipping, Big Cartel, Sheets and Backups.</p></div></details>
       <details class="help-q"><summary>How do I see exactly what an artist sees?</summary><div class="help-a"><p>Choose their book, then press <b>Author view</b> at the top of the screen. A note reminds you that you’re previewing. Press it again to get your full view back.</p></div></details>
       <details class="help-q"><summary>Where do I start each day?</summary><div class="help-a"><ol><li>Open <b>Dashboard</b> and read any <b>Action required</b> note first.</li><li>Open <b>Website orders</b> and apply the ones marked ready.</li><li>Check <b>To-do</b> for anything still waiting on you.</li></ol><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="todo">Open To-do →</button></p></div></details>
       <details class="help-q"><summary>How do I get to the website’s admin?</summary><div class="help-a"><p>Use the <b>Website · Inventory</b> switch: at the top of the left menu on a computer, the <b>Website ↗</b> button at the top of the screen on a phone or tablet, or the top of <b>More</b>. The red number on it is how many website orders are paid and not sent yet.</p><p>On a computer the website opens in its own tab, and pressing <b>Inventory</b> there brings you back to this tab — no pile of new tabs. A website sale in <b>History</b> has an <b>Open on the website</b> link that goes straight to that order, and the website’s orders link back here the same way.</p><p>It needs the internet: offline, the switch says so and opens nothing.</p></div></details>
@@ -920,12 +921,13 @@
       <details class="help-q"><summary>An artist and I owe each other money.</summary><div class="help-a"><p>This happens when an artist kept the money from sales they made themselves, and you also owe them earnings. Choose their book and open the <b>Dashboard</b>: under <b>Profit Sharing Breakdown</b>, the <b>Settle up</b> panel shows both sides and the <b>one</b> payment that clears them.</p><ol><li>Send the artist the statement with <b>Share statement</b> so they see how it adds up.</li><li>Once the money has actually moved, record it there. Saved it by mistake? Use <b>Undo settlement</b>.</li></ol><p>If the artist pays with the card button on their own Dashboard, it’s recorded for you.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="dashboard">Open Dashboard →</button></p></div></details>
       <details class="help-q"><summary>How do I pay back an artist’s expense?</summary><div class="help-a"><p>Artists add costs in <b>Expenses</b>. The Dashboard shows <b>Reimbursements due</b> while any are waiting. Review each one (the receipt photo helps) before paying it back.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="expenses">Open Expenses →</button></p></div></details>
       <details class="help-q"><summary>How do I keep track of shops holding books?</summary><div class="help-a"><p>Use <b>Consignment</b>: add the shop, record the copies you dropped off, then record sales and payments as the shop reports them. It shows what each shop still holds and owes.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="consignment">Open Consignment →</button></p></div></details>
-      <details class="help-q"><summary>Where do I check money came in?</summary><div class="help-a"><p><b>Payments</b> lines up what customers paid against the sales in the books, so you can spot anything missing or doubled.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="reconcile">Open Payments →</button></p></div></details>
-      <details class="help-q"><summary>Where are my numbers for taxes?</summary><div class="help-a"><p>Open <b>Tax Centre</b> for totals by year and expense category, ready to hand to your accountant.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="taxcenter">Open Tax Centre →</button></p></div></details>
+      <details class="help-q"><summary>Where do I check money came in?</summary><div class="help-a"><p><b>Stripe</b> lines up what customers paid against the sales in the books, so you can spot anything missing or doubled, and tracks your Stripe processing fees.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="reconcile">Open Stripe →</button></p></div></details>
+      <details class="help-q"><summary>Where are my receipts and email imports?</summary><div class="help-a"><p>Open <b>Receipts</b> to browse your Receipts Vault, check storage, or import receipts from Gmail and uploaded files.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="receipts">Open Receipts →</button></p></div></details>
+      <details class="help-q"><summary>Where do I check my numbers for taxes?</summary><div class="help-a"><p>Open <b>Tax Centre</b> for totals by year and expense category, ready to hand to your accountant.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="taxcenter">Open Tax Centre →</button></p></div></details>
     </section>
     <section class="help-sec" id="help-safe" data-audience="publisher">
       <h3 class="help-sec-title">Keeping things safe</h3>
-      <details class="help-q"><summary>Does an artist see my other books or the business totals?</summary><div class="help-a"><p>No. An artist only sees their own book. Business tabs like Payments, Tax Centre and Customers stay with you.</p></div></details>
+      <details class="help-q"><summary>Does an artist see my other books or the business totals?</summary><div class="help-a"><p>No. An artist only sees their own book. Business tabs like Stripe, Receipts, Tax Centre and Customers stay with you.</p></div></details>
       <details class="help-q"><summary>How do I make a backup?</summary><div class="help-a"><p>Open <b>Backups</b> to save a copy of everything. Do this before big clean-ups, like deleting old sales or changing many prices at once.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="backups">Open Backups →</button></p></div></details>
       <details class="help-q"><summary>Two devices show different numbers.</summary><div class="help-a"><p>One of them may still be sending changes made offline. Get both online, wait a minute and refresh. If they still disagree, open <b>Backups</b> — when the same thing was changed on two devices, the other version is kept there so you can compare and bring it back.</p><p class="help-go-row"><button type="button" class="btn sm sys-target" data-go="backups">Open Backups →</button></p></div></details>
     </section>
@@ -1521,22 +1523,29 @@
   </div>
   <div class="today-label">Your workspace</div>
   <div class="today-rows">
-    <button type="button" class="today-row" data-action="nav.tab" data-go="reconcile"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-payments"/></svg></span><span class="today-row-txt"><span class="today-row-name">Payments</span><span class="today-row-sub">Match Stripe payments to sales</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="reconcile"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-payments"/></svg></span><span class="today-row-txt"><span class="today-row-name">Stripe</span><span class="today-row-sub">Match Stripe payments &amp; check fees</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="receipts"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-receipt"/></svg></span><span class="today-row-txt"><span class="today-row-name">Receipts</span><span class="today-row-sub">Vault and email receipt import</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
     <button type="button" class="today-row" data-action="nav.tab" data-go="customers"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-customers"/></svg></span><span class="today-row-txt"><span class="today-row-name">Customers</span><span class="today-row-sub">Buyers and mailing list</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
     <button type="button" class="today-row" data-action="nav.tab" data-go="shipping"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-shipping"/></svg></span><span class="today-row-txt"><span class="today-row-name">Shipping</span><span class="today-row-sub">Labels and parcels</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
-    <button type="button" class="today-row" data-action="nav.tab" data-go="taxcenter"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-tax"/></svg></span><span class="today-row-txt"><span class="today-row-name">Tax Centre</span><span class="today-row-sub">Receipts, trips, tax time</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
+    <button type="button" class="today-row" data-action="nav.tab" data-go="taxcenter"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-tax"/></svg></span><span class="today-row-txt"><span class="today-row-name">Tax Centre</span><span class="today-row-sub">Ledger, missing costs, tax time</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
     <button type="button" class="today-row" data-action="nav.tab" data-go="opencall"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-opencall"/></svg></span><span class="today-row-txt"><span class="today-row-name">Open call</span><span class="today-row-sub">Contributor pipeline</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
     <button type="button" class="today-row" data-action="nav.tab" data-go="backups"><span class="today-row-ic" aria-hidden="true"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-backups"/></svg></span><span class="today-row-txt"><span class="today-row-name">Backups</span><span class="today-row-sub">Save and restore your data</span></span><span class="today-row-chev" aria-hidden="true">›</span></button>
   </div>
 </div>
 
-<!-- PAYMENTS / STRIPE RECONCILIATION -->
+<!-- STRIPE (PAYMENTS & PROCESSING FEES) -->
 <div class="tab-panel" id="tab-reconcile" style="display:none;">
+  <div class="settings-sub-nav stripe-sub-nav" role="tablist" aria-label="Stripe Navigation" onkeydown="stripeSubNavKeydown(event)">
+    <button class="settings-sub-tab active" id="btn-stripetab-payments" role="tab" aria-selected="true" aria-controls="stripe-sec-payments" tabindex="0" onclick="switchStripeSubTab('payments')"><span class="lead-emoji" aria-hidden="true">💳 </span>Payments to reconcile</button>
+    <button class="settings-sub-tab" id="btn-stripetab-fees" role="tab" aria-selected="false" aria-controls="stripe-sec-fees" tabindex="-1" onclick="switchStripeSubTab('fees')"><span class="lead-emoji" aria-hidden="true">📊 </span>Stripe fees</button>
+  </div>
+
+  <div id="stripe-sec-payments" class="stripe-section settings-section" role="tabpanel" aria-labelledby="btn-stripetab-payments">
   <!-- Phone order is set by #tab-reconcile rules in styles/phone.css (worklist first, settings folded at the bottom). -->
   <div class="recon-layout">
   <div class="sec-head">
     <div class="sec-head-titles">
-      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Payments</div>
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Stripe</div>
       <div class="section-hed sec-head-title">Stripe payments to reconcile</div>
       <p class="section-subcopy">
         The app sorts every Stripe payment for you. Sales through a book’s own link, or with a title typed on the card reader,
@@ -1628,6 +1637,52 @@
     </div>
   </details>
   </div>
+  </div> <!-- /#stripe-sec-payments -->
+
+  <div id="stripe-sec-fees" class="stripe-section settings-section" role="tabpanel" aria-labelledby="btn-stripetab-fees" style="display:none;">
+    <div class="card tc-integrations-card" id="tc-stripe-card">
+      <div class="tc-integrations-list">
+        <div class="tc-integration-section" id="tc-integration-card-stripe">
+          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
+            <div class="tc-service-header-left">
+              <div class="tc-service-badge badge-stripe" aria-hidden="true">💳</div>
+              <div class="tc-service-meta">
+                <strong class="tc-service-title">Stripe Processing Fees</strong>
+                <div class="tc-service-desc">What Stripe took from your sales each year, month by month, and whether your ledger has it.</div>
+              </div>
+            </div>
+            <div class="tc-service-header-right">
+              <span class="tc-service-status is-idle" id="tc-service-status-stripe">Not connected</span>
+              <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe" aria-hidden="true">▾</span>
+            </div>
+          </div>
+          <div class="oc-collapse-body" id="tc-integration-body-stripe">
+            <div class="tc-form-grid">
+              <div class="tc-form-group">
+                <label class="tc-form-label" for="stripe-fees-key">Restricted Stripe API Key</label>
+                <input type="password" id="stripe-fees-key" class="tc-form-input" placeholder="rk_live_… or sk_live_…" autocomplete="off">
+                <div class="tc-form-hint">A read-only restricted key is enough. <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener">Create one in Stripe →</a></div>
+              </div>
+            </div>
+            <div class="tc-form-actions-row">
+              <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch Stripe fees</button>
+            </div>
+            <div id="stripe-fees-status" class="tc-status-msg" role="status" aria-live="polite"></div>
+            <div id="stripe-fees-results-wrap" style="display:none;"></div>
+            <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
+            <div class="tc-form-actions-row">
+              <div class="tc-form-actions-buttons">
+                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;"><span class="lead-emoji" aria-hidden="true">➕ </span>File in ledger</button>
+                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;"><span class="lead-emoji" aria-hidden="true">⚖ </span>Compare with sales</button>
+                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download transactions (CSV)</button>
+                <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">Forget key</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div> <!-- /#stripe-sec-fees -->
 </div>
 
 <!-- CUSTOMERS / MAILING LIST (publisher only, all books) -->
@@ -2943,10 +2998,7 @@
   <!-- Tax Center Sub-navigation -->
   <div class="settings-sub-nav tc-sub-nav" role="tablist" aria-label="Tax Centre Navigation" onkeydown="tcSubNavKeydown(event)">
     <button class="settings-sub-tab active" id="btn-tctab-ledger" role="tab" aria-selected="true" aria-controls="tc-sec-ledger" tabindex="0" onclick="switchTaxCenterSubTab('ledger')"><span class="lead-emoji" aria-hidden="true">📊 </span>Expenses &amp; Ledger</button>
-    <button class="settings-sub-tab" id="btn-tctab-receipts" role="tab" aria-selected="false" aria-controls="tc-sec-receipts" tabindex="-1" onclick="switchTaxCenterSubTab('receipts')"><span class="lead-emoji" aria-hidden="true">🗂️ </span>Receipts Vault</button>
     <button class="settings-sub-tab" id="btn-tctab-deductions" role="tab" aria-selected="false" aria-controls="tc-sec-deductions" tabindex="-1" onclick="switchTaxCenterSubTab('deductions')"><span class="lead-emoji" aria-hidden="true">🔎 </span>Missing Costs</button>
-    <button class="settings-sub-tab" id="btn-tctab-integrations" role="tab" aria-selected="false" aria-controls="tc-sec-integrations" tabindex="-1" onclick="switchTaxCenterSubTab('integrations')"><span class="lead-emoji" aria-hidden="true">💳 </span>Stripe fees</button>
-    <button class="settings-sub-tab tc-email-import-tab" id="btn-tctab-email-import" role="tab" aria-selected="false" aria-controls="tc-sec-email-import" tabindex="-1" onclick="switchTaxCenterSubTab('email-import')"><span class="lead-emoji" aria-hidden="true">📧 </span>Email Receipt Import<span id="email-inbox-badge" class="tc-email-import-badge" style="display:none;"></span></button>
   </div>
 
   <!-- 1. EXPENSES & LEDGER SECTION -->
@@ -3221,8 +3273,52 @@
   <div id="tc-ledger-pagination"></div>
   </div> <!-- /#tc-sec-ledger -->
 
-  <!-- 2. RECEIPTS VAULT SECTION -->
-  <div id="tc-sec-receipts" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-receipts" style="display:none;">
+  <!-- MISSING COSTS — costs the business had with no record of them.
+       Findings are gaps in the publisher's own records, never tax advice. -->
+  <div id="tc-sec-deductions" role="tabpanel" aria-labelledby="btn-tctab-deductions" style="display:none;">
+    <div class="sec-head">
+      <div class="sec-head-titles">
+        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Missing Costs</div>
+        <div class="section-hed sec-head-title">Money you spent and never wrote down</div>
+        <p class="section-subcopy">This looks for things that cost money &mdash; a fair you sold at, books you posted, a subscription that went out &mdash; and checks whether the cost is in your records. A table paid for in cash leaves no trace anywhere else.</p>
+      </div>
+      <div class="sec-head-badges">
+        <span class="pill gold intel-fig" id="tc-deductions-total">&mdash;</span>
+      </div>
+    </div>
+    <p class="sr-only" id="tc-deductions-status" role="status" aria-live="polite"></p>
+    <div class="ded-list" id="tc-deductions-body"></div>
+    <p class="ded-foot">Amounts are the middle of what you have spent on similar things before, not an industry figure. Whether a cost can be claimed on a return is a question for your accountant &mdash; this only tells you what is missing from your own books.</p>
+
+    <!-- POSSIBLE MISCATEGORIZATIONS — is a recorded cost filed under the right
+         name, judged only against how this business has filed similar wording
+         before. Logic lives in src/lib/category-fit.js. -->
+    <div class="ded-subsec-head">
+      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Possible Miscategorizations</div>
+      <span class="pill gray intel-fig" id="tc-catcheck-total">&mdash;</span>
+    </div>
+    <p class="section-subcopy">This checks each expense's own wording against how you've filed similar wording before &mdash; never against an outside idea of what a category should mean. A word you've used nine times under one category and once under another is worth a second look.</p>
+    <p class="sr-only" id="tc-catcheck-status" role="status" aria-live="polite"></p>
+    <div class="ded-list" id="tc-catcheck-body"></div>
+  </div>
+
+</div>
+
+<!-- RECEIPTS (publisher only) -->
+<div class="tab-panel" id="tab-receipts" style="display:none;">
+  <div class="book-context" style="margin-bottom: 2rem;">
+    <div class="book-context-dot"></div>
+    <div><div class="book-context-title">Receipts</div><div class="book-context-meta">Vault &amp; Email Import</div></div>
+  </div>
+
+  <!-- Receipts Sub-navigation -->
+  <div class="settings-sub-nav receipts-sub-nav" role="tablist" aria-label="Receipts Navigation" onkeydown="receiptsSubNavKeydown(event)">
+    <button class="settings-sub-tab active" id="btn-recptab-vault" role="tab" aria-selected="true" aria-controls="recp-sec-vault" tabindex="0" onclick="switchReceiptsSubTab('vault')"><span class="lead-emoji" aria-hidden="true">🗂️ </span>Receipts Vault</button>
+    <button class="settings-sub-tab tc-email-import-tab" id="btn-recptab-email-import" role="tab" aria-selected="false" aria-controls="recp-sec-email-import" tabindex="-1" onclick="switchReceiptsSubTab('email-import')"><span class="lead-emoji" aria-hidden="true">📧 </span>Email Receipt Import<span id="email-inbox-badge" class="tc-email-import-badge" style="display:none;"></span></button>
+  </div>
+
+  <!-- 1. RECEIPTS VAULT SECTION -->
+  <div id="recp-sec-vault" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-recptab-vault">
     <!-- View Switcher -->
     <div class="tc-vault-view-switch">
       <button type="button" class="tc-vault-view-btn active" id="btn-vault-view-overview" onclick="tcSetVaultView('overview')">🗂 Overview &amp; Storage</button>
@@ -3309,12 +3405,10 @@
         <div id="tc-gallery-pagination" style="margin-top:1rem;"></div>
       </div>
     </div>
-  </div> <!-- /#tc-sec-receipts -->
+  </div> <!-- /#recp-sec-vault -->
 
-  <!-- EMAIL RECEIPT IMPORT SECTION — a normal Tax Centre sub-page (matches the
-       Integrations card layout) instead of a floating dialog, so finding and
-       reviewing receipts lives on the same screen as everything else here. -->
-  <div id="tc-sec-email-import" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-email-import" style="display:none;">
+  <!-- 2. EMAIL RECEIPT IMPORT SECTION -->
+  <div id="recp-sec-email-import" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-recptab-email-import" style="display:none;">
     <div class="card tc-integrations-card email-import-workspace" id="m-email-receipt-import-modal">
       <div class="tc-integrations-head">
         <div class="tc-integrations-icon-badge" aria-hidden="true">📧</div>
@@ -3458,84 +3552,8 @@
         <button type="button" class="btn gold" onclick="handleEmailImportPrimaryAction()" id="email-receipt-scan-btn"><span class="lead-emoji" aria-hidden="true">✨ </span>Select emails to extract</button>
       </div>
     </div>
-  </div> <!-- /#tc-sec-email-import -->
-
-  <!-- 3. INTEGRATIONS & APIS SECTION -->
-  <!-- MISSING COSTS — costs the business had with no record of them.
-       Findings are gaps in the publisher's own records, never tax advice. -->
-  <div id="tc-sec-deductions" role="tabpanel" aria-labelledby="btn-tctab-deductions" style="display:none;">
-    <div class="sec-head">
-      <div class="sec-head-titles">
-        <div class="sec-kicker"><span class="sec-kicker-dot"></span>Missing Costs</div>
-        <div class="section-hed sec-head-title">Money you spent and never wrote down</div>
-        <p class="section-subcopy">This looks for things that cost money &mdash; a fair you sold at, books you posted, a subscription that went out &mdash; and checks whether the cost is in your records. A table paid for in cash leaves no trace anywhere else.</p>
-      </div>
-      <div class="sec-head-badges">
-        <span class="pill gold intel-fig" id="tc-deductions-total">&mdash;</span>
-      </div>
-    </div>
-    <p class="sr-only" id="tc-deductions-status" role="status" aria-live="polite"></p>
-    <div class="ded-list" id="tc-deductions-body"></div>
-    <p class="ded-foot">Amounts are the middle of what you have spent on similar things before, not an industry figure. Whether a cost can be claimed on a return is a question for your accountant &mdash; this only tells you what is missing from your own books.</p>
-
-    <!-- POSSIBLE MISCATEGORIZATIONS — is a recorded cost filed under the right
-         name, judged only against how this business has filed similar wording
-         before. Logic lives in src/lib/category-fit.js. -->
-    <div class="ded-subsec-head">
-      <div class="sec-kicker"><span class="sec-kicker-dot"></span>Possible Miscategorizations</div>
-      <span class="pill gray intel-fig" id="tc-catcheck-total">&mdash;</span>
-    </div>
-    <p class="section-subcopy">This checks each expense's own wording against how you've filed similar wording before &mdash; never against an outside idea of what a category should mean. A word you've used nine times under one category and once under another is worth a second look.</p>
-    <p class="sr-only" id="tc-catcheck-status" role="status" aria-live="polite"></p>
-    <div class="ded-list" id="tc-catcheck-body"></div>
-  </div>
-
-  <div id="tc-sec-integrations" class="tc-section settings-section" role="tabpanel" aria-labelledby="btn-tctab-integrations" style="display:none;">
-    <p class="tc-moved-note">Your shipping and AI keys now live in one place, Settings. <button type="button" class="btn sm" data-action="settings.open" data-part="shipping">Open Settings</button></p>
-    <div class="card tc-integrations-card" id="tc-stripe-card">
-      <div class="tc-integrations-list">
-        <div class="tc-integration-section" id="tc-integration-card-stripe">
-          <div class="oc-collapse-head" role="button" tabindex="0" aria-expanded="true" aria-controls="tc-integration-body-stripe" onclick="toggleIntegrationSection('stripe')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleIntegrationSection('stripe');}">
-            <div class="tc-service-header-left">
-              <div class="tc-service-badge badge-stripe" aria-hidden="true">💳</div>
-              <div class="tc-service-meta">
-                <strong class="tc-service-title">Stripe Processing Fees</strong>
-                <div class="tc-service-desc">What Stripe took from your sales each year, month by month, and whether your ledger has it.</div>
-              </div>
-            </div>
-            <div class="tc-service-header-right">
-              <span class="tc-service-status is-idle" id="tc-service-status-stripe">Not connected</span>
-              <span class="oc-collapse-chevron" id="tc-integration-chevron-stripe" aria-hidden="true">▾</span>
-            </div>
-          </div>
-          <div class="oc-collapse-body" id="tc-integration-body-stripe">
-            <div class="tc-form-grid">
-              <div class="tc-form-group">
-                <label class="tc-form-label" for="stripe-fees-key">Restricted Stripe API Key</label>
-                <input type="password" id="stripe-fees-key" class="tc-form-input" placeholder="rk_live_… or sk_live_…" autocomplete="off">
-                <div class="tc-form-hint">A read-only restricted key is enough. <a href="https://dashboard.stripe.com/apikeys/create" target="_blank" rel="noopener">Create one in Stripe →</a></div>
-              </div>
-            </div>
-            <div class="tc-form-actions-row">
-              <button class="btn gold" onclick="fetchStripeFeesByYear()" id="stripe-fees-btn">Fetch Stripe fees</button>
-            </div>
-            <div id="stripe-fees-status" class="tc-status-msg" role="status" aria-live="polite"></div>
-            <div id="stripe-fees-results-wrap" style="display:none;"></div>
-            <div id="stripe-fees-reconcile-wrap" style="display:none;"></div>
-            <div class="tc-form-actions-row">
-              <div class="tc-form-actions-buttons">
-                <button class="btn gold outline" id="stripe-fees-insert-btn" onclick="insertStripeFeesIntoLedger()" style="display:none;"><span class="lead-emoji" aria-hidden="true">➕ </span>File in ledger</button>
-                <button class="btn tag" id="stripe-fees-reconcile-btn" onclick="reconcileStripeAgainstSales()" style="display:none;"><span class="lead-emoji" aria-hidden="true">⚖ </span>Compare with sales</button>
-                <button class="btn tag" id="stripe-fees-download-btn" onclick="downloadStripeFeesAuditCSV()" style="display:none;">⬇ Download transactions (CSV)</button>
-                <button class="btn tag" id="stripe-fees-clear-btn" onclick="clearStoredStripeKey()" style="display:none;">Forget key</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div> <!-- /#tc-sec-integrations -->
-</div>
+  </div> <!-- /#recp-sec-email-import -->
+</div> <!-- /#tab-receipts -->
 
 <!-- BIG CARTEL DASHBOARD -->
 <div class="tab-panel" id="tab-bigcartel" style="display:none;">
