@@ -290,9 +290,9 @@ describe('expenses and artist payments reach the sheet on their own', () => {
 });
 
 describe('the sheet itself', () => {
-  it('advertises v60 and the sync abilities', () => {
+  it('advertises v61 and the sync abilities', () => {
     const caps = gs.get({});
-    expect(caps.scriptVersion).toBe('v60');
+    expect(caps.scriptVersion).toBe('v61');
     expect(caps.capabilities.pruneOrphans).toBe(true);
     expect(caps.capabilities.expenseRows).toBe(true);
   });

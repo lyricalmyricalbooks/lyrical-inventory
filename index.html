@@ -3338,7 +3338,14 @@
           <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">✉️</span> Gmail Import <span class="email-no-ai-tag">No AI</span></span>
           <span class="email-tab-sub">Keep the original email as is</span>
         </button>
+        <button type="button" class="modal-tab-btn" id="email-tab-bank" onclick="switchEmailImportTab('bank')" role="tab" aria-selected="false" aria-controls="email-panel-bank">
+          <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">🏦</span> Bank check</span>
+          <span class="email-tab-sub">Charges with no receipt</span>
+        </button>
       </div>
+
+      <!-- Bank check: statement lines and connected banks matched to filed receipts (src/features/bank-check.js). -->
+      <div id="email-panel-bank" role="tabpanel" aria-labelledby="email-tab-bank" style="display:none;"></div>
 
       <div id="email-panel-review" role="tabpanel" aria-labelledby="email-tab-review" style="display:none;">
         <p class="email-panel-intro">Review each found receipt and its source before filing. Discard receipts that do not belong in your records.</p>

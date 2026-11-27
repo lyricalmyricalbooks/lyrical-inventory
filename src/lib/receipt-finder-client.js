@@ -383,17 +383,48 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
 
 // The daily sweep's trigger lives in the publisher's own Apps Script, so the
 // app only ever asks it to arm, disarm or report itself.
-export async function receiptDailySchedule({ endpoint, op = 'status', enabled, hour = 5, every = 'hour', fetchImpl = fetch, signal }) {
+// The script checks every action's sign-in (since v53), so the token goes with
+// it; without one the switch was refused and the hourly check never armed.
+export async function receiptDailySchedule({ endpoint, idToken, op = 'status', enabled, hour = 5, every = 'hour', fetchImpl = fetch, signal }) {
   if (!FINDER_ENDPOINT_PATTERN.test(endpoint || '')) throw new Error('Connect your Google Sheet script first');
   const res = await fetchImpl(endpoint, {
     method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: JSON.stringify({ version: 2, action: 'receiptDailySchedule', payload: { op, enabled, hour, every } }),
+    body: JSON.stringify({ version: 2, action: 'receiptDailySchedule', idToken, payload: { op, enabled, hour, every } }),
     signal, redirect: 'follow',
   });
   if (!res.ok) throw new Error(`The script did not answer (${res.status}).`);
   const data = await readScriptJson(res);
   if (!data.ok) throw new Error(data.error || 'Could not change the daily scan.');
   return data;
+}
+
+// Asks the Sheet script to download the receipt behind a "view your receipt"
+// link (the browser cannot: other sites do not allow it). Never throws: a
+// link that cannot be had returns {reason} and the email stays listed.
+// Gives {file:{mime, base64, size, name}} for a PDF or picture, {text} for a
+// receipt web page.
+export async function fetchReceiptLink({ endpoint, idToken, link, fetchImpl = fetch, signal }) {
+  if (!FINDER_ENDPOINT_PATTERN.test(endpoint || '') || !/^https:\/\//i.test(link || '')) return { reason: 'No script to download it' };
+  try {
+    const res = await fetchImpl(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+      body: JSON.stringify({ version: 2, action: 'receiptLinkFetch', idToken, payload: { link } }),
+      signal, redirect: 'follow',
+    });
+    if (!res.ok) return { reason: `The script did not answer (${res.status})` };
+    const data = await readScriptJson(res);
+    if (!data.ok) return { reason: data.reason || data.error || 'Could not download it' };
+    const file = data.file;
+    if (file && ATTACHMENT_MIMES.has(file.mimeType) && typeof file.data === 'string' && /^[A-Za-z0-9+/]*={0,2}$/.test(file.data)) {
+      return { file: { name: file.mimeType === 'application/pdf' ? 'linked-receipt.pdf' : 'linked-receipt', mime: file.mimeType,
+        base64: file.data, size: Math.floor(file.data.length * 3 / 4), attachmentId: '', partId: '' } };
+    }
+    if (typeof data.text === 'string' && data.text.trim()) return { text: data.text.slice(0, 20000) };
+    return { reason: 'Nothing came back from the link' };
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    return { reason: 'Could not reach your Sheet script' };
+  }
 }
 
 // Plain reading of the daily sweep's own report, for the line under the switch.

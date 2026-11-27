@@ -84,6 +84,8 @@ const MAIN_IMPORT_BUDGET = {
   'receipts.js': 14,
   // Composed by receipts.js with injected adapters; no main.js cycle at all.
   'receipt-finder.js': 0,
+  // Opened on demand from the receipts window, with injected adapters.
+  'bank-check.js': 0,
   // The review inbox is a window over receipts.js and shipping.js, which hold its
   // data. From main.js it needs only the DOM lookup, the role check, the toast,
   // and the call that repaints the landing page after something is filed.
@@ -323,6 +325,8 @@ describe('feature module boundary', () => {
 const MIN_EXPORTS = {
   'intel.js': 12,
   'receipt-finder.js': 4,
+  // One tab in the receipts window: mount it.
+  'bank-check.js': 1,
   // Open it, read the queue, repaint it, ask whether it is showing.
   'review-inbox.js': 4,
   // The practice book's fake spreadsheet: one writer, one renderer and the
@@ -385,8 +389,15 @@ describe('feature modules are the only home of what they own', () => {
       // one would pull it back into the first download. Its wiring is checked
       // in tests/lazy-screens.test.js instead.
       const lazy = new RegExp(`lazyFeature\\(\\(\\) => import\\('\\./features/${file.replace('.', '\\.')}'\\)`).test(mainJs);
+      // A tab loaded on demand by another feature (the bank check, by receipts.js).
+      const lazyInFeature = file === 'bank-check.js'
+        && fs.readFileSync(path.join(featureDir, 'receipts.js'), 'utf8').includes(`import('./${file}')`);
 
       it('has everything main.js still uses imported back', () => {
+        if (lazyInFeature) {
+          expect(mainJs).not.toMatch(new RegExp(`features/${file.replace('.', '\\.')}`));
+          return;
+        }
         if (lazy) {
           // ...and must keep it that way.
           expect(mainJs).not.toMatch(new RegExp(`from '\\./features/${file.replace('.', '\\.')}'`));

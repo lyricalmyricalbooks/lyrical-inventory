@@ -1,0 +1,28 @@
+/* Bank check tab (Tax Centre › Import from Email › Bank check). Folio tokens only. */
+.bank-check { display: grid; gap: var(--space-4); }
+.bank-check .email-panel-intro { margin: 0; }
+.bank-sources { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.bank-source {
+  display: grid; align-content: start; gap: var(--space-2);
+  padding: var(--space-4); border: 1px solid var(--border-default); border-radius: var(--r2); background: var(--surface-sunken);
+}
+.bank-source h4 { margin: 0; font-size: var(--text-base); font-weight: 600; color: var(--content-primary); }
+.bank-file-btn { justify-self: start; cursor: pointer; }
+.bank-file-btn:focus-within { box-shadow: var(--focus-ring-halo); }
+.bank-plaid-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.bank-banks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+.bank-banks li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--text-sm); color: var(--content-primary); }
+.bank-setup summary { cursor: pointer; font-size: var(--text-sm); font-weight: 600; color: var(--content-primary); min-height: 44px; display: flex; align-items: center; }
+.bank-setup ol { margin: 0 0 var(--space-2); padding-inline-start: var(--space-5); font-size: var(--text-sm); color: var(--content-primary); line-height: 1.6; }
+.bank-message { margin: 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--border-default); border-radius: var(--r2); font-size: var(--text-sm); color: var(--content-primary); }
+.bank-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); }
+.bank-summary { margin: 0; font-size: var(--text-sm); color: var(--content-secondary); }
+.bank-list { margin: 0; }
+.bank-count { margin-inline-start: var(--space-1); font-weight: 400; color: var(--content-secondary); }
+.bank-list-empty { padding: var(--space-3) var(--space-4); }
+.bank-row .bank-line { flex: 1 1 220px; min-width: 0; font-size: var(--text-sm); overflow-wrap: anywhere; }
+.bank-row .bank-amount { font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--text-sm); color: var(--content-primary); }
+.bank-row .bank-match { flex: 1 1 100%; font-size: var(--text-sm); color: var(--content-primary); padding-inline-start: var(--space-3); overflow-wrap: anywhere; }
+.bank-empty { padding: var(--space-5) var(--space-4); text-align: center; border: 1px dashed var(--border-default); border-radius: var(--r2); }
+.bank-empty p { margin: 0 0 var(--space-1); }
+.bank-foot { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }

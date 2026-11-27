@@ -164,6 +164,8 @@ export function normalizeFoundReceipt(raw, source, index = 0) {
       amount: receiptMoney(line?.amount),
     })),
     from: String(source.from || '').slice(0, 300),
+    // Downloaded from a "view your receipt" link rather than read in the email.
+    ...(/^https:\/\//i.test(String(raw.fromLink || '')) ? { receiptLink: String(raw.fromLink).slice(0, 600) } : {}),
     reviewed: false, selected: confidence >= 0.85, status: 'draft', error: '', updatedAt: Date.now(),
   };
   // About one in fifty is held for a look, to measure how often the reader is right.
@@ -287,6 +289,7 @@ export function receiptExpense(draft, rate, receiptFiles = []) {
     // in emailAttachments above); it is not a receipt file.
     receipt: receiptFiles.find(Boolean) || '', receiptFiles: receiptFiles.filter(Boolean), sourceSnippet: draft.sourceSnippet,
     importedFromEmail: true, importedAt: new Date().toISOString(),
+    ...(draft.receiptLink ? { receiptLink: draft.receiptLink } : {}),
   };
 }
 

@@ -12,9 +12,9 @@ class PinnedDate extends Date {
   static now() { return NOW; }
 }
 
-function hourly({ properties = {}, messages = [], receipts = [{ vendor: 'Printer', amount: 42, currency: 'CAD', date: '2026-11-27' }], aiStatus = 200, senders = null, triggers = [] } = {}) {
+function hourly({ properties = {}, messages = [], receipts = [{ vendor: 'Printer', amount: 42, currency: 'CAD', date: '2026-11-27' }], aiStatus = 200, senders = null, triggers = [], links = {}, plaid = null } = {}) {
   const props = { GEMINI_API_KEY: 'server-secret', ...properties };
-  const written = [], searches = [], aiCalls = [], created = [];
+  const written = [], searches = [], aiCalls = [], created = [], fetched = [], plaidCalls = [];
   const ctx = vm.createContext({
     Date: PinnedDate,
     PropertiesService: { getScriptProperties: () => ({
@@ -29,6 +29,18 @@ function hourly({ properties = {}, messages = [], receipts = [{ vendor: 'Printer
       }
       if (url.startsWith('https://firestore.googleapis.com/') && url.endsWith('/settings/taxCenter')) {
         return { getResponseCode: () => 404, getContentText: () => '{}' };
+      }
+      if (url in links) {
+        fetched.push(url);
+        const l = links[url];
+        return { getResponseCode: () => l.code || 200, getHeaders: () => ({ 'Content-Type': l.type }),
+          getBlob: () => ({ getBytes: () => Array.from({ length: l.size || 10 }, () => 1) }), getContentText: () => l.body || '' };
+      }
+      if (/^https:\/\/(sandbox|production)\.plaid\.com\//.test(url)) {
+        const body = JSON.parse(options.payload);
+        plaidCalls.push({ url, body });
+        const answer = plaid ? plaid(url.replace(/^https:\/\/\w+\.plaid\.com/, ''), body) : { code: 200, data: {} };
+        return { getResponseCode: () => answer.code || 200, getContentText: () => JSON.stringify(answer.data || {}) };
       }
       if (url.startsWith('https://firestore.googleapis.com/')) {
         written.push(JSON.parse(JSON.parse(options.payload).fields.data.stringValue));
@@ -59,7 +71,7 @@ function hourly({ properties = {}, messages = [], receipts = [{ vendor: 'Printer
   vm.runInContext(source, ctx);
   vm.runInContext("verifyFirebaseCaller_ = () => ({ uid: \"p\" }); requirePublisher_ = verifyFirebaseCaller_;", ctx);
   const status = () => JSON.parse(props.RECEIPT_DAILY_STATUS || '{}');
-  return { ctx, props, written, searches, aiCalls, created, triggers, status };
+  return { ctx, props, written, searches, aiCalls, created, triggers, status, fetched, plaidCalls };
 }
 
 const mail = (when, { id, subject = 'Your receipt', from = 'Printer <billing@printer.ca>', body = 'Total $42.00', html = '', attachments = [] } = {}) => ({
@@ -174,5 +186,90 @@ describe('hourly receipt check (v60)', () => {
     call({ op: 'set', enabled: false });
     expect(triggers).toHaveLength(0);
     expect(s.ctx.doGet({ parameter: {} }).capabilities.receiptHourlySweep).toBe(true);
+  });
+
+  it('downloads a PDF behind a "view your receipt" link and files the receipt with the link', () => {
+    const html = '<p>Thanks for paying $12.00</p><a href="https://pay.example.com/r/1">View receipt</a>';
+    const s = hourly({ receipts: n => (n === 1 ? [] : [{ vendor: 'Pay Co', amount: 12, currency: 'CAD' }]),
+      links: { 'https://pay.example.com/r/1': { type: 'application/pdf' } },
+      messages: [mail('2026-11-27T11:00:00Z', { id: 'link-2', subject: 'Payment received', html })] });
+    s.ctx.receiptHourlyScan();
+    expect(s.fetched).toEqual(['https://pay.example.com/r/1']);
+    expect(s.aiCalls).toHaveLength(2);
+    expect(s.aiCalls[1].body.contents[0].parts.some(p => p.inlineData?.mimeType === 'application/pdf')).toBe(true);
+    expect(s.written[0]).toMatchObject({ vendor: 'Pay Co', receipt: 'https://pay.example.com/r/1', fromLink: 'https://pay.example.com/r/1' });
+    expect(JSON.parse(s.props.RECEIPT_LINK_ONLY || '[]')).toEqual([]);
+    expect(s.status().text).toMatch(/1 of them downloaded from a “view your receipt” link/);
+  });
+
+  it('reads a receipt web page behind the link, and leaves a sign-in page on the list', () => {
+    const page = '<html><body><h1>Receipt</h1><p>Paper Co</p><p>Total $12.00 CAD</p><script>x()</script></body></html>';
+    const s = hourly({ receipts: n => (n === 1 ? [] : [{ vendor: 'Paper Co', amount: 12 }]),
+      links: { 'https://pay.example.com/r/2': { type: 'text/html; charset=utf-8', body: page } },
+      messages: [mail('2026-11-27T11:00:00Z', { id: 'p', html: '<a href="https://pay.example.com/r/2">View your receipt</a> $12.00' })] });
+    s.ctx.receiptHourlyScan();
+    expect(JSON.parse(s.aiCalls[1].body.contents[0].parts[0].text).body).toContain('Total $12.00 CAD');
+    expect(JSON.parse(s.aiCalls[1].body.contents[0].parts[0].text).body).not.toContain('x()');
+    expect(s.written).toHaveLength(1);
+
+    const login = hourly({ receipts: [],
+      links: { 'https://pay.example.com/r/3': { type: 'text/html', body: '<form>Sign in <input type="password"> $0.00</form>' } },
+      messages: [mail('2026-11-27T11:00:00Z', { id: 'q', html: '<a href="https://pay.example.com/r/3">View receipt</a> $9.00' })] });
+    login.ctx.receiptHourlyScan();
+    expect(login.aiCalls).toHaveLength(1);
+    expect(JSON.parse(login.props.RECEIPT_LINK_ONLY)).toEqual([expect.objectContaining({ id: 'q' })]);
+  });
+
+  it('refuses links it should not download', () => {
+    const s = hourly({ links: { 'https://big.example.com/r': { type: 'application/pdf', size: 13 * 1024 * 1024 } } });
+    expect(s.ctx.receiptLinkFetch_('http://plain.example.com/r')).toEqual({ reason: 'Not a safe link' });
+    expect(s.ctx.receiptLinkFetch_('https://big.example.com/r')).toEqual({ reason: 'The receipt is too large' });
+  });
+
+  it('answers the app’s request to download a link', () => {
+    const s = hourly({ links: { 'https://pay.example.com/r/9': { type: 'image/png' } } });
+    const out = s.ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'receiptLinkFetch', payload: { link: 'https://pay.example.com/r/9' } }) } });
+    expect(out).toEqual({ ok: true, file: { mimeType: 'image/png', data: 'AAAA' } });
+    expect(s.ctx.doGet({ parameter: {} }).capabilities.receiptLinkFetch).toBe(true);
+  });
+});
+
+describe('bank link through Plaid (v61)', () => {
+  const call = (s, payload) => s.ctx.doPost({ postData: { contents: JSON.stringify({ version: 2, action: 'plaid', payload }) } });
+
+  it('says when the keys are missing, without calling Plaid', () => {
+    const s = hourly();
+    expect(call(s, { op: 'status' })).toEqual({ ok: true, configured: false, env: 'production', items: [] });
+    expect(call(s, { op: 'linkToken' })).toMatchObject({ ok: false, error: expect.stringContaining('PLAID_CLIENT_ID') });
+    expect(s.plaidCalls).toHaveLength(0);
+  });
+
+  it('connects a bank, keeps its token in the script and pages through transactions', () => {
+    const s = hourly({ properties: { PLAID_CLIENT_ID: 'cid', PLAID_SECRET: 'sec', PLAID_ENV: 'sandbox' }, plaid: (path, body) => {
+      if (path === '/link/token/create') return { data: { link_token: 'link-sandbox-1' } };
+      if (path === '/item/public_token/exchange') return { data: { item_id: 'item-1', access_token: 'access-sandbox-secret' } };
+      if (path === '/transactions/sync') return { data: { added: [{ transaction_id: 't1', date: '2026-11-20', name: 'PAPER CO', amount: 12, iso_currency_code: 'CAD', pending: false, account_id: 'hidden' }],
+        modified: [], removed: [{ transaction_id: 't0' }], next_cursor: body.cursor ? 'c3' : 'c2', has_more: false } };
+      return { code: 400, data: { error_code: 'INVALID' } };
+    } });
+    expect(call(s, { op: 'linkToken' })).toEqual({ ok: true, linkToken: 'link-sandbox-1' });
+    expect(s.plaidCalls[0].url).toBe('https://sandbox.plaid.com/link/token/create');
+    expect(s.plaidCalls[0].body).toMatchObject({ client_id: 'cid', secret: 'sec', products: ['transactions'], country_codes: ['CA', 'US'] });
+    const linked = call(s, { op: 'exchange', publicToken: 'public-sandbox-abcdef123456', institution: 'Test Bank' });
+    expect(linked.items).toEqual([{ itemId: 'item-1', institution: 'Test Bank', added: '2026-11-27' }]);
+    expect(JSON.stringify(linked)).not.toContain('access-sandbox-secret');
+    expect(JSON.parse(s.props.PLAID_ITEMS)[0].token).toBe('access-sandbox-secret');
+    const page = call(s, { op: 'sync', itemId: 'item-1', cursor: 'c1' });
+    expect(s.plaidCalls[2].body).toMatchObject({ access_token: 'access-sandbox-secret', cursor: 'c1' });
+    expect(page).toEqual({ ok: true, added: [{ transaction_id: 't1', date: '2026-11-20', name: 'PAPER CO', merchant_name: undefined, amount: 12, iso_currency_code: 'CAD', pending: false }],
+      modified: [], removed: ['t0'], nextCursor: 'c3', hasMore: false });
+    expect(call(s, { op: 'remove', itemId: 'item-1' })).toEqual({ ok: true, items: [] });
+    expect(s.plaidCalls[3].url).toBe('https://sandbox.plaid.com/item/remove');
+  });
+
+  it('refuses a made-up token and an unknown bank', () => {
+    const s = hourly({ properties: { PLAID_CLIENT_ID: 'cid', PLAID_SECRET: 'sec' } });
+    expect(call(s, { op: 'exchange', publicToken: 'nope' })).toMatchObject({ ok: false });
+    expect(call(s, { op: 'sync', itemId: 'ghost' })).toEqual({ ok: false, error: 'That bank is not connected any more' });
   });
 });

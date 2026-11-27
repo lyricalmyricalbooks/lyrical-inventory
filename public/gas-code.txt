@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v60)
+/* Lyricalmyrical Inventory — Unified Backend (v61)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -313,6 +313,15 @@
  *      Emails whose receipt is only behind a link are listed for the app.
  *      'receiptdailyschedule' accepts every:'hour' and reports it back. Bump
  *      flags v59-and-older as outdated so the publisher redeploys.
+ *  59. v61: an email that holds only a "view your receipt" link has the
+ *      receipt behind it downloaded (a PDF, a picture or a receipt web page;
+ *      https only, one GET, 12 MB cap, sign-in pages left alone) and read,
+ *      in the hourly check and, through the new 'receiptLinkFetch' action,
+ *      in the app's own scan. New 'plaid' action links the publisher's bank
+ *      through their own Plaid keys (PLAID_CLIENT_ID, PLAID_SECRET, PLAID_ENV
+ *      in Script Properties): status, link token, token exchange (the access
+ *      token stays in Script Properties), transactions sync with the cursor
+ *      held by the app, and disconnect. Bump flags v60-and-older as outdated.
  */
 
 const HEADERS = [
@@ -376,9 +385,9 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-3.8-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v60',
-    scriptVersion: 'v60',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptHourlySweep: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true, pruneDuplicates: true, renameBook: true, deferSummary: true },
+    service: 'lyrical-sheets-webhook-v61',
+    scriptVersion: 'v61',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptHourlySweep: true, receiptLinkFetch: true, plaidBank: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true, pruneDuplicates: true, renameBook: true, deferSummary: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
@@ -875,6 +884,16 @@ function doPost(e) {
     }
 
     // Install / remove / inspect the daily receipt sweep's trigger.
+    // Download the receipt behind a "view your receipt" link for the app's scan (v61).
+    // Bank link through Plaid: status, connect, read transactions, disconnect (v61).
+    if (action === 'plaid') {
+      return plaidAction_(payload.payload || {});
+    }
+
+    if (action === 'receiptlinkfetch') {
+      return receiptLinkFetchAction_(payload.payload || {});
+    }
+
     if (action === 'receiptdailyschedule') {
       return receiptDailySchedule_(payload.payload || {});
     }
@@ -3587,7 +3606,11 @@ function receiptDailyReadOne_(message, aiKey, props, ai, options) {
       files.push({ inlineData: { mimeType: type, data: Utilities.base64Encode(attachments[a].getBytes()) } });
     }
 
+    // A receipt downloaded from a link in the email is read with it.
+    var linked = options.linked || null;
+    if (linked && linked.file && files.length < 10) files.push({ inlineData: linked.file });
     var body = String(message.getPlainBody() || '').slice(0, 24000);
+    if (linked && linked.text) body = body.slice(0, 8000) + '\n\nReceipt page linked from this email:\n' + linked.text;
     var request = {
       subject: String(message.getSubject() || '').slice(0, 1000),
       from: String(message.getFrom() || '').slice(0, 1000),
@@ -3608,9 +3631,13 @@ function receiptDailyReadOne_(message, aiKey, props, ai, options) {
       try { links = uploadReceiptFiles_(message) || []; } catch (_) { links = []; }
     }
 
+    // The link itself is the copy of a downloaded receipt to open later.
+    if (!links.length && linked && options.receiptLink) links = [options.receiptLink];
     var written = 0;
     for (var r = 0; r < receipts.length && r < 20; r++) {
-      receiptInboxWrite_(receiptDailyDraft_(receipts[r], message, links, r, options.source || 'daily-sweep'));
+      var draft = receiptDailyDraft_(receipts[r], message, links, r, options.source || 'daily-sweep');
+      if (linked) draft.fromLink = options.receiptLink || true;
+      receiptInboxWrite_(draft);
       written++;
     }
     return { found: written, files: files.length };
@@ -3838,6 +3865,153 @@ function receiptLinkOnly_(html) {
   return '';
 }
 
+var RECEIPT_LINK_MAX_BYTES = 12 * 1024 * 1024;
+
+/** Readable words of a receipt web page: scripts, styles and tags removed. */
+function receiptPageText_(html) {
+  return String(html || '').slice(0, 400000)
+    .replace(/<(script|style|noscript|svg|head)\b[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<br\s*\/?>|<\/(?:p|div|tr|li|h\d|table)>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&#36;|&dollar;/gi, '$')
+    .replace(/[ \t\f\v]+/g, ' ').replace(/\s*\n\s*/g, '\n').trim();
+}
+
+/**
+ * Download the receipt behind a "view your receipt" link. Returns
+ * {file:{mimeType,data}} for a PDF or picture, {text} for a readable receipt
+ * page, or {reason} when it cannot be had (a sign-in page, an error, too big).
+ * Only https, only one GET, nothing the page says is acted on.
+ */
+function receiptLinkFetch_(link) {
+  link = String(link || '');
+  if (!/^https:\/\/[^\s"'<>]{1,600}$/i.test(link)) return { reason: 'Not a safe link' };
+  var res;
+  try {
+    res = UrlFetchApp.fetch(link, { method: 'get', followRedirects: true, muteHttpExceptions: true, validateHttpsCertificates: true });
+  } catch (_) { return { reason: 'The link did not answer' }; }
+  var code = res.getResponseCode();
+  if (code !== 200) return { reason: code === 401 || code === 403 ? 'The link needs you to sign in' : 'The link answered ' + code };
+  var headers = {};
+  try { headers = res.getHeaders() || {}; } catch (_) { headers = {}; }
+  var type = String(headers['Content-Type'] || headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  var bytes = res.getBlob().getBytes();
+  if (bytes.length > RECEIPT_LINK_MAX_BYTES) return { reason: 'The receipt is too large' };
+  if (/^(application\/pdf|image\/(jpeg|png|webp))$/.test(type)) {
+    return { file: { mimeType: type, data: Utilities.base64Encode(bytes) } };
+  }
+  if (type === 'text/html' || type === 'text/plain' || !type) {
+    var html = res.getContentText();
+    if (/<input\b[^>]*type\s*=\s*["']?password/i.test(html)) return { reason: 'The link needs you to sign in' };
+    var text = receiptPageText_(html);
+    if (text.length < 20 || !/\d[.,]\d{2}\b/.test(text)) return { reason: 'The page has no receipt on it' };
+    return { text: text.slice(0, 20000) };
+  }
+  return { reason: 'The link is not a receipt file' };
+}
+
+/** v2 action: the app's own scan asks the script to download a receipt link. */
+function receiptLinkFetchAction_(input) {
+  var got = receiptLinkFetch_(input && input.link);
+  if (got.reason) return jsonOut_({ ok: false, reason: got.reason });
+  return jsonOut_(got.file ? { ok: true, file: got.file } : { ok: true, text: got.text });
+}
+
+// ─────────────────────────────────────────────────────────────
+// BANK LINK THROUGH PLAID (v61)
+// The publisher's own Plaid keys (PLAID_CLIENT_ID, PLAID_SECRET, and
+// PLAID_ENV = production or sandbox) live in Script Properties. Each bank's
+// access token is kept here too (PLAID_ITEMS) and never leaves the script;
+// the app only ever sees transactions, item ids and the bank's name. The
+// sync cursor travels with the app, which keeps the transactions, so a
+// failed save in the app never loses a page.
+// ─────────────────────────────────────────────────────────────
+function plaidConfig_(props) {
+  var env = String(props.getProperty('PLAID_ENV') || 'production').toLowerCase();
+  if (env !== 'sandbox' && env !== 'production') env = 'production';
+  return { clientId: props.getProperty('PLAID_CLIENT_ID') || '', secret: props.getProperty('PLAID_SECRET') || '', env: env };
+}
+
+function plaidItems_(props) {
+  var items = [];
+  try { items = JSON.parse(props.getProperty('PLAID_ITEMS') || '[]'); } catch (_) { items = []; }
+  return Array.isArray(items) ? items : [];
+}
+
+function plaidCall_(config, path, body) {
+  if (!config.clientId || !config.secret) throw new Error('Plaid keys are missing: add PLAID_CLIENT_ID and PLAID_SECRET in Script Properties');
+  var payload = { client_id: config.clientId, secret: config.secret };
+  for (var k in body) payload[k] = body[k];
+  var res = UrlFetchApp.fetch('https://' + config.env + '.plaid.com' + path, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true
+  });
+  var data = {};
+  try { data = JSON.parse(res.getContentText() || '{}'); } catch (_) { data = {}; }
+  if (res.getResponseCode() !== 200) {
+    // Plaid's own short code and message only; never the request.
+    var code = String(data.error_code || res.getResponseCode());
+    throw new Error('Plaid said ' + code + (data.error_message ? ': ' + String(data.error_message).slice(0, 200) : ''));
+  }
+  return data;
+}
+
+function plaidPublicItems_(items) {
+  return items.map(function (item) { return { itemId: item.itemId, institution: item.institution || '', added: item.added || '' }; });
+}
+
+function plaidAction_(input) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var config = plaidConfig_(props);
+    var op = String((input && input.op) || 'status');
+    var items = plaidItems_(props);
+    if (op === 'status') {
+      return jsonOut_({ ok: true, configured: !!(config.clientId && config.secret), env: config.env, items: plaidPublicItems_(items) });
+    }
+    if (op === 'linkToken') {
+      var token = plaidCall_(config, '/link/token/create', {
+        client_name: 'Lyrical Inventory', language: 'en', country_codes: ['CA', 'US'],
+        user: { client_user_id: 'publisher' }, products: ['transactions'],
+        transactions: { days_requested: 730 }
+      });
+      return jsonOut_({ ok: true, linkToken: token.link_token });
+    }
+    if (op === 'exchange') {
+      var publicToken = String(input.publicToken || '');
+      if (!/^public-[A-Za-z0-9-]{10,200}$/.test(publicToken)) throw new Error('Plaid did not hand back a usable link');
+      var swapped = plaidCall_(config, '/item/public_token/exchange', { public_token: publicToken });
+      items = items.filter(function (item) { return item.itemId !== swapped.item_id; });
+      items.push({ itemId: swapped.item_id, token: swapped.access_token, institution: String(input.institution || '').slice(0, 80), added: new Date().toISOString().slice(0, 10) });
+      props.setProperty('PLAID_ITEMS', JSON.stringify(items.slice(-10)));
+      return jsonOut_({ ok: true, items: plaidPublicItems_(items) });
+    }
+    var item = items.filter(function (x) { return x.itemId === input.itemId; })[0];
+    if (!item) throw new Error('That bank is not connected any more');
+    if (op === 'sync') {
+      var body = { access_token: item.token, count: 500 };
+      if (input.cursor) body.cursor = String(input.cursor).slice(0, 2000);
+      var page = plaidCall_(config, '/transactions/sync', body);
+      var keep = function (t) {
+        return { transaction_id: t.transaction_id, date: t.date, name: t.name, merchant_name: t.merchant_name,
+          amount: t.amount, iso_currency_code: t.iso_currency_code, pending: t.pending };
+      };
+      return jsonOut_({ ok: true, added: (page.added || []).map(keep), modified: (page.modified || []).map(keep),
+        removed: (page.removed || []).map(function (r) { return r.transaction_id; }),
+        nextCursor: page.next_cursor || '', hasMore: !!page.has_more });
+    }
+    if (op === 'remove') {
+      try { plaidCall_(config, '/item/remove', { access_token: item.token }); } catch (_) { /* forgotten here either way */ }
+      items = items.filter(function (x) { return x.itemId !== item.itemId; });
+      props.setProperty('PLAID_ITEMS', JSON.stringify(items));
+      return jsonOut_({ ok: true, items: plaidPublicItems_(items) });
+    }
+    throw new Error('Unknown bank action');
+  } catch (error) {
+    var text = String(error && error.message ? error.message : error);
+    return jsonOut_({ ok: false, error: /^(Plaid|That bank|Unknown bank)/.test(text) ? text : 'The bank link failed. Try again.' });
+  }
+}
+
 /** Where this run starts reading, in Unix seconds. */
 function receiptHourlyStart_(cursor, nowS, lastDay) {
   var since = parseInt(cursor, 10);
@@ -3894,7 +4068,7 @@ function receiptHourlyScan() {
     }
     messages.sort(function (a, b) { return a.getDate().getTime() - b.getDate().getTime(); });
 
-    var read = 0, found = 0, skipped = 0, blocked = 0, failed = 0, gaveUp = 0;
+    var read = 0, found = 0, skipped = 0, blocked = 0, failed = 0, gaveUp = 0, fromLinks = 0, halted = false;
     var holdS = 0;          // the oldest email left for the next run
     var stopNote = '';
     var linkOnly = [];
@@ -3938,11 +4112,22 @@ function receiptHourlyScan() {
       markSeen(message.getId());
       if (!outcome.found && !outcome.files) {
         var link = receiptLinkOnly_(html);
+        // Download the receipt the link points at and read it, when there is
+        // time. Only what cannot be downloaded (a sign-in page) is listed.
+        if (link && Date.now() - started < RECEIPT_HOURLY_BUDGET_MS) {
+          var linked = receiptLinkFetch_(link);
+          if (!linked.reason) {
+            var again = receiptDailyReadOne_(message, aiKey, props, ai, { markup: receiptMarkup_(html), source: 'hourly-sweep', linked: linked, receiptLink: link });
+            if (again.found) { found += again.found; fromLinks += again.found; link = ''; }
+            else if (again.halt) { stopNote = ' Stopped: ' + again.halt; halted = true; }
+          }
+        }
         if (link) {
           linkOnly = linkOnly.filter(function (x) { return x.id !== message.getId(); });
           linkOnly.unshift({ id: message.getId(), subject: String(message.getSubject() || '').slice(0, 200),
             from: String(message.getFrom() || '').slice(0, 200), day: receiptDayString_(message.getDate()), link: link });
         }
+        if (halted) break;
       }
     }
 
@@ -3956,6 +4141,7 @@ function receiptHourlyScan() {
     props.setProperty('RECEIPT_DAILY_LAST_RUN', new Date().toISOString());
 
     var parts = ['Read ' + read + ' email' + (read === 1 ? '' : 's') + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.'];
+    if (fromLinks) parts.push(fromLinks + ' of them downloaded from a “view your receipt” link.');
     if (skipped) parts.push(skipped + ' set aside as not receipts.');
     if (blocked) parts.push(blocked + ' from senders you never want read.');
     if (ai.backupReads) parts.push('Your OpenRouter backup read ' + ai.backupReads + ' of them.');
