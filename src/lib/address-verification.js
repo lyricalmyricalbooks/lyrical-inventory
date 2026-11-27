@@ -233,6 +233,8 @@ export function normalizeAddressVerification(payload, submitted = {}) {
   if (legacy) {
     const results = body.validation_results;
     const recommended = addressFromV1(body);
+    // buildLegacyValidationPayload fills a blank name with a placeholder; its echo is not a correction.
+    if (recommended && !str(submitted.name) && recommended.name === 'Recipient') recommended.name = '';
     const corrections = addressCorrections(submitted, recommended);
     const reasons = (Array.isArray(results.messages) ? results.messages : []).map(message => ({
       code: str(message?.code),

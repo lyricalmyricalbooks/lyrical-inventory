@@ -69,9 +69,10 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       if (e.baseAmount != null) {
         eBase = e.baseAmount;
       } else {
-        eBase = roundCents((e.amount || 0) * datedCadRate(e.currency || 'CAD', e.date, fxRateCache).rate);
+        const eFx = datedCadRate(e.currency || 'CAD', e.date, fxRateCache);
+        eBase = eFx.missing || (e.fxMissing && eFx.estimated) ? 0 : roundCents((e.amount || 0) * eFx.rate);
       }
-      operatingExpenses += eBase;
+      operatingExpenses = roundCents(operatingExpenses + (Number(eBase) || 0));
     });
 
     // Artist payouts — tracked separately (NOT operating expenses).
@@ -119,7 +120,7 @@ export function computeCashFlowMetrics(sources, yearFilter) {
       : (e.fxMissing && eFx.estimated) || eFx.missing
         ? 0
         : roundCents((e.amount || 0) * eFx.rate);
-    operatingExpenses += eBase;
+    operatingExpenses = roundCents(operatingExpenses + (Number(eBase) || 0));
   });
 
   return { grossSales, operatingExpenses, artistPayouts, txnCount, unitsSold,

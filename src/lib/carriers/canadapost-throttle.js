@@ -172,8 +172,10 @@ async function takeSlot(state, { now, sleep }) {
     : Math.max(now(), state.lastStartedAt);
 
   const gate = Math.max(state.readyAt === null ? from : state.readyAt, state.cooldownUntil);
+  const served = state.cooldownUntil;
   const wait = Math.max(0, gate - from);
   if (wait > 0) await sleep(wait);
+  if (state.cooldownUntil > served) return takeSlot(state, { now, sleep });
 
   // The cooldown is cleared once served rather than re-checked against the
   // clock, so the calls queued behind this one do not each sit out the same

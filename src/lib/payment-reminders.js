@@ -346,13 +346,14 @@ export function nextDay(iso) {
  * midnight — and the warning cannot drift from what the sweep will actually do,
  * which is the whole reason both go through one function.
  */
-export function dueForReminderTomorrow(invoices, { today, days } = {}) {
+export function dueForReminderTomorrow(invoices, { today, days, now = Date.now() } = {}) {
+  const tomorrowNow = now + 24 * 60 * 60 * 1000;
   const tomorrow = nextDay(today);
   if (!tomorrow) return [];
   const out = [];
   for (const inv of (invoices || [])) {
-    if (!reminderBlockReason(inv, { today, days })) continue;          // already in today's queue
-    if (reminderBlockReason(inv, { today: tomorrow, days })) continue; // still blocked tomorrow
+    if (!reminderBlockReason(inv, { today, days, now })) continue;          // already in today's queue
+    if (reminderBlockReason(inv, { today: tomorrow, days, now: tomorrowNow })) continue; // still blocked tomorrow
     out.push(inv);
   }
   out.sort((a, b) => str(a.dueDate).localeCompare(str(b.dueDate)));

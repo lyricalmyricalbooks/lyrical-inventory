@@ -60,7 +60,8 @@ function dayOf(value) {
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
   const ts = activityTimestamp(value);
   if (!ts) return '';
-  return new Date(ts).toISOString().slice(0, 10);
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 /** Numeric ids are `Date.now()` stamps; anything else sorts as 0. */
@@ -223,7 +224,7 @@ function expenseEvents(book, rows) {
   const out = [];
   const bookCur = getBookCurrencyCode(book);
   (rows || []).forEach((e) => {
-    if (!e) return;
+    if (!e || e.voided) return;
     const cur = e.currency || bookCur;
     const ev = event({
       book, date: e.date, tie: e.id, kind: 'expense', icon: '🧾',

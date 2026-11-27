@@ -48,10 +48,12 @@ export function splitFee(fee, amounts) {
   const total = amounts.reduce((sum, a) => sum + (Number(a) || 0), 0);
   if (!(fee > 0) || !(total > 0)) return amounts.map(() => 0);
   let given = 0;
+  let running = 0;
   return amounts.map((a, i) => {
     if (i === amounts.length - 1) return roundCents(fee - given);
-    const part = roundCents(fee * ((Number(a) || 0) / total));
-    given += part;
+    running += Number(a) || 0;
+    const part = roundCents(roundCents(fee * (running / total)) - given);
+    given = roundCents(given + part);
     return part;
   });
 }
@@ -86,12 +88,17 @@ export function backfillSaleFees(states, payments) {
   (payments || []).forEach(p => { if (p && p.feeCurrency && p.fee >= 0) byId.set(p.id, p); });
   if (!byId.size) return [];
   const changed = new Set();
+  const splitIds = new Set();
+  Object.values(states || {}).forEach(s => (s?.hist || []).forEach(h => {
+    const m = /^stripe-(.+)-\d+$/.exec(typeof h?.sheetsId === 'string' ? h.sheetsId : '');
+    if (m && !/-r\d+$/.test(h.sheetsId)) splitIds.add(m[1].replace(/-r\d+$/, ''));
+  }));
   Object.entries(states || {}).forEach(([bookId, s]) => {
     (s?.hist || []).forEach(h => {
       if (!h || h.voided || !h.payment || h.payment.feeCurrency) return;
       const sid = typeof h.sheetsId === 'string' ? h.sheetsId : '';
       const m = /^stripe-(.+?)(-r\d+)?$/.exec(sid);
-      if (!m || /-\d+$/.test(m[1])) return;
+      if (!m || /-\d+$/.test(m[1]) || splitIds.has(m[1])) return;
       const p = byId.get(m[1]);
       if (!p) return;
       h.payment = withSaleFee(h.payment, p);

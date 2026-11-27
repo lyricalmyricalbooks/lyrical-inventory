@@ -68,7 +68,7 @@ export function unshipOrderForRefund(order, labelTracking = '') {
   if (!order) return false;
   const onOrder = String(order.trackingNumber || '').replace(/\s+/g, '').toUpperCase();
   const refunded = String(labelTracking || '').replace(/\s+/g, '').toUpperCase();
-  if (onOrder && refunded && onOrder !== refunded) return false;
+  if (onOrder && onOrder !== refunded) return false;
   order.shipped = false;
   delete order.shippedDate;
   order.trackingNumber = '';

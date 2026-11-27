@@ -256,6 +256,7 @@ export function planCurrencyChange({ state, book, from, to, rateFor, skip }) {
       skipped.push(f);
       continue;
     }
+    if (curOf(f) && normalizeCurrencyCode(curOf(f), '') !== fromCode) continue;
     const rate = Number(getRate(f.date)) || 0;
     if (rate <= 0) { missingRate++; continue; }
     const before = f.get();
@@ -399,6 +400,7 @@ export function detectCurrencyMismatch(state, book) {
 export function describePlan(plan) {
   if (!plan) return '';
   const n = plan.changes.length;
+  if (n === 0 && plan.missingRate) return `Nothing converted — ${plan.missingRate} amount${plan.missingRate === 1 ? '' : 's'} skipped, no rate available.`;
   if (n === 0) return `Nothing to convert — every amount is already in ${plan.to}.`;
   const parts = [`${n} amount${n === 1 ? '' : 's'} will be restated from ${plan.from} to ${plan.to}`];
   if (plan.skipped.length) parts.push(`${plan.skipped.length} already in ${plan.to} (left alone)`);

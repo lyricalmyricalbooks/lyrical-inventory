@@ -91,7 +91,7 @@ function inPersonSales(ctx) {
   for (const [bookId, state] of Object.entries(ctx.states || {})) {
     for (const h of (state?.hist || [])) {
       if (!h || h.voided || h.gratuity || h.consignmentLink) continue;
-      if (!IN_PERSON_CHANNELS.includes(str(h.chan))) continue;
+      if (!IN_PERSON_CHANNELS.includes(str(h.chan)) && str(h.chan) !== 'Book Fair') continue;
       rows.push({
         bookId, date: str(h.date), qty: num(h.qty),
         revenue: roundCents(num(h.qty) * num(h.price ?? h.unitPrice)),

@@ -106,9 +106,11 @@ export function splitDelimitedRecords(raw) {
     return fields;
   };
 
+  // Tabs inside quoted fields don't make a row tab-separated.
+  const unquoted = r => r.replace(/"(?:[^"]|"")*"/g, '');
   const result = [];
   for (const rec of records) {
-    const fields = splitFields(rec, rec.includes('\t') ? '\t' : ',');
+    const fields = splitFields(rec, unquoted(rec).includes('\t') ? '\t' : ',');
     if (fields.some(f => f !== '')) result.push(fields);
   }
   return result;

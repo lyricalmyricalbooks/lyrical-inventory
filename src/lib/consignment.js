@@ -144,7 +144,7 @@ export function stampLedgerInvoiceLink(s, ledgerId, inv) {
     let cleaned = e.notes || '';
     cleaned = cleaned.replace(/\s*·\s*Invoice Discount:\s*[^·]+/g, '').replace(/Invoice Discount:\s*[^·]+/g, '').trim();
     e.notes = cleaned ? `${cleaned} · ${discStr}` : discStr;
-  } else if (!inv) {
+  } else {
     if (e.notes) {
       e.notes = e.notes.replace(/\s*·\s*Invoice Discount:\s*[^·]+/g, '').replace(/Invoice Discount:\s*[^·]+/g, '').trim();
     }
@@ -290,7 +290,7 @@ export function collectUniqueConsignmentStores(states, bookList) {
           country: (st.country || '').trim(),
           website: (st.website || '').trim(),
           terms: (st.terms || '').trim(),
-          rate: st.rate != null ? Number(st.rate) : 40,
+          rate: st.rate != null ? Number(st.rate) : null,
           notes: (st.notes || '').trim(),
           books: [bookTitle],
           bookIds: [book.id],
@@ -329,6 +329,7 @@ export function collectUniqueConsignmentStores(states, bookList) {
     });
   });
 
+  storeMap.forEach(s => { if (s.rate == null) s.rate = 40; });
   return Array.from(storeMap.values()).sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
   );

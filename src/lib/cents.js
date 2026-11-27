@@ -44,7 +44,8 @@ export function halfUpCents(n) {
   const a = Math.abs(n);
   if (a < 1e-9) return 0;
   if (a >= 1e13) return Math.round(n * 100);
-  const cents = Math.round(Number(`${Number(a.toPrecision(12))}e2`));
+  const s = String(Number(a.toPrecision(12)));
+  const cents = Math.round(s.includes('e') ? Number(s) * 100 : Number(`${s}e2`));
   return n < 0 && cents ? -cents : cents;
 }
 

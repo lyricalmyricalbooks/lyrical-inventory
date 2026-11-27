@@ -153,8 +153,9 @@ export function isSettledRefund(refund) {
  */
 export function refundExpense(refund, original, idSeed = Date.now()) {
   if (!refund || !original) return null;
-  const amount = Number(original.origAmount ?? original.amount);
-  if (!Number.isFinite(amount) || amount === 0) return null;
+  const amount = Number(original.amount ?? original.origAmount);
+  const origAmount = Number(original.origAmount ?? original.amount);
+  if (!Number.isFinite(amount) || amount === 0 || !Number.isFinite(origAmount)) return null;
 
   return {
     id: idSeed,
@@ -163,7 +164,7 @@ export function refundExpense(refund, original, idSeed = Date.now()) {
     currency: original.currency,
     amount: -amount,
     origCurrency: original.origCurrency || original.currency,
-    origAmount: -amount,
+    origAmount: -origAmount,
     fxRate: original.fxRate ?? null,
     baseAmount: original.baseAmount != null ? -original.baseAmount : null,
     date: refund.date || original.date,

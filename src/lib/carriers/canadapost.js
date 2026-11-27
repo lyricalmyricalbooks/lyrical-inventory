@@ -2066,7 +2066,7 @@ export function buildNonContractShipmentJson({
   const ph = (value, stand) => (allowPlaceholders ? (value || stand) : (value || ''));
   const cleanOriginZip = ph(cleanPostalCode(sender.postalCode), 'M4B1B3');
   const destCountry = String(destination.countryCode || 'CA').toUpperCase().trim();
-  const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : (destination.postalCode || destination.zip || '90210');
+  const cleanDestZip = destCountry === 'CA' ? cleanPostalCode(destination.postalCode) : ph(destination.postalCode || destination.zip, '90210');
 
   const cleanDeclId = formatDeclarationId(declarationId || customs?.declarationId || '');
 

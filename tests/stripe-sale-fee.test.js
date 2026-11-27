@@ -19,7 +19,7 @@ describe('the Stripe fee kept on each card sale', () => {
 
   it('splits one fee across a split sale so the parts add back up', () => {
     const parts = splitFee(1.01, [22, 22, 22]);
-    expect(parts).toEqual([0.34, 0.34, 0.33]);
+    expect(parts).toEqual([0.34, 0.33, 0.34]);
     expect(parts.reduce((a, b) => a + b, 0)).toBeCloseTo(1.01, 10);
     expect(splitFee(0.9, [30, 15])).toEqual([0.6, 0.3]);
     expect(splitFee(0, [10, 10])).toEqual([0, 0]);

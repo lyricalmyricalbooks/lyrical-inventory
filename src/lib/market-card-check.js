@@ -30,10 +30,11 @@ function isRegisterCardRow(entry) {
  */
 export function checkMarketCards(rows = [], day = '', readerPayments = []) {
   const groups = new Map();
-  (Array.isArray(rows) ? rows : []).forEach(({ bookId, entry }) => {
+  let loose = 0;
+  (Array.isArray(rows) ? rows : []).forEach(({ entry }) => {
     if (!entry || entry.voided || entry.chan !== 'Book Fair') return;
     if (String(entry.date || '').slice(0, 10) !== day || !isRegisterCardRow(entry)) return;
-    const key = entry.num || `${bookId}-${entry.qty}-${entry.price}`;
+    const key = entry.num || `nonum-${loose++}`;
     const group = groups.get(key) || { num: entry.num || '', cents: 0, currency: '', qty: 0 };
     group.cents += cents(entry.payment?.amount ?? (Number(entry.qty) || 0) * (Number(entry.price) || 0));
     group.currency = group.currency || String(entry.payment?.currency || '').toUpperCase();

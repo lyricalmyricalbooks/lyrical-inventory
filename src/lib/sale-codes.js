@@ -187,20 +187,27 @@ function resolveFragment(fragment, names) {
  * and a bare "2" are counts; commas, plus signs, ampersands, slashes and
  * "and" separate books.
  */
-function tokens(text) {
+function tokens(text, codes = new Set()) {
   const raw = String(text ?? '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/×/g, 'x');
   const out = [];
-  const re = /(\d{1,2})\s*x\b|\bx\s*(\d{1,2})\b|(\d{1,2})|([a-z]+)|([,+&;/|\n])/g;
+  const re = /(?!x\d)([a-z]+\d+)(?![a-z\d])|(\d{1,2})\s*x\b|\bx\s*(\d{1,2})\b|(\d{1,2})|([a-z]+)|([,+&;/|\n])/g;
   let m;
   while ((m = re.exec(raw))) {
-    if (m[1] || m[3]) out.push({ type: 'count', qty: Number(m[1] || m[3]), after: false });
-    else if (m[2]) out.push({ type: 'count', qty: Number(m[2]), after: true });
-    else if (m[4] === 'and') out.push({ type: 'sep' });
-    else if (m[4]) out.push({ type: 'word', word: m[4] });
+    const [, code, c1, c2, c3, word] = m;
+    if (code) {
+      // A code with a number in it ("hou2") is one word; anything else is a
+      // word with a count stuck on, read as before.
+      const letters = code.match(/^[a-z]+/)[0];
+      out.push({ type: 'word', word: codes.has(code) ? code : letters });
+      if (!codes.has(code)) re.lastIndex = m.index + letters.length;
+    } else if (c1 || c3) out.push({ type: 'count', qty: Number(c1 || c3), after: false });
+    else if (c2) out.push({ type: 'count', qty: Number(c2), after: true });
+    else if (word === 'and') out.push({ type: 'sep' });
+    else if (word) out.push({ type: 'word', word });
     else out.push({ type: 'sep' });
   }
   return out;
@@ -220,7 +227,7 @@ function tokens(text) {
 export function booksInDescription(text, books = {}) {
   const names = bookNames(books, saleCodes(books));
   if (!names.length) return [];
-  const toks = tokens(text);
+  const toks = tokens(text, new Set(names.map(n => n.code).filter(c => /\d/.test(c))));
   const found = new Map();
   let pending = null;
 
