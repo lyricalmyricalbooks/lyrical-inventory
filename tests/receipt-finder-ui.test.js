@@ -611,6 +611,23 @@ describe('receipt finder UI', () => {
     expect(list.querySelector('[data-action="connect"]')).not.toBeNull();
     expect(list.querySelector('a.finder-setaside-open').getAttribute('href')).toBe('https://mail.google.com/mail/u/?authuser=publisher%40example.com#all/quiet');
   });
+  it('folds the set-aside list, removes one email, and clears the rest without forgetting they were read', async () => {
+    mocks.saved.scans = Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`publisher@example.com:n${i}`,
+      { done: true, subject: `Newsletter ${i}`, count: 0, skipped: 'no-amount', reader: 4 }]));
+    await mount();
+    document.querySelector('[data-status="aside"]').click();
+    const list = () => document.querySelector('.finder-setaside');
+    expect(list().open).toBe(false);
+    expect(list().querySelectorAll('.finder-failure')).toHaveLength(5);
+    list().querySelector('[data-aside-more]').click();
+    expect(list().querySelectorAll('.finder-failure')).toHaveLength(8);
+    list().querySelector('[data-aside-clear="publisher@example.com:n7"]').click(); await settle();
+    expect(mocks.saved.scans['publisher@example.com:n7']).toMatchObject({ done: true, cleared: true });
+    expect(list().textContent).toContain('7 emails set aside as not receipts');
+    list().querySelector('[data-aside-clear-all]').click(); await settle();
+    expect(Object.values(mocks.saved.scans).every(scan => scan.done && scan.cleared)).toBe(true);
+    expect(document.querySelector('.finder-setaside')).toBeNull();
+  });
   it('fills in the subject of an email set aside before subjects were read, without any AI', async () => {
     mocks.saved.scans = { 'publisher@example.com:blank': { done: true, count: 0, skipped: 'no-amount', reader: 3 } };
     mocks.headers.mockResolvedValue({ id: 'blank', subject: 'Receipt from Staples', from: 'Staples <noreply@staples.ca>', date: 'Tue, 22 Sep 2026 12:00:00 -0400' });
