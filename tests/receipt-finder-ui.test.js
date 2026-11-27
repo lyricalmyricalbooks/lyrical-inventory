@@ -704,6 +704,74 @@ describe('receipt finder UI', () => {
   });
 });
 
+describe('receipt finder: senders, duplicates, links and accuracy', () => {
+  it('offers to never read a dismissed receipt’s sender, and saves the list for the hourly check', async () => {
+    mocks.saved.drafts[0].from = 'Printer <billing@printer.ca>';
+    window._fbSaveSettings = vi.fn(async () => true);
+    await mount();
+    document.querySelector('[data-dismiss]').click(); await settle();
+    document.querySelector('[data-status="aside"]').click();
+    const never = document.querySelector('[data-never="printer.ca"]');
+    expect(never.textContent).toContain('Never read emails from printer.ca');
+    never.click(); await settle();
+    expect(mocks.saved.senderRules).toEqual({ never: ['printer.ca'], always: [] });
+    expect(window._fbSaveSettings).toHaveBeenCalledWith('receiptSenders', { never: ['printer.ca'], always: [] });
+    expect(document.querySelector('[data-forget-sender="printer.ca"]')).not.toBeNull();
+    delete window._fbSaveSettings;
+  });
+
+  it('skips a never-read sender during a scan without an AI read', async () => {
+    mocks.saved.senderRules = { never: ['spam.com'], always: [] };
+    mocks.message.mockResolvedValue({ ...source, id: 'm2', from: 'Deals <deals@mail.spam.com>', subject: 'Invoice' });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    expect(mocks.extract).not.toHaveBeenCalled();
+    expect(mocks.saved.scans['publisher@example.com:m2']).toMatchObject({ done: true, skipped: 'sender' });
+  });
+
+  it('lists an email whose receipt is only behind a link, until marked done', async () => {
+    mocks.extract.mockResolvedValue({ receipts: [] });
+    mocks.message.mockResolvedValue({ ...source, id: 'm2', subject: 'Payment received', receiptLink: 'https://pay.example.com/r/1' });
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    document.querySelector('[data-action="connect"]').click(); await settle();
+    document.querySelector('[data-action="scan"]').click(); await settle(); await settle();
+    const links = document.querySelector('[data-finder-links]');
+    expect(links.textContent).toContain('One receipt needs downloading');
+    expect(links.querySelector('a[href="https://pay.example.com/r/1"]')).not.toBeNull();
+    links.querySelector('[data-link-done="m2"]').click(); await settle();
+    expect(document.querySelector('[data-finder-links]').textContent).toBe('');
+  });
+
+  it('holds the later of two emails for the same order, and lets you say it is a different purchase', async () => {
+    const first = normalizeFoundReceipt({ vendor: 'Paper Co', amount: 20, currency: 'CAD', date: '2026-09-01', reference: 'PS-1', confidence: 0.95 }, { ...source, id: 'a' });
+    const second = normalizeFoundReceipt({ vendor: 'Paper Co', amount: 20, currency: 'CAD', date: '2026-09-02', reference: 'PS-1', confidence: 0.95 }, { ...source, id: 'b' });
+    first.updatedAt = 1; second.updatedAt = 2; first.spotCheck = false; second.spotCheck = false;
+    mocks.saved.drafts = [first, second];
+    await mount();
+    document.querySelector('[data-status="needs"]').click();
+    const row = document.querySelector('[data-draft="publisher@example.com:b:0"]');
+    expect(row.textContent).toContain('Same order number as the receipt from Paper Co');
+    row.querySelector('[data-not-duplicate]').click(); await settle();
+    expect(mocks.saved.drafts.find(d => d.id === second.id).notDuplicate).toBe(true);
+  });
+
+  it('records what was corrected and shows the spot-check accuracy', async () => {
+    mocks.saved.drafts[0].spotCheck = true;
+    await mount();
+    const vendor = document.querySelector('[data-field="vendor"]');
+    vendor.value = 'Better Printer'; vendor.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    const reviewed = document.querySelector('[data-reviewed]');
+    reviewed.checked = true; reviewed.dispatchEvent(new Event('change', { bubbles: true })); await settle();
+    const draft = mocks.saved.drafts[0];
+    expect(draft.editedFields).toEqual(['vendor']);
+    expect(draft.history[0]).toMatchObject({ field: 'vendor', from: 'Printer', to: 'Better Printer' });
+    expect(document.querySelector('[data-health-accuracy]').textContent).toBe('Reader accuracy: 0% right on 1 spot check');
+  });
+});
+
 describe('receipt finder with app AI keys', () => {
   it('scans without a script URL and passes the shared reader', async () => {
     mocks.saved.endpoint = '';

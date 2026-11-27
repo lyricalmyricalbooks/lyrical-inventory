@@ -1,4 +1,4 @@
-/* Lyricalmyrical Inventory — Unified Backend (v59)
+/* Lyricalmyrical Inventory — Unified Backend (v60)
  * Features:
  *  1. Gmail scanner for Big Cartel order emails, including customer-paid shipping
  *  2. Sheets sync with:
@@ -300,6 +300,19 @@
  *      stepped past instead of ending the read. The deprecated temperature
  *      setting is no longer sent. Bump flags v58-and-older as outdated so the
  *      publisher redeploys.
+ *  58. v60: 'receiptHourlyScan' checks Gmail for receipts every hour instead of
+ *      once a day. It remembers the moment it last looked (plus the ids of the
+ *      emails it already read), so each run reads only new mail, with no
+ *      20-email ceiling: what one run cannot finish in its time budget is
+ *      picked up by the next. It uses the app's own receipt search and junk
+ *      rules (notification subjects, emails with no amount), honours the
+ *      publisher's "never read" and "always read" sender lists saved in the
+ *      app, passes any order details a store hides in its email to the reader,
+ *      and keeps the subtotal, tax, shipping, line items and GST/HST number on
+ *      each receipt. An unknown currency stays blank instead of becoming CAD.
+ *      Emails whose receipt is only behind a link are listed for the app.
+ *      'receiptdailyschedule' accepts every:'hour' and reports it back. Bump
+ *      flags v59-and-older as outdated so the publisher redeploys.
  */
 
 const HEADERS = [
@@ -363,9 +376,9 @@ function doGet(e) {
   const receiptModel = receiptProps.getProperty('GEMINI_MODEL') || 'gemini-3.8-flash';
   const receiptModelValid = /^[a-zA-Z0-9.-]+$/.test(receiptModel);
   return jsonOut_({
-    service: 'lyrical-sheets-webhook-v59',
-    scriptVersion: 'v59',
-    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true, pruneDuplicates: true, renameBook: true, deferSummary: true },
+    service: 'lyrical-sheets-webhook-v60',
+    scriptVersion: 'v60',
+    capabilities: { reset: true, voidDeletes: true, providerEmail: true, invoiceColumn: true, getBookData: true, captureThread: true, openCallIntake: true, bounceDetection: true, senderAlias: true, mailQuota: true, ocSchedule: true, batchSync: true, bigCartelShipping: true, proxyBigCartel: true, batchEmailContent: true, cheapReceiptList: true, proxyCanadaPost: true, proxyChitChats: true, proxyZonos: true, canadaPostTracking: true, canadaPostOAuth: true, canadaPostRefund: true, graphicalEmails: true, authorPaymentEmails: true, dateOrderedRows: true, receiptExtraction: true, receiptSelfTest: true, receiptDailySweep: true, receiptHourlySweep: true, receiptBackupAi: true, pruneOrphans: true, expenseRows: true, pruneDuplicates: true, renameBook: true, deferSummary: true },
     receiptAi: {
       geminiApiKey: !!receiptProps.getProperty('GEMINI_API_KEY'),
       model: receiptModelValid,
@@ -3148,13 +3161,24 @@ function extractReceipt_(input) {
     // Only the Script Property backup here, never the key saved in the app:
     // this action answers anyone holding the deployment address, and must not
     // become a way to spend the publisher's backup allowance.
+    const request = {
+      subject: String(email.subject || '').slice(0, 1000),
+      from: String(email.from || '').slice(0, 1000),
+      date: String(email.date || '').slice(0, 200),
+      body: email.body
+    };
+    // Order details the store embedded in its email, found by the app. Only
+    // short plain values are passed on; anything else is dropped.
+    const markup = email.orderStructuredData;
+    if (markup && typeof markup === 'object' && !Array.isArray(markup)) {
+      request.orderStructuredData = {
+        vendor: String(markup.vendor || '').slice(0, 200), reference: String(markup.reference || '').slice(0, 100),
+        amount: typeof markup.amount === 'number' && isFinite(markup.amount) ? markup.amount : null,
+        currency: String(markup.currency || '').slice(0, 3), date: String(markup.date || '').slice(0, 10)
+      };
+    }
     const read = receiptAiRead_(props, aiKey, {
-      userText: JSON.stringify({
-        subject: String(email.subject || '').slice(0, 1000),
-        from: String(email.from || '').slice(0, 1000),
-        date: String(email.date || '').slice(0, 200),
-        body: email.body
-      }),
+      userText: JSON.stringify(request),
       files: files
     }, { allowAppSettings: false });
     if (!read.finished) throw new Error('AI could not finish this email. Review it manually or retry.');
@@ -3214,7 +3238,11 @@ function receiptPrompt_() {
     + 'Never guess CAD, today, a tax rate, or payment status. Invoice dates use YYYY-MM-DD. Currency uses ISO 4217. '
     + 'amount is the total including tax and shipping; subtotal excludes them. Do not add shipping twice. '
     + 'confidence ranges 0 to 1 and measures extraction reliability, not whether a purchase is tax deductible. '
-    + 'Return JSON {receipts:[{vendor,description,reference,date,dueDate,currency,amount,subtotal,tax,shipping,category,paymentStatus,documentType,confidence,sourceSnippet,lineItems:[{description,quantity,unitPrice,amount}]}]}. '
+    + 'Copy every amount exactly as printed; never work one out. '
+    + 'supplierTaxNumber is the seller\'s GST/HST, QST or VAT registration number exactly as printed, or an empty string. '
+    + 'taxLines lists each tax printed (GST, HST, PST, QST, VAT) on its own, with its rate in percent when printed, else null. '
+    + 'orderStructuredData, when present, is order data the store embedded in its email; prefer it for the order number and total when it agrees with the text. '
+    + 'Return JSON {receipts:[{vendor,description,reference,date,dueDate,currency,amount,subtotal,tax,shipping,supplierTaxNumber,taxLines:[{name,rate,amount}],category,paymentStatus,documentType,confidence,sourceSnippet,lineItems:[{description,quantity,unitPrice,amount}]}]}. '
     + 'paymentStatus is paid, unpaid, unknown or refunded. sourceSnippet quotes up to 500 characters of evidence. '
     + 'If there is no actual financial document return {receipts:[]}. No prose or markdown.';
 }
@@ -3547,7 +3575,8 @@ function receiptDailyScan() {
 }
 
 /** One message. Returns {found, halt} — `halt` set when the whole run should stop. */
-function receiptDailyReadOne_(message, aiKey, props, ai) {
+function receiptDailyReadOne_(message, aiKey, props, ai, options) {
+  options = options || {};
   try {
     var files = [];
     var attachments = message.getAttachments({ includeInlineImages: false, includeAttachments: true });
@@ -3559,12 +3588,14 @@ function receiptDailyReadOne_(message, aiKey, props, ai) {
     }
 
     var body = String(message.getPlainBody() || '').slice(0, 24000);
+    var request = {
+      subject: String(message.getSubject() || '').slice(0, 1000),
+      from: String(message.getFrom() || '').slice(0, 1000),
+      date: String(message.getDate()), body: body
+    };
+    if (options.markup) request.orderStructuredData = options.markup;
     var read = receiptAiRead_(props, aiKey, {
-      userText: JSON.stringify({
-        subject: String(message.getSubject() || '').slice(0, 1000),
-        from: String(message.getFrom() || '').slice(0, 1000),
-        date: String(message.getDate()), body: body
-      }),
+      userText: JSON.stringify(request),
       files: files
     }, ai || { allowAppSettings: true, backupReads: 0 });
     if (!read.finished) return { found: 0, failed: true };
@@ -3579,10 +3610,10 @@ function receiptDailyReadOne_(message, aiKey, props, ai) {
 
     var written = 0;
     for (var r = 0; r < receipts.length && r < 20; r++) {
-      receiptInboxWrite_(receiptDailyDraft_(receipts[r], message, links, r));
+      receiptInboxWrite_(receiptDailyDraft_(receipts[r], message, links, r, options.source || 'daily-sweep'));
       written++;
     }
-    return { found: written };
+    return { found: written, files: files.length };
   } catch (error) {
     var text = String(error && error.message ? error.message : error);
     // Allowance and key problems repeat on every remaining message, so there is
@@ -3599,13 +3630,21 @@ function receiptDayBefore_(dayString) {
 }
 
 /** Shape the app's inbox already understands, from one extracted receipt. */
-function receiptDailyDraft_(row, message, links, index) {
+function receiptDailyDraft_(row, message, links, index, source) {
   var amount = Number(row.amount);
+  var money = function (value) {
+    if (value === null || value === undefined || value === '') return null;
+    var n = Number(value);
+    return isFinite(n) ? Math.round(n * 100) / 100 : null;
+  };
+  var hourly = source === 'hourly-sweep';
   return {
     vendor: String(row.vendor || '').slice(0, 250),
     description: String(row.description || row.vendor || 'Email receipt').slice(0, 500),
     amount: isNaN(amount) ? 0 : amount,
-    currency: /^[A-Za-z]{3}$/.test(String(row.currency || '')) ? String(row.currency).toUpperCase() : 'CAD',
+    // The daily sweep has always filled CAD; the hourly one never guesses a
+    // currency, so a blank one is asked for in review instead of filed wrong.
+    currency: /^[A-Za-z]{3}$/.test(String(row.currency || '')) ? String(row.currency).toUpperCase() : (hourly ? '' : 'CAD'),
     date: /^\d{4}-\d{2}-\d{2}$/.test(String(row.date || '')) ? row.date : receiptDayString_(message.getDate()),
     reference: String(row.reference || '').slice(0, 200),
     category: String(row.category || 'Other'),
@@ -3614,7 +3653,23 @@ function receiptDailyDraft_(row, message, links, index) {
     receipt: links[0] || '',
     receiptUrls: links,
     gmailMessageId: message.getId() + (index ? '-' + index : ''),
-    source: 'daily-sweep'
+    subtotal: money(row.subtotal),
+    tax: money(row.tax),
+    shipping: money(row.shipping),
+    supplierTaxNumber: String(row.supplierTaxNumber || '').slice(0, 40),
+    taxLines: (Array.isArray(row.taxLines) ? row.taxLines : []).slice(0, 6).map(function (t) {
+      return { name: String((t && t.name) || '').slice(0, 20), rate: money(t && t.rate), amount: money(t && t.amount) };
+    }),
+    lineItems: (Array.isArray(row.lineItems) ? row.lineItems : []).slice(0, 50).map(function (item) {
+      return { description: String((item && item.description) || '').slice(0, 300),
+        quantity: typeof (item && item.quantity) === 'number' ? item.quantity : null,
+        unitPrice: money(item && item.unitPrice), amount: money(item && item.amount) };
+    }),
+    paymentStatus: ['paid', 'unpaid', 'unknown', 'refunded'].indexOf(row.paymentStatus) >= 0 ? row.paymentStatus : 'unknown',
+    documentType: String(row.documentType || 'unknown').slice(0, 40),
+    emailSubject: String(message.getSubject() || '').slice(0, 300),
+    emailFrom: String(message.getFrom() || '').slice(0, 300),
+    source: source || 'daily-sweep'
   };
 }
 
@@ -3637,12 +3692,282 @@ function receiptInboxWrite_(draft) {
     payload: JSON.stringify({ fields: {
       data: { stringValue: JSON.stringify(draft) },
       ts: { integerValue: String(Date.now()) },
-      source: { stringValue: 'daily-sweep' }
+      source: { stringValue: draft.source || 'daily-sweep' }
     } }),
     muteHttpExceptions: true
   });
   var code = res.getResponseCode();
   if (code < 200 || code >= 300) throw new Error('Firestore HTTP ' + code);
+}
+
+// ─────────────────────────────────────────────────────────────
+// HOURLY RECEIPT CHECK (v60)
+//
+// The daily sweep read one finished day at a time with a 20-email ceiling. This
+// one runs every hour and remembers the exact moment it last looked, so each run
+// reads only mail that arrived since — a handful of emails, well inside the free
+// AI allowance. Nothing is capped by day: what one run cannot finish inside its
+// time budget is left for the next, and the cursor never moves past it.
+//
+// The search and junk rules are copies of the app's (src/lib/receipt-finder.js
+// RECEIPT_QUERY, RECEIPT_NOISE and receiptSkipReason); a test runs both on the
+// same emails so they cannot drift apart.
+// ─────────────────────────────────────────────────────────────
+var RECEIPT_HOURLY_QUERY = '(category:purchases OR subject:(receipt OR invoice OR bill OR statement OR "order confirmation" OR "payment confirmation" OR "payment received") OR (has:attachment filename:pdf (invoice OR receipt))) -from:me -from:notifications@github.com -subject:"received a new order" -in:trash -in:spam';
+var RECEIPT_HOURLY_MAX_READS = 25;               // AI reads per run; the rest wait an hour
+var RECEIPT_HOURLY_BUDGET_MS = 4 * 60 * 1000;    // Apps Script stops a run at 6 minutes
+var RECEIPT_HOURLY_OVERLAP_S = 3600;             // Gmail can index a message late
+var RECEIPT_HOURLY_FIRST_LOOKBACK_S = 2 * 86400; // first run: the last two days
+var RECEIPT_HOURLY_MAX_LOOKBACK_S = 14 * 86400;  // after a long pause, never further back
+var RECEIPT_HOURLY_SEEN_MAX = 350;               // ~7 KB, under the 9 KB property limit
+var RECEIPT_HOURLY_GIVE_UP_S = 3 * 86400;        // an email that keeps failing is listed, not retried forever
+
+var RECEIPT_NOT_A_RECEIPT_SUBJECT_ = /\b(?:has shipped|have shipped|is on (?:its|the) way|out for delivery|was delivered|has been delivered|delivery update|shipment update|tracking (?:number|update)|rate your|review your|how did we do|tell us what you think|verify your|reset your password|password reset|security alert|sign-?in attempt)\b/i;
+var RECEIPT_AMOUNT_IN_TEXT_ = new RegExp([
+  '(?:[$€£¥₹]|\\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|JPY|MXN|INR)\\b)\\s?-?\\d',
+  '\\d\\s?(?:[$€£]|\\b(?:CAD|USD|EUR|GBP|AUD|NZD|CHF|SEK|NOK|DKK)\\b)',
+  '\\b(?:total|subtotal|amount|paid|charged|balance|due)\\b[^\\n\\d]{0,40}\\d[\\d,.]{0,15}[.,]\\d{2}\\b'
+].join('|'), 'i');
+
+/** Why an email is not worth an AI read, or '' — the app's receiptSkipReason. */
+function receiptSkipReason_(subject, body, fileCount) {
+  if (fileCount > 0) return '';
+  if (RECEIPT_NOT_A_RECEIPT_SUBJECT_.test(String(subject || '').slice(0, 300))) return 'notification';
+  return RECEIPT_AMOUNT_IN_TEXT_.test(String(subject || '') + '\n' + String(body || '')) ? '' : 'no-amount';
+}
+
+/** The sender's registrable domain ("mail.squareup.com" → "squareup.com"), lower case. */
+function receiptSenderDomain_(from) {
+  var m = /<([^>]*)>/.exec(String(from || ''));
+  var address = (m ? m[1] : String(from || '')).trim().toLowerCase();
+  var labels = (address.split('@')[1] || '').split('.').filter(function (x) { return x; });
+  if (labels.length < 2) return '';
+  var keep = labels.length > 2 && /^(?:co|com|org|net|ac|gov)$/.test(labels[labels.length - 2]) ? 3 : 2;
+  return labels.slice(-keep).join('.');
+}
+
+/** 'never', 'always' or '' for this sender, from the lists saved in the app. */
+function receiptSenderRule_(from, rules) {
+  var domain = receiptSenderDomain_(from);
+  if (!domain || !rules) return '';
+  if ((rules.never || []).indexOf(domain) >= 0) return 'never';
+  if ((rules.always || []).indexOf(domain) >= 0) return 'always';
+  return '';
+}
+
+/** The sender lists the app saves (settings/receiptSenders), read with the owner's own token. */
+function receiptSenderRules_(props) {
+  try {
+    var projectId = props.getProperty('FIREBASE_PROJECT_ID') || 'lyricalmyrical-37c46';
+    var res = UrlFetchApp.fetch('https://firestore.googleapis.com/v1/projects/' + projectId +
+      '/databases/(default)/documents/settings/receiptSenders', {
+      method: 'get', headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) return { never: [], always: [] };
+    var doc = JSON.parse(res.getContentText());
+    var data = JSON.parse(((doc.fields || {}).data || {}).stringValue || '{}') || {};
+    var clean = function (list) {
+      return (Array.isArray(list) ? list : []).map(function (d) { return String(d || '').toLowerCase().trim(); })
+        .filter(function (d) { return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d); }).slice(0, 500);
+    };
+    return { never: clean(data.never), always: clean(data.always) };
+  } catch (_) {
+    return { never: [], always: [] };
+  }
+}
+
+/**
+ * Order details a store embeds in its email for Gmail (schema.org Order or
+ * Invoice in a JSON-LD block): seller, order number, total, currency, date.
+ * Only what is actually there; null when there is none. The app's
+ * receiptMarkup does the same.
+ */
+function receiptMarkup_(html) {
+  var text = String(html || '');
+  var re = /<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]{0,40000}?)<\/script>/gi;
+  var match, blocks = 0;
+  while ((match = re.exec(text)) && blocks < 6) {
+    blocks++;
+    var data;
+    try { data = JSON.parse(match[1].trim()); } catch (_) { continue; }
+    var found = receiptMarkupFind_(data, 0);
+    if (found) return found;
+  }
+  return null;
+}
+
+function receiptMarkupFind_(node, depth) {
+  if (!node || typeof node !== 'object' || depth > 4) return null;
+  if (Array.isArray(node)) {
+    for (var i = 0; i < node.length && i < 20; i++) {
+      var hit = receiptMarkupFind_(node[i], depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (node['@graph']) return receiptMarkupFind_(node['@graph'], depth + 1);
+  var type = String(node['@type'] || '');
+  if (type !== 'Order' && type !== 'Invoice') return null;
+  var name = function (who) { return who && typeof who === 'object' ? String(who.name || '') : String(who || ''); };
+  var spec = node.totalPaymentDue || node.priceSpecification || {};
+  if (Array.isArray(spec)) spec = spec[0] || {};
+  var price = node.price !== undefined ? node.price : (spec.price !== undefined ? spec.price : spec.value);
+  var amount = price === undefined || price === null || price === '' ? null : Number(String(price).replace(/[^0-9.\-]/g, ''));
+  var out = {
+    type: type,
+    vendor: name(node.seller || node.merchant || node.provider || node.broker).slice(0, 200),
+    reference: String(node.orderNumber || node.confirmationNumber || node.accountId || '').slice(0, 100),
+    amount: amount !== null && isFinite(amount) ? amount : null,
+    currency: String(node.priceCurrency || spec.priceCurrency || spec.currency || '').toUpperCase().slice(0, 3),
+    date: String(node.orderDate || node.paymentDueDate || '').slice(0, 10)
+  };
+  if (!/^[A-Z]{3}$/.test(out.currency)) out.currency = '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(out.date)) out.date = '';
+  return out.vendor || out.reference || out.amount !== null ? out : null;
+}
+
+/** A link that says it opens or downloads the receipt, for emails that hold only a link. */
+function receiptLinkOnly_(html) {
+  var re = /<a\b[^>]*href\s*=\s*["'](https:\/\/[^"'\s]{1,600})["'][^>]*>([\s\S]{0,300}?)<\/a>/gi;
+  var m, count = 0;
+  while ((m = re.exec(String(html || ''))) && count < 400) {
+    count++;
+    var words = m[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (/\b(?:view|download|see|get|open|print)\b[^.]{0,30}\b(?:receipt|invoice|bill|statement)\b/i.test(words)) return m[1];
+  }
+  return '';
+}
+
+/** Where this run starts reading, in Unix seconds. */
+function receiptHourlyStart_(cursor, nowS, lastDay) {
+  var since = parseInt(cursor, 10);
+  if (!isFinite(since) || since <= 0) {
+    // Carry on from the daily sweep, if it was on, so switching loses nothing.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(lastDay || ''))) since = Math.floor(Date.parse(lastDay + 'T00:00:00Z') / 1000) + 86400;
+    else since = nowS - RECEIPT_HOURLY_FIRST_LOOKBACK_S;
+  }
+  return Math.max(since, nowS - RECEIPT_HOURLY_MAX_LOOKBACK_S);
+}
+
+function receiptHourlyNote_(props, text, extra) {
+  var note = { at: new Date().toISOString(), text: text };
+  if (extra) for (var k in extra) note[k] = extra[k];
+  props.setProperty('RECEIPT_DAILY_STATUS', JSON.stringify(note));
+}
+
+/** The hourly trigger target. Never throws. */
+function receiptHourlyScan() {
+  var props = PropertiesService.getScriptProperties();
+  var lock = null;
+  try {
+    lock = LockService.getScriptLock();
+    if (lock.tryLock && !lock.tryLock(1000)) return; // the previous run is still going
+  } catch (_) { lock = null; }
+  try {
+    var started = Date.now();
+    var nowS = Math.floor(started / 1000);
+    var aiKey = props.getProperty('GEMINI_API_KEY');
+    var ai = { allowAppSettings: true, backupReads: 0 };
+    if (!aiKey) {
+      ai.backup = receiptBackupKey_(props, true);
+      if (!ai.backup) { receiptHourlyNote_(props, 'Add GEMINI_API_KEY in Script Properties to turn the hourly check on.'); return; }
+    }
+    var since = receiptHourlyStart_(props.getProperty('RECEIPT_HOURLY_SINCE'), nowS, props.getProperty('RECEIPT_DAILY_LAST_DAY'));
+    var from = since - RECEIPT_HOURLY_OVERLAP_S;
+    var seen = [];
+    try { seen = JSON.parse(props.getProperty('RECEIPT_HOURLY_SEEN') || '[]'); } catch (_) { seen = []; }
+    if (!Array.isArray(seen)) seen = [];
+    var seenSet = {};
+    seen.forEach(function (id) { seenSet[id] = true; });
+    var rules = receiptSenderRules_(props);
+
+    var searchLimit = 100;
+    var threads = GmailApp.search(RECEIPT_HOURLY_QUERY + ' after:' + from, 0, searchLimit);
+    var truncated = threads.length >= searchLimit;
+    var grouped = GmailApp.getMessagesForThreads(threads);
+    var messages = [];
+    for (var t = 0; t < grouped.length; t++) {
+      for (var m = 0; m < grouped[t].length; m++) {
+        var msg = grouped[t][m];
+        if (Math.floor(msg.getDate().getTime() / 1000) >= from && !seenSet[msg.getId()]) messages.push(msg);
+      }
+    }
+    messages.sort(function (a, b) { return a.getDate().getTime() - b.getDate().getTime(); });
+
+    var read = 0, found = 0, skipped = 0, blocked = 0, failed = 0, gaveUp = 0;
+    var holdS = 0;          // the oldest email left for the next run
+    var stopNote = '';
+    var linkOnly = [];
+    try { linkOnly = JSON.parse(props.getProperty('RECEIPT_LINK_ONLY') || '[]'); } catch (_) { linkOnly = []; }
+    if (!Array.isArray(linkOnly)) linkOnly = [];
+    var markSeen = function (id) { if (!seenSet[id]) { seenSet[id] = true; seen.push(id); } };
+
+    for (var i = 0; i < messages.length; i++) {
+      var message = messages[i];
+      var whenS = Math.floor(message.getDate().getTime() / 1000);
+      if (read >= RECEIPT_HOURLY_MAX_READS || Date.now() - started > RECEIPT_HOURLY_BUDGET_MS) {
+        holdS = whenS; stopNote = ' ' + (messages.length - i) + ' more will be read next hour.'; break;
+      }
+      var rule = receiptSenderRule_(message.getFrom(), rules);
+      if (rule === 'never') { blocked++; markSeen(message.getId()); continue; }
+      var html = '';
+      try { html = String(message.getBody() || ''); } catch (_) { html = ''; }
+      var attachmentCount = 0;
+      try {
+        attachmentCount = message.getAttachments({ includeInlineImages: false, includeAttachments: true }).filter(function (a) {
+          return /^(application\/pdf|image\/(jpeg|png|webp|heic|heif))/i.test(String(a.getContentType() || ''));
+        }).length;
+      } catch (_) { attachmentCount = 0; }
+      if (rule !== 'always' && receiptSkipReason_(message.getSubject(), message.getPlainBody(), attachmentCount)) {
+        skipped++; markSeen(message.getId()); continue;
+      }
+      var outcome = receiptDailyReadOne_(message, aiKey, props, ai, { markup: receiptMarkup_(html), source: 'hourly-sweep' });
+      if (outcome.halt) {
+        holdS = whenS;
+        stopNote = ' Stopped: ' + outcome.halt + (ai.backup === null
+          ? ' Save an OpenRouter backup key in the app’s Tax Centre settings and it will be used when Gemini runs out.' : '');
+        break;
+      }
+      if (outcome.failed) {
+        if (nowS - whenS > RECEIPT_HOURLY_GIVE_UP_S) { gaveUp++; markSeen(message.getId()); }
+        else { failed++; if (!holdS || whenS < holdS) holdS = whenS; }
+        continue;
+      }
+      read++;
+      found += outcome.found;
+      markSeen(message.getId());
+      if (!outcome.found && !outcome.files) {
+        var link = receiptLinkOnly_(html);
+        if (link) {
+          linkOnly = linkOnly.filter(function (x) { return x.id !== message.getId(); });
+          linkOnly.unshift({ id: message.getId(), subject: String(message.getSubject() || '').slice(0, 200),
+            from: String(message.getFrom() || '').slice(0, 200), day: receiptDayString_(message.getDate()), link: link });
+        }
+      }
+    }
+
+    // The cursor stops in front of anything not finished; otherwise it moves to
+    // when this run began (mail that arrived during the run is next hour's).
+    var next = holdS ? Math.max(holdS - 1, since - RECEIPT_HOURLY_MAX_LOOKBACK_S) : (truncated && messages.length
+      ? Math.floor(messages[messages.length - 1].getDate().getTime() / 1000) : nowS);
+    props.setProperty('RECEIPT_HOURLY_SINCE', String(next));
+    props.setProperty('RECEIPT_HOURLY_SEEN', JSON.stringify(seen.slice(-RECEIPT_HOURLY_SEEN_MAX)));
+    props.setProperty('RECEIPT_LINK_ONLY', JSON.stringify(linkOnly.slice(0, 15)));
+    props.setProperty('RECEIPT_DAILY_LAST_RUN', new Date().toISOString());
+
+    var parts = ['Read ' + read + ' email' + (read === 1 ? '' : 's') + ', found ' + found + ' receipt' + (found === 1 ? '' : 's') + '.'];
+    if (skipped) parts.push(skipped + ' set aside as not receipts.');
+    if (blocked) parts.push(blocked + ' from senders you never want read.');
+    if (ai.backupReads) parts.push('Your OpenRouter backup read ' + ai.backupReads + ' of them.');
+    if (failed) parts.push(failed + ' could not be read and will be tried again next hour.');
+    if (gaveUp) parts.push(gaveUp + ' still could not be read after three days; scan those by hand.');
+    if (truncated) parts.push('More than ' + searchLimit + ' emails matched, so the rest are read next hour.');
+    receiptHourlyNote_(props, parts.join(' ') + stopNote, { read: read, found: found, skipped: skipped, failed: failed });
+  } catch (error) {
+    receiptHourlyNote_(props, 'Failed: ' + (error && error.message ? error.message : error));
+  } finally {
+    try { if (lock && lock.releaseLock) lock.releaseLock(); } catch (_) { /* nothing to release */ }
+  }
 }
 
 function receiptDailySchedule_(input) {
@@ -3652,12 +3977,15 @@ function receiptDailySchedule_(input) {
     if (op === 'set') {
       var triggers = ScriptApp.getProjectTriggers();
       for (var i = 0; i < triggers.length; i++) {
-        if (triggers[i].getHandlerFunction() === 'receiptDailyScan') ScriptApp.deleteTrigger(triggers[i]);
+        var handler = triggers[i].getHandlerFunction();
+        if (handler === 'receiptDailyScan' || handler === 'receiptHourlyScan') ScriptApp.deleteTrigger(triggers[i]);
       }
       var enabled = input.enabled === true || input.enabled === 'true';
       var hour = parseInt(input.hour, 10);
       if (isNaN(hour) || hour < 0 || hour > 23) hour = 5;
-      if (enabled) ScriptApp.newTrigger('receiptDailyScan').timeBased().atHour(hour).everyDays(1).create();
+      var hourly = input.every === 'hour';
+      if (enabled && hourly) ScriptApp.newTrigger('receiptHourlyScan').timeBased().everyHours(1).create();
+      else if (enabled) ScriptApp.newTrigger('receiptDailyScan').timeBased().atHour(hour).everyDays(1).create();
       props.setProperty('RECEIPT_DAILY_HOUR', String(hour));
       return jsonOut_(receiptDailyState_(props));
     }
@@ -3670,17 +3998,23 @@ function receiptDailySchedule_(input) {
 /** The installed trigger is the source of truth for whether it is on. */
 function receiptDailyState_(props) {
   var armed = false;
+  var every = 'day';
   var hour = parseInt(props.getProperty('RECEIPT_DAILY_HOUR') || '5', 10);
   try {
     var triggers = ScriptApp.getProjectTriggers();
     for (var i = 0; i < triggers.length; i++) {
-      if (triggers[i].getHandlerFunction() === 'receiptDailyScan') armed = true;
+      var handler = triggers[i].getHandlerFunction();
+      if (handler === 'receiptDailyScan') armed = true;
+      if (handler === 'receiptHourlyScan') { armed = true; every = 'hour'; }
     }
   } catch (_) { /* no trigger access yet */ }
+  var linkOnly = [];
+  try { linkOnly = JSON.parse(props.getProperty('RECEIPT_LINK_ONLY') || '[]'); } catch (_) { linkOnly = []; }
   var status = {};
   try { status = JSON.parse(props.getProperty('RECEIPT_DAILY_STATUS') || '{}'); } catch (_) { status = {}; }
   return {
-    ok: true, enabled: armed, hour: isNaN(hour) ? 5 : hour,
+    ok: true, enabled: armed, every: every, hour: isNaN(hour) ? 5 : hour,
+    linkOnly: Array.isArray(linkOnly) ? linkOnly.slice(0, 15) : [],
     lastRun: props.getProperty('RECEIPT_DAILY_LAST_RUN') || '',
     throughDay: props.getProperty('RECEIPT_DAILY_LAST_DAY') || '',
     lastResult: status.text || ''

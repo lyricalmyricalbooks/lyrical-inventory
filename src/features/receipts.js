@@ -2869,7 +2869,12 @@ function _inboxItemToDraft(item) {
       ? item.category
       : inferReceiptCategory(item.vendor, item.description),
     sourceSnippet: item.sourceSnippet || '',
-    confidence: typeof item.confidence === 'number' ? item.confidence : 1,
+    // The hourly check leaves an unread currency blank rather than guessing.
+    // The table still needs one, so CAD is shown — but as a low-confidence
+    // row, so it is checked before filing.
+    confidence: !item.currency && item.source === 'hourly-sweep'
+      ? Math.min(0.5, typeof item.confidence === 'number' ? item.confidence : 0.5)
+      : (typeof item.confidence === 'number' ? item.confidence : 1),
     include: true,
     // Receipt file(s) the add-on uploaded to Firebase Storage.
     receipt: item.receipt || '',

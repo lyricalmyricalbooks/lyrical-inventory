@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
 import { receiptRequestBody, describeFinderSetup } from '../src/lib/receipt-finder-client.js';
+import { RECEIPT_QUERY, RECEIPT_NOISE, receiptSkipReason } from '../src/lib/receipt-finder.js';
+import { receiptMarkup, receiptLinkOnly, senderDomain } from '../src/lib/receipt-signals.js';
 
 // The receipt reader moved into the unified Google Sheet script (v44) so the
 // publisher maintains one Apps Script deployment instead of two. These run the
@@ -380,5 +382,36 @@ describe('daily receipt sweep schedule', () => {
 
   it('advertises itself so the app only offers the switch where it works', () => {
     expect(sweepCtx().ctx.doGet({ parameter: {} }).capabilities.receiptDailySweep).toBe(true);
+  });
+});
+
+// ── The Sheet script's copies must say exactly what the app's say ────────────
+describe('the Sheet script follows the same rules as the app', () => {
+  const ctx = vm.createContext({ console });
+  vm.runInContext(source, ctx);
+  const orderEmail = '<script type="application/ld+json">{"@type":"Order","merchant":{"name":"Paper Supply Co"},"orderNumber":"PS-1042","priceCurrency":"CAD","price":"56.50","orderDate":"2026-11-20"}</script>';
+
+  it('searches with the app’s receipt search and junk rules', () => {
+    expect(ctx.RECEIPT_HOURLY_QUERY).toBe(`${RECEIPT_QUERY} ${RECEIPT_NOISE} -in:trash -in:spam`);
+  });
+
+  it('sets aside the same emails', () => {
+    const emails = [
+      { subject: 'Your order has shipped', body: 'Total $40.00' },
+      { subject: 'Receipt', body: 'Thanks for your purchase of CAD 12.50' },
+      { subject: 'Hello', body: 'No money here' },
+      { subject: 'Invoice', body: 'Amount due 1.234,56' },
+      { subject: 'Facture', body: '12,50 $' },
+    ];
+    for (const e of emails) expect(ctx.receiptSkipReason_(e.subject, e.body, 0), e.subject).toBe(receiptSkipReason(e));
+    expect(ctx.receiptSkipReason_('Hello', 'nothing', 1)).toBe('');
+  });
+
+  it('reads embedded order details, links and sender domains the same way', () => {
+    const html = [orderEmail, '<script type="application/ld+json">{"@type":"Invoice","provider":"X","totalPaymentDue":{"price":"9"}}</script>', '<p>none</p>'];
+    for (const h of html) expect(JSON.parse(JSON.stringify(ctx.receiptMarkup_(h)))).toEqual(receiptMarkup(h));
+    const links = ['<a href="https://pay.example.com/r/abc">View your receipt</a>', '<a href="https://e.com/u">Unsubscribe</a>'];
+    for (const h of links) expect(ctx.receiptLinkOnly_(h)).toBe(receiptLinkOnly(h));
+    for (const f of ['"Square" <receipts@messaging.squareup.com>', 'orders@amazon.co.uk', 'x']) expect(ctx.receiptSenderDomain_(f)).toBe(senderDomain(f));
   });
 });

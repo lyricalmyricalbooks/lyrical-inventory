@@ -682,3 +682,26 @@
   .finder-report-outcome { grid-row: 2; grid-column: 1; white-space: normal; }
   .finder-report-open { grid-row: 1 / span 2; grid-column: 2; }
 }
+
+/* ── Reasons to check, reminders, sender lists, link-only receipts ─────── */
+.finder-note { margin: 0; color: var(--content-secondary); font-size: var(--text-sm); line-height: 1.6; }
+.finder-reasons p, .finder-dup p { margin: 0; }
+.finder-reasons ul { margin: var(--space-1) 0; padding-inline-start: var(--space-5); }
+.finder-dup { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.finder-accuracy { color: var(--content-secondary); font-size: var(--text-sm); }
+.finder-senders { display: grid; gap: var(--space-3); margin-block: var(--space-4); }
+.finder-sender-offer {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4); border: 1px solid var(--border-default); border-radius: var(--r2); background: var(--surface-sunken);
+}
+.finder-sender-offer p { margin: 0; font-size: var(--text-sm); color: var(--content-primary); }
+.finder-senders-head { margin: 0; font-size: var(--text-sm); font-weight: 600; color: var(--content-primary); }
+.finder-sender-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.finder-sender-list li {
+  display: inline-flex; align-items: center; gap: var(--space-2); padding-inline-start: var(--space-3);
+  border: 1px solid var(--border-default); border-radius: var(--r2); font-size: var(--text-sm); color: var(--content-primary);
+}
+.finder-links { margin-block-start: var(--space-3); }
+.finder-links .finder-failure { flex-wrap: wrap; }
+.finder-reasons, .finder-dup { font-size: var(--text-sm); margin-block-end: var(--space-3); }
+.finder-links a.btn { text-decoration: none; }
