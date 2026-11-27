@@ -2545,9 +2545,9 @@ async function saveBookFromModal() {
     shipLength: parseFloat($('nb-ship-length').value) || null,
     shipWidth: parseFloat($('nb-ship-width').value) || null,
     shipHeight: parseFloat($('nb-ship-height').value) || null,
-    shipDimUnit: $('nb-ship-dim-unit').value || 'in',
+    shipDimUnit: $('nb-ship-dim-unit').value || 'cm',
     shipWeight: parseFloat($('nb-ship-weight').value) || null,
-    shipWeightUnit: $('nb-ship-weight-unit').value || 'lb',
+    shipWeightUnit: $('nb-ship-weight-unit').value || 'kg',
     shipHsCode: $('nb-ship-hs').value.trim() || '490199'
   };
 

@@ -30,9 +30,9 @@ function weightInPounds(book) {
   if (!Number.isFinite(raw) || raw <= 0) return 0;
   switch (clean(book.shipWeightUnit).toLowerCase()) {
     case 'oz': return raw / 16;
-    case 'kg': return raw * 2.20462;
+    case 'lb': case 'lbs': return raw;
     case 'g': return raw / 453.592;
-    default: return raw;
+    default: return raw * 2.20462; // kg, the default unit
   }
 }
 

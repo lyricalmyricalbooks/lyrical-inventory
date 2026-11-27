@@ -45,29 +45,29 @@ describe('Book parcel presets', () => {
 
   it('resolves by book id, so a retitled book keeps its real dimensions', () => {
     // This is the regression: the old title-substring chain dropped a renamed
-    // book onto the generic 10x8x1 / 1.2 lb parcel and mis-rated every quote.
+    // book onto the generic 25x20x2.5 cm / 0.5 kg parcel and mis-rated every quote.
     const renamed = resolveBookPresetSpecs({ id: 'hound', title: 'The Hound — Second Edition' });
     expect(renamed.source).toBe('preset');
     expect(renamed.specs).toEqual({
-      length: 12, width: 9, height: 1.2, dim_unit: 'in', weight: 2.2, weight_unit: 'lb',
+      length: 30.5, width: 22.9, height: 3, dim_unit: 'cm', weight: 1, weight_unit: 'kg',
     });
 
     const fullyRetitled = resolveBookPresetSpecs({ id: 'sistema', title: 'Unauthorised System' });
     expect(fullyRetitled.source).toBe('preset');
-    expect(fullyRetitled.specs.weight).toBe(0.7);
+    expect(fullyRetitled.specs.weight).toBe(0.3);
   });
 
   it('still matches a known title when the id is unfamiliar', () => {
     const copied = resolveBookPresetSpecs({ id: 'archaeology-reprint-2026', title: 'Archaeology of Presence' });
     expect(copied.source).toBe('preset');
-    expect(copied.specs.length).toBe(9);
+    expect(copied.specs.length).toBe(22.9);
   });
 
   it('reports a generic fallback so the caller can warn', () => {
     const brandNew = resolveBookPresetSpecs({ id: 'newtitle', title: 'A Brand New Book' });
     expect(brandNew.source).toBe('generic');
     expect(brandNew.specs).toEqual({
-      length: 10, width: 8, height: 1, dim_unit: 'in', weight: 1.2, weight_unit: 'lb',
+      length: 25, width: 20, height: 2.5, dim_unit: 'cm', weight: 0.5, weight_unit: 'kg',
     });
 
     expect(resolveBookPresetSpecs(null).source).toBe('generic');
@@ -76,7 +76,7 @@ describe('Book parcel presets', () => {
   it('does not treat a partially filled book record as custom specs', () => {
     const partial = resolveBookPresetSpecs({ id: 'nobody', title: 'As if Nobody is Watching', shipLength: 11 });
     expect(partial.source).toBe('preset');
-    expect(partial.specs.length).toBe(10);
+    expect(partial.specs.length).toBe(25.4);
   });
 
   it('warns in the preset handler when specs are generic', () => {

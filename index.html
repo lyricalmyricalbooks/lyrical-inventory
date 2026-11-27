@@ -3858,14 +3858,14 @@
           <span style="font-size:var(--text-2xs); font-weight:400; text-transform:none; color:var(--text3);">Auto-scales height &amp; weight with quantity</span>
         </div>
         <div class="phone-parcel-grid" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
-          <div class="form-group"><label>Length</label><input type="number" inputmode="decimal" id="sp-length" value="10" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
-          <div class="form-group"><label>Width</label><input type="number" inputmode="decimal" id="sp-width" value="8" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
-          <div class="form-group"><label>Height</label><input type="number" inputmode="decimal" id="sp-height" value="1" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Length</label><input type="number" inputmode="decimal" id="sp-length" value="25" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Width</label><input type="number" inputmode="decimal" id="sp-width" value="20" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
+          <div class="form-group"><label>Height</label><input type="number" inputmode="decimal" id="sp-height" value="2.5" step="0.1" oninput="updateShippoBaseSpecsFromInputs()"></div>
           <div class="form-group">
             <label>Dim. Unit</label>
             <select id="sp-dim-unit" onchange="updateShippoBaseSpecsFromInputs()">
-              <option value="in">Inches (in)</option>
               <option value="cm">Centimeters (cm)</option>
+              <option value="in">Inches (in)</option>
             </select>
           </div>
         </div>
@@ -3876,15 +3876,15 @@
           </div>
           <div class="form-group">
             <label>Total Weight</label>
-            <input type="number" inputmode="decimal" id="sp-weight" value="1.2" step="0.01" oninput="updateShippoBaseSpecsFromInputs()">
+            <input type="number" inputmode="decimal" id="sp-weight" value="0.5" step="0.01" oninput="updateShippoBaseSpecsFromInputs()">
           </div>
           <div class="form-group">
             <label>Weight Unit</label>
             <select id="sp-weight-unit" onchange="updateShippoBaseSpecsFromInputs()">
-              <option value="lb">Pounds (lb)</option>
-              <option value="oz">Ounces (oz)</option>
               <option value="kg">Kilograms (kg)</option>
               <option value="g">Grams (g)</option>
+              <option value="lb">Pounds (lb)</option>
+              <option value="oz">Ounces (oz)</option>
             </select>
           </div>
         </div>

@@ -65,16 +65,16 @@ export const DESTINATION_DE_MINIMIS = {
  * Normalize dimension unit to Zonos enum
  */
 export function normalizeDimUnit(unit) {
-  const clean = String(unit || 'in').toLowerCase().trim();
-  return ZONOS_DIM_UNITS[clean] || 'INCH';
+  const clean = String(unit || 'cm').toLowerCase().trim();
+  return ZONOS_DIM_UNITS[clean] || 'CENTIMETER';
 }
 
 /**
  * Normalize weight unit to Zonos enum
  */
 export function normalizeWeightUnit(unit) {
-  const clean = String(unit || 'lb').toLowerCase().trim();
-  return ZONOS_WEIGHT_UNITS[clean] || 'POUND';
+  const clean = String(unit || 'kg').toLowerCase().trim();
+  return ZONOS_WEIGHT_UNITS[clean] || 'KILOGRAM';
 }
 
 // NOTE ON CREDENTIALS

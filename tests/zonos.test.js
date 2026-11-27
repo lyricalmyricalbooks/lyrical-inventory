@@ -19,8 +19,8 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(normalizeDimUnit('centimeter')).toBe('CENTIMETER');
       expect(normalizeDimUnit('mm')).toBe('MILLIMETER');
       expect(normalizeDimUnit('ft')).toBe('FOOT');
-      expect(normalizeDimUnit('invalid')).toBe('INCH');
-      expect(normalizeDimUnit(null)).toBe('INCH');
+      expect(normalizeDimUnit('invalid')).toBe('CENTIMETER');
+      expect(normalizeDimUnit(null)).toBe('CENTIMETER');
     });
 
     it('normalizes weight units to Zonos enum values', () => {
@@ -30,8 +30,8 @@ describe('Zonos Landed Cost & Duty Engine', () => {
       expect(normalizeWeightUnit('oz')).toBe('OUNCE');
       expect(normalizeWeightUnit('kg')).toBe('KILOGRAM');
       expect(normalizeWeightUnit('g')).toBe('GRAM');
-      expect(normalizeWeightUnit('invalid')).toBe('POUND');
-      expect(normalizeWeightUnit(null)).toBe('POUND');
+      expect(normalizeWeightUnit('invalid')).toBe('KILOGRAM');
+      expect(normalizeWeightUnit(null)).toBe('KILOGRAM');
     });
   });
 
