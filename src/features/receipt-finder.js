@@ -1,5 +1,6 @@
 import { escapeHtml as esc } from '../lib/html.js';
-import { emailDay, emailSenderName as senderName, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { emailDay, emailSenderName as senderName, receiptQuery, normalizeFoundReceipt, receiptProblems, receiptReviewStatus, receiptReviewReasons, receiptMoney, receiptSkipReason, RECEIPT_STATUSES } from '../lib/receipt-finder.js';
+import { senderDomain, senderRule, normalizeSenderRules, withSenderRule, senderSuggestions, craRecordGaps, spotCheckAccuracy, sameOrderElsewhere } from '../lib/receipt-signals.js';
 import { createReceiptFinderClient, extractFoundReceipts, decodeGmailBase64, checkReceiptFinderService, testReceiptAiService, describeAiTest, systemicReceiptFailure, receiptDailySchedule, describeDailySweep } from '../lib/receipt-finder-client.js';
 import { createReceiptFinderStore } from '../lib/receipt-finder-store.js';
 import { flushReceiptOutbox } from '../lib/receipt-finder-outbox.js';
@@ -18,7 +19,7 @@ const PILES = {
   filed: { label: 'Filed', statuses: ['imported'] },
 };
 
-const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '', lastReport: null });
+const emptyState = () => ({ drafts: [], emails: {}, scans: {}, endpoint: '', account: '', lastScan: '', pageToken: '', lastQuery: '', lastEndpoint: '', lastHalt: '', lastReport: null, senderRules: { never: [], always: [] }, linksDone: [] });
 
 // Emails are read a few at a time rather than one after another. The AI call
 // dominates each one, so this is the difference between a scan that takes a
@@ -62,10 +63,18 @@ const activeEndpoint = () => state.endpoint || deps?.service?.() || '';
 // recompute six times per draft per render. One map per render pass, thrown
 // away immediately after, keeps it correct without the repeated scans.
 function statusOf(draft) {
-  if (!statusCache) return receiptReviewStatus(draft, deps.expenses());
+  if (!statusCache) return reviewStatus(draft, deps.expenses());
   let value = statusCache.get(draft);
-  if (value === undefined) { value = receiptReviewStatus(draft, cachedExpenses); statusCache.set(draft, value); }
+  if (value === undefined) { value = reviewStatus(draft, cachedExpenses); statusCache.set(draft, value); }
   return value;
+}
+
+// A store's order confirmation and its receipt for the same order are two
+// emails. With the same order number, only the earlier one is filed.
+function reviewStatus(draft, expenses) {
+  const status = receiptReviewStatus(draft, expenses);
+  if ((status === 'ready' || status === 'review') && sameOrderElsewhere(draft, state.drafts)) return 'duplicate';
+  return status;
 }
 
 // Runs `fn` with one shared status map, for the bulk actions that would
@@ -299,8 +308,10 @@ async function mountReceiptFinder(element, dependencies) {
       <div class="finder-health" data-finder-health>
         <span class="finder-health-item" data-health-reader></span>
         <button type="button" class="btn sm finder-test-btn" data-action="test-reader">Test the reader</button>
-        <label class="finder-auto finder-health-item"><input type="checkbox" data-daily-toggle> Scan every morning <span class="finder-auto-note" data-daily-note>Checking…</span></label>
+        <label class="finder-auto finder-health-item"><input type="checkbox" data-daily-toggle> Check Gmail every hour <span class="finder-auto-note" data-daily-note>Checking…</span></label>
+        <span class="finder-health-item finder-accuracy" data-health-accuracy hidden></span>
       </div>
+      <div data-finder-links></div>
     </section>
     <div class="finder-results-head" data-finder-results-head>
       <div class="finder-tabs finder-piles" data-finder-tabs role="group" aria-label="Show receipts by pile"></div>
@@ -463,6 +474,7 @@ function renderPiles(counts, pile) {
 const REPORT_WORDS = {
   failed: ['Couldn’t be read', 'bad'],
   found: ['New receipt found', 'ok'],
+  'link-only': ['Receipt only behind a link', 'bad'],
   waiting: ['Already found, waiting in your piles', 'ok'],
   'found-before': ['Already found in an earlier scan', 'ok'],
   filed: ['Already in your expenses', 'ok'],
@@ -598,6 +610,8 @@ function render() {
     renderHealth();
     renderProgress();
     renderReport();
+    renderLinkOnly();
+    renderAccuracy();
     const counts = Object.fromEntries(RECEIPT_STATUSES.map(status => [status, 0]));
     state.drafts.forEach(draft => { counts.all++; counts[statusOf(draft)]++; });
     renderAlert(counts);
@@ -694,10 +708,13 @@ function renderDraft(draft, open) {
       ${draft.filledFromEmail?.length && !draft.reviewed && !locked ? `<p class="finder-warning">${esc(filledNote(draft.filledFromEmail))} Check ${draft.filledFromEmail.length === 1 ? 'it' : 'them'}, then tick “I reviewed” below.</p>` : ''}
       ${draft.error ? `<p class="finder-warning">${esc(draft.error)}</p>` : ''}
       ${skipped.length ? `<p class="finder-warning">${esc(skipped.map(file => file.skipped).join(' '))}</p>` : ''}
-      ${status === 'duplicate' ? '<p class="finder-warning">Matches a saved expense. This receipt will not be imported again.</p>' : ''}
+      ${status === 'duplicate' ? duplicateNote(draft) : ''}
+      ${!locked && !draft.reviewed && status !== 'duplicate' ? reasonsNote(draft) : ''}
+      ${craReminders(draft)}
       <div class="finder-edit-grid">${field('vendor', 'Vendor')}${field('reference', 'Invoice / receipt number')}${field('description', 'Description')}
         ${field('date', 'Invoice date', 'date')}${field('dueDate', 'Due date', 'date')}${field('currency', 'Currency (ISO code)')}
         ${field('amount', 'Total', 'number')}${field('subtotal', 'Subtotal', 'number')}${field('tax', 'Tax', 'number')}${field('shipping', 'Shipping', 'number')}
+        ${field('supplierTaxNumber', 'Seller’s GST/HST number')}
         <label>Category<select data-field="category" ${locked ? 'disabled' : ''}>${deps.categories.map(category => `<option ${category === draft.category ? 'selected' : ''}>${esc(category)}</option>`).join('')}</select></label>
         <label>Payment status<select data-field="paymentStatus" ${locked ? 'disabled' : ''}>${['unknown', 'paid', 'unpaid', 'refunded'].map(value => `<option ${value === draft.paymentStatus ? 'selected' : ''}>${value}</option>`).join('')}</select></label></div>
       <details><summary>Line items (${draft.lineItems.length})</summary>
@@ -711,8 +728,35 @@ function renderDraft(draft, open) {
         <pre class="finder-email">${esc(source?.body || draft.sourceSnippet || 'Email not saved')}</pre>
         <a href="https://mail.google.com/mail/u/?authuser=${encodeURIComponent(draft.account)}#all/${encodeURIComponent(draft.messageId)}" target="_blank" rel="noopener noreferrer">Open original in Gmail</a>
         <div class="finder-toolbar">${(source?.fileParts || []).map((file, index) => file.base64 ? `<button type="button" class="btn sm" data-download="${index}">Download ${esc(file.name)}</button>` : '').join('')}</div></details>
-      ${status === 'ignored' ? '<button type="button" class="btn sm" data-restore>Restore receipt</button>' : ''}
+      ${draft.taxLines?.length ? `<p class="finder-note">Tax charged: ${esc(draft.taxLines.map(line => `${line.name || 'Tax'}${line.rate != null ? ` ${line.rate}%` : ''} ${line.amount != null ? line.amount.toFixed(2) : '?'}`).join(' · '))}</p>` : ''}
+      ${draft.history?.length ? `<p class="finder-note">Changed by you: ${esc([...new Set(draft.history.map(h => FIELD_WORDS[h.field] || h.field))].join(', '))}</p>` : ''}
+      ${status === 'ignored' ? `<div class="finder-toolbar"><button type="button" class="btn sm" data-restore>Restore receipt</button>
+        ${senderDomain(draft.from) && senderRule(draft.from, senderRules()) !== 'never' ? `<button type="button" class="btn sm" data-never="${esc(senderDomain(draft.from))}">Never read emails from ${esc(senderDomain(draft.from))}</button>` : ''}</div>` : ''}
     </div></details>`;
+}
+
+const FIELD_WORDS = { vendor: 'vendor', reference: 'invoice number', description: 'description', date: 'date', dueDate: 'due date',
+  currency: 'currency', amount: 'total', subtotal: 'subtotal', tax: 'tax', shipping: 'shipping', category: 'category',
+  paymentStatus: 'payment status', supplierTaxNumber: 'GST/HST number', lineItems: 'line items' };
+
+function duplicateNote(draft) {
+  const other = sameOrderElsewhere(draft, state.drafts);
+  const why = other
+    ? `Same order number as the receipt from ${esc(other.vendor || 'this store')}${other.date ? ` dated ${esc(other.date)}` : ''} in another email. Only one is filed.`
+    : 'Matches a saved expense. This receipt will not be imported again.';
+  return `<div class="finder-warning finder-dup"><p>${why}</p><button type="button" class="btn sm" data-not-duplicate>It’s a different purchase</button></div>`;
+}
+
+function reasonsNote(draft) {
+  const reasons = receiptReviewReasons(draft);
+  if (!reasons.length) return '';
+  return `<div class="finder-warning finder-reasons"><p>Check before filing:</p><ul>${reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+    <p>Then tick “I reviewed” below.</p></div>`;
+}
+
+function craReminders(draft) {
+  const notes = craRecordGaps(draft).filter(gap => !gap.review);
+  return notes.length ? `<p class="finder-note">${esc(notes.map(gap => gap.text).join(' '))}</p>` : '';
 }
 
 function filledNote(fields) {
@@ -749,17 +793,27 @@ async function onChange(event) {
             throw new Error('Line items must be an array with descriptions and numeric quantities / amounts');
           }
         }
+        if (JSON.stringify(draft[key] ?? null) !== JSON.stringify(value ?? null)) noteEdit(draft, key, draft[key], value);
         draft[key] = value;
       }
       if (el.dataset.lineField) {
         const item = draft.lineItems[Number(el.closest('[data-line]').dataset.line)];
         const key = el.dataset.lineField;
-        item[key] = key === 'description' ? el.value : key === 'quantity'
+        const value = key === 'description' ? el.value : key === 'quantity'
           ? (el.value === '' ? null : Number(el.value)) : receiptMoney(el.value);
+        if (item[key] !== value) noteEdit(draft, 'lineItems', item[key], value);
+        item[key] = value;
       }
     }
     await persist(); render();
   } catch (error) { report(error); }
+}
+
+// Who changed what, kept on the receipt: the record of a correction, and how
+// a spot check knows whether the reader had it right.
+function noteEdit(draft, field, from, to) {
+  draft.editedFields = [...new Set([...(draft.editedFields || []), field])];
+  draft.history = [...(draft.history || []), { at: new Date().toISOString(), field, from: from ?? null, to: to ?? null }].slice(-50);
 }
 
 function markPeriod(preset) {
@@ -801,6 +855,16 @@ async function onClick(event) {
     }
     const draft = state.drafts.find(row => row.id === button.closest('[data-draft]')?.dataset.draft);
     if (draft && button.hasAttribute('data-restore')) { draft.status = 'draft'; draft.updatedAt = Date.now(); await persist(); render(); return; }
+    if (draft && button.hasAttribute('data-not-duplicate')) {
+      draft.notDuplicate = true; draft.updatedAt = Date.now(); await persist(); render();
+      announce('Kept as a separate purchase. It now waits with your other receipts.'); return;
+    }
+    if (button.dataset.never) { await setSenderRule(button.dataset.never, 'never'); return; }
+    if (button.dataset.forgetSender) { await setSenderRule(button.dataset.forgetSender, ''); return; }
+    if (button.dataset.linkDone) {
+      state.linksDone = [...new Set([...(state.linksDone || []), button.dataset.linkDone])].slice(-200);
+      await persist(); render(); return;
+    }
     if (draft && !['queued', 'imported', 'ignored'].includes(draft.status)) {
       if (button.hasAttribute('data-add-line')) { draft.lineItems.push({ description: '', quantity: null, unitPrice: null, amount: null }); draft.updatedAt = Date.now(); await persist(); render(); return; }
       if (button.hasAttribute('data-remove-line')) { draft.lineItems.splice(Number(button.closest('[data-line]').dataset.line), 1); draft.updatedAt = Date.now(); await persist(); render(); return; }
@@ -874,17 +938,45 @@ async function loadDailySweep(endpoint, report) {
   if (report && !report.capabilities?.receiptDailySweep) { dailySweep = null; return; }
   try {
     dailySweep = await receiptDailySchedule({ endpoint, op: 'status' });
+    // The publisher asked for an hourly check (2026-11-26). A script new enough
+    // to report how often it runs, still set to once a day, is moved over.
+    if (dailySweep?.enabled && dailySweep.every === 'day') {
+      dailySweep = await receiptDailySchedule({ endpoint, op: 'set', enabled: true, hour: dailySweep.hour ?? 5, every: 'hour' });
+    }
   } catch { dailySweep = null; }
+  loadSenderRules().catch(() => {});
+}
+
+// The "never read" and "always read" sender lists live in Firestore so the
+// hourly check in the Sheet script follows them too; a copy is kept with the
+// mailbox so they still apply offline.
+let senderRulesLoaded = '';
+const senderRules = () => normalizeSenderRules(state.senderRules);
+async function loadSenderRules() {
+  if (senderRulesLoaded === uid || typeof window._fbLoadSettings !== 'function') return;
+  senderRulesLoaded = uid;
+  const saved = await window._fbLoadSettings('receiptSenders');
+  if (saved && active()) { state.senderRules = normalizeSenderRules(saved); await persist(); render(); }
+}
+
+async function setSenderRule(domain, kind) {
+  state.senderRules = withSenderRule(state.senderRules, domain, kind);
+  await persist();
+  render();
+  if (typeof window._fbSaveSettings === 'function') await window._fbSaveSettings('receiptSenders', state.senderRules);
+  announce(kind === 'never'
+    ? `Emails from ${domain} will not be read for receipts, here or in the hourly check.`
+    : `Emails from ${domain} will be read again.`);
 }
 
 async function setDailySweep(enabled) {
   const endpoint = activeEndpoint();
   if (!endpoint) throw new Error('Connect your Google Sheet script first');
-  dailySweep = await receiptDailySchedule({ endpoint, op: 'set', enabled, hour: dailySweep?.hour ?? 5 });
+  dailySweep = await receiptDailySchedule({ endpoint, op: 'set', enabled, hour: dailySweep?.hour ?? 5, every: 'hour' });
   render();
   announce(enabled
-    ? 'The daily scan is on. It reads the previous day’s mail each morning and leaves anything it finds here for you to review.'
-    : 'The daily scan is off. Receipts are only found when you scan by hand.');
+    ? 'Gmail is now checked every hour, even with the app closed. Anything found waits in Tax Centre › Import from Email for your review.'
+    : 'The hourly check is off. Receipts are only found when you scan by hand.');
 }
 
 async function useSheetsScript() {
@@ -1103,7 +1195,8 @@ async function readCandidate(id, signal, endpoint, force = false) {
     // is not worth an AI read. Most of a broad search is mail like this.
     // A publisher who asked for this email to be read again has already judged
     // it worth the read, so the quick set-aside rules do not apply.
-    const skipReason = force ? '' : receiptSkipReason(email);
+    const rule = senderRule(email.from, senderRules());
+    const skipReason = force ? '' : rule === 'never' ? 'sender' : rule === 'always' ? '' : receiptSkipReason(email);
     if (skipReason) {
       dropEmail(key);
       state.scans[key] = { done: true, ...emailLabel(email), count: 0, skipped: skipReason, reader: READER_VERSION };
@@ -1142,10 +1235,13 @@ async function readCandidate(id, signal, endpoint, force = false) {
     // saved mailbox — and therefore every later save — from growing with every
     // scan of a mostly-ordinary inbox.
     if (!result.receipts.length) dropEmail(key);
-    state.scans[key] = { done: true, ...emailLabel(email), count: result.receipts.length, reader: READER_VERSION };
-    note(key, result.receipts.length ? 'found' : 'aside', label, result.receipts.length
+    // No receipt in the email itself, but a "view your receipt" link: the
+    // receipt exists, just not here. Listed to download rather than dropped.
+    const linkOnly = !result.receipts.length && !email.fileParts.length && email.receiptLink ? email.receiptLink : '';
+    state.scans[key] = { done: true, ...emailLabel(email), count: result.receipts.length, reader: READER_VERSION, ...(linkOnly ? { receiptLink: linkOnly } : {}) };
+    note(key, result.receipts.length ? 'found' : linkOnly ? 'link-only' : 'aside', label, result.receipts.length
       ? result.receipts.map(raw => [raw.vendor, raw.amount != null && raw.currency ? `${raw.currency} ${raw.amount}` : ''].filter(Boolean).join(' ')).join('; ')
-      : 'the AI read it and found no receipt');
+      : linkOnly ? 'the receipt is behind a link in the email; it is listed above to download' : 'the AI read it and found no receipt');
     await persist();
   } catch (error) {
     if (error.name === 'AbortError' || !active() || uid !== owner) throw error;
@@ -1298,6 +1394,7 @@ const SET_ASIDE_SHOWN = 30;
 const SET_ASIDE_WHY = {
   'no-amount': 'no price found in it',
   notification: 'looked like a shipping or account notice',
+  sender: 'from a sender you chose never to read',
 };
 
 const senderOnly = from => String(from || '').replace(/\s*<[^>]*>\s*$/, '').replace(/^"|"$/g, '').trim();
@@ -1319,7 +1416,8 @@ const dismissedCount = () => state.drafts.filter(draft => draft.status === 'igno
 
 function renderSetAside() {
   const all = setAsideEmails();
-  if (!all.length) return '';
+  // The sender lists belong to this pile even before any email is set aside.
+  if (!all.length) return renderSenderLists();
   const rows = all.slice(-SET_ASIDE_SHOWN).reverse();
   const canRetry = !busy && tokenLive();
   const dismissed = dismissedCount();
@@ -1345,7 +1443,62 @@ function renderSetAside() {
       </li>`;
     }).join('')}</ul>
     <p class="finder-failures-foot">${all.length > SET_ASIDE_SHOWN ? `Showing the latest ${SET_ASIDE_SHOWN}. ` : ''}Reading again uses the AI once for that email; anything it finds appears above for your approval.</p>
-  </details>${dismissed ? `<h4 class="finder-dismissed-head">${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed</h4>` : ''}`;
+  </details>${renderSenderLists()}${dismissed ? `<h4 class="finder-dismissed-head">${dismissed} receipt${dismissed === 1 ? '' : 's'} you dismissed</h4>` : ''}`;
+}
+
+// Senders whose receipts keep being dismissed are offered as "never read",
+// and the senders already on that list can be read again.
+function renderSenderLists() {
+  const rules = senderRules();
+  const offers = senderSuggestions(state.drafts, rules).slice(0, 3);
+  const never = rules.never.slice(0, 20);
+  if (!offers.length && !never.length) return '';
+  return `<div class="finder-senders">
+    ${offers.map(row => `<div class="finder-sender-offer"><p>You dismissed ${row.dismissed} receipts from <strong>${esc(row.domain)}</strong> and filed none. Stop reading their emails?</p>
+      <button type="button" class="btn sm" data-never="${esc(row.domain)}">Stop reading ${esc(row.domain)}</button></div>`).join('')}
+    ${never.length ? `<p class="finder-senders-head">Never read for receipts:</p><ul class="finder-sender-list">${never.map(domain => `<li>${esc(domain)}
+      <button type="button" class="btn sm" data-forget-sender="${esc(domain)}" aria-label="Read emails from ${esc(domain)} again">Read again</button></li>`).join('')}</ul>` : ''}
+  </div>`;
+}
+
+// Emails whose receipt is only a "view your receipt" link, from this device's
+// scans and from the hourly check, until marked done.
+function linkOnlyRows() {
+  const done = new Set(state.linksDone || []);
+  const prefix = state.account + ':';
+  const rows = Object.entries(state.scans)
+    .filter(([key, scan]) => scan.done && scan.receiptLink && key.startsWith(prefix))
+    .map(([key, scan]) => ({ id: key.slice(key.lastIndexOf(':') + 1), key, subject: scan.subject || '', from: senderOnly(scan.from), day: scan.date || '', link: scan.receiptLink }));
+  for (const row of dailySweep?.linkOnly || []) {
+    if (!row?.id || rows.some(r => r.id === row.id) || !/^https:\/\//.test(String(row.link || ''))) continue;
+    rows.push({ id: String(row.id), key: `${state.account}:${row.id}`, subject: String(row.subject || ''), from: senderOnly(row.from), day: String(row.day || ''), link: String(row.link) });
+  }
+  return rows.filter(row => !done.has(row.id)).slice(0, 15);
+}
+
+function renderLinkOnly() {
+  const slot = host.querySelector('[data-finder-links]');
+  if (!slot) return;
+  const rows = state.account ? linkOnlyRows() : [];
+  if (!rows.length) { slot.replaceChildren(); return; }
+  slot.innerHTML = `<details class="finder-failures finder-links" open>
+    <summary><span class="finder-failures-sum">${rows.length === 1 ? 'One receipt needs downloading' : `${rows.length} receipts need downloading`}</span>
+      <span class="finder-failures-hint">The email only links to it</span></summary>
+    <ul class="finder-failures-list">${rows.map(row => `<li class="finder-failure">
+      <p><strong>${esc((row.subject || 'Subject not saved').slice(0, 120))}</strong><br><span class="finder-setaside-why">${esc([row.from, row.day].filter(Boolean).join(' · '))}</span></p>
+      <a class="btn sm gold" href="${esc(row.link)}" target="_blank" rel="noopener noreferrer">Open the receipt</a>
+      <a class="btn sm" href="${esc(gmailLink(row.key))}" target="_blank" rel="noopener noreferrer">Open email</a>
+      <button type="button" class="btn sm" data-link-done="${esc(row.id)}">Done</button></li>`).join('')}</ul>
+    <p class="finder-failures-foot">Save the receipt, then add it on the Scan a receipt screen. Press Done to clear it from this list.</p>
+  </details>`;
+}
+
+function renderAccuracy() {
+  const slot = host.querySelector('[data-health-accuracy]');
+  if (!slot) return;
+  const score = spotCheckAccuracy(state.drafts);
+  slot.hidden = !score.checked;
+  slot.textContent = score.checked ? `Reader accuracy: ${score.percent}% right on ${score.checked} spot check${score.checked === 1 ? '' : 's'}` : '';
 }
 
 // Emails set aside before the subject, sender and date were read show no

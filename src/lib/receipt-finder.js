@@ -2,6 +2,7 @@
 import { roundCents } from './money.js';
 import { scanDateConcern } from './receipt-scan-checks.js';
 import { localDay } from './calendar-day.js';
+import { receiptWarnings, craRecordGaps, isSpotCheck } from './receipt-signals.js';
 
 // What the finder looks for when the keyword box is empty. Matching "order",
 // "tax", "payment" or "shipping" anywhere in an email found about 200
@@ -156,9 +157,46 @@ export function normalizeFoundReceipt(raw, source, index = 0) {
     })),
     attachmentIds: (source.fileParts || []).map(file => file.attachmentId || file.partId),
     attachments: (source.fileParts || []).map(file => ({ name: file.name || '', mime: file.mime || '', attachmentId: file.attachmentId || file.partId || '' })),
+    supplierTaxNumber: String(raw.supplierTaxNumber || '').slice(0, 40),
+    taxLines: (Array.isArray(raw.taxLines) ? raw.taxLines : []).slice(0, 6).map(line => ({
+      name: String(line?.name || '').slice(0, 20),
+      rate: typeof line?.rate === 'number' && Number.isFinite(line.rate) ? line.rate : null,
+      amount: receiptMoney(line?.amount),
+    })),
+    from: String(source.from || '').slice(0, 300),
     reviewed: false, selected: confidence >= 0.85, status: 'draft', error: '', updatedAt: Date.now(),
   };
-  return fillFromEmail(draft, source);
+  // About one in fifty is held for a look, to measure how often the reader is right.
+  if (isSpotCheck(draft.id)) draft.spotCheck = true;
+  return checkAgainstMarkup(fillFromEmail(draft, source), source.markup);
+}
+
+// The order details a store embeds in its email are a second reading of the
+// same receipt. A missing order number is taken from them; a total that
+// disagrees with what the AI read holds the receipt for a look.
+function checkAgainstMarkup(draft, markup) {
+  if (!markup || typeof markup !== 'object') return draft;
+  if (!draft.reference && markup.reference) {
+    draft.reference = String(markup.reference).slice(0, 200);
+    draft.filledFromEmail = [...(draft.filledFromEmail || []), 'reference'];
+    draft.selected = false;
+  }
+  const marked = receiptMoney(markup.amount);
+  if (marked !== null && draft.amount !== null && Math.round(marked * 100) !== Math.round(draft.amount * 100)
+    && (!markup.currency || !draft.currency || markup.currency === draft.currency)) {
+    draft.markupTotal = marked;
+    draft.selected = false;
+  }
+  return draft;
+}
+
+// Reasons a receipt waits for a person even though nothing blocks filing it.
+export function receiptReviewReasons(draft) {
+  const reasons = [...receiptWarnings(draft)];
+  if (typeof draft.markupTotal === 'number') reasons.push(`The store's own order details say the total is ${draft.markupTotal.toFixed(2)}`);
+  for (const gap of craRecordGaps(draft)) if (gap.review) reasons.push(gap.text);
+  if (draft.spotCheck) reasons.push('Spot check: one in fifty receipts is held for a look, to measure how often the reader gets it right');
+  return reasons;
 }
 
 // A receipt the reader could not find a vendor or date in would sit in
@@ -225,8 +263,10 @@ export function receiptDuplicate(draft, expenses) {
 
 export function receiptReviewStatus(draft, expenses = []) {
   if (['imported', 'queued', 'ignored'].includes(draft.status)) return draft.status;
-  if (receiptDuplicate(draft, expenses)) return 'duplicate';
-  if (receiptProblems(draft).length || (!draft.reviewed && (draft.confidence < 0.85 || draft.filledFromEmail?.length))) return 'review';
+  // "Not a duplicate", once said, is remembered for this receipt.
+  if (!draft.notDuplicate && receiptDuplicate(draft, expenses)) return 'duplicate';
+  if (receiptProblems(draft).length) return 'review';
+  if (!draft.reviewed && (draft.confidence < 0.85 || draft.filledFromEmail?.length || receiptReviewReasons(draft).length)) return 'review';
   return 'ready';
 }
 

@@ -2,6 +2,7 @@
 // directly. The AI half talks to the publisher's Apps Script deployment; the
 // Gmail half talks to Google with a read-only token held by the browser.
 import { receiptFileForAi } from './receipt-finder.js';
+import { receiptMarkup, receiptLinkOnly } from './receipt-signals.js';
 import { readScriptJson } from './script-reply.js';
 
 // Exactly what the Apps Script accepts. Sending anything else makes the script
@@ -96,8 +97,10 @@ export function gmailMessage(message, account) {
   const body = plainText.length >= PLAIN_STUB_CHARS || !html.length
     ? plainText
     : html.map(emailHtmlText).join('\n');
+  const rawHtml = html.join('\n');
   return { id: message.id, account, from: header('From'), subject: header('Subject'),
-    date: header('Date'), body, snippet: message.snippet || '', fileParts };
+    date: header('Date'), body, snippet: message.snippet || '', fileParts,
+    markup: receiptMarkup(rawHtml), receiptLink: receiptLinkOnly(rawHtml) };
 }
 
 export const MAX_ATTACHMENT_BYTES = 12 * 1024 * 1024;
@@ -336,6 +339,7 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
   const body = receiptRequestBody({ idToken, email: {
     subject: email.subject, from: email.from, date: email.date,
     body: receiptBodyForAi(email.body, files.length > 0),
+    ...(email.markup ? { orderStructuredData: email.markup } : {}),
   }, files });
   if (body.length > MAX_AI_PAYLOAD) throw new Error('This email is too large for AI extraction. Review its attachments separately.');
   if (readAi) {
@@ -347,7 +351,11 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
       + 'Merge duplicate email and attachment copies. Include unpaid invoices and negative refunds. Never infer paid from invoice. '
       + 'Unknown numbers are null; unknown dates and currencies are empty strings. Never guess a date, currency, tax rate or payment status. '
       + 'Dates use YYYY-MM-DD; currency uses ISO 4217. amount includes tax and shipping; subtotal excludes them. Do not count shipping twice. '
-      + 'Return JSON {receipts:[{vendor,description,reference,date,dueDate,currency,amount,subtotal,tax,shipping,category,paymentStatus,documentType,confidence,sourceSnippet,lineItems:[{description,quantity,unitPrice,amount}]}]}. '
+      + 'Copy every amount exactly as printed; never work one out. '
+      + 'supplierTaxNumber is the seller\'s GST/HST, QST or VAT registration number exactly as printed, or an empty string. '
+      + 'taxLines lists each tax printed (GST, HST, PST, QST, VAT) on its own, with its rate in percent when printed, else null. '
+      + 'orderStructuredData, when present, is order data the store embedded in its email; prefer it for the order number and total when it agrees with the text. '
+      + 'Return JSON {receipts:[{vendor,description,reference,date,dueDate,currency,amount,subtotal,tax,shipping,supplierTaxNumber,taxLines:[{name,rate,amount}],category,paymentStatus,documentType,confidence,sourceSnippet,lineItems:[{description,quantity,unitPrice,amount}]}]}. '
       + 'paymentStatus is paid, unpaid, unknown or refunded. confidence is extraction certainty from 0 to 1. '
       + 'sourceSnippet quotes at most 500 characters of evidence. Preserve plausible receipts with missing fields for review. '
       + 'If there is no financial document return {"receipts":[]}. Return JSON only.';
@@ -375,11 +383,11 @@ export async function extractFoundReceipts({ endpoint, idToken, email, signal, f
 
 // The daily sweep's trigger lives in the publisher's own Apps Script, so the
 // app only ever asks it to arm, disarm or report itself.
-export async function receiptDailySchedule({ endpoint, op = 'status', enabled, hour = 5, fetchImpl = fetch, signal }) {
+export async function receiptDailySchedule({ endpoint, op = 'status', enabled, hour = 5, every = 'hour', fetchImpl = fetch, signal }) {
   if (!FINDER_ENDPOINT_PATTERN.test(endpoint || '')) throw new Error('Connect your Google Sheet script first');
   const res = await fetchImpl(endpoint, {
     method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: JSON.stringify({ version: 2, action: 'receiptDailySchedule', payload: { op, enabled, hour } }),
+    body: JSON.stringify({ version: 2, action: 'receiptDailySchedule', payload: { op, enabled, hour, every } }),
     signal, redirect: 'follow',
   });
   if (!res.ok) throw new Error(`The script did not answer (${res.status}).`);
@@ -389,8 +397,20 @@ export async function receiptDailySchedule({ endpoint, op = 'status', enabled, h
 }
 
 // Plain reading of the daily sweep's own report, for the line under the switch.
-export function describeDailySweep(state) {
+export function describeDailySweep(state, now = Date.now()) {
   if (!state?.enabled) return 'Off. Receipts are only found when you scan by hand.';
+  if (state.every === 'hour') {
+    const at = 'Checks Gmail every hour, even with the app closed.';
+    const last = Date.parse(state.lastRun || '');
+    const quiet = Number.isFinite(last) ? now - last : 0;
+    if (Number.isFinite(last) && quiet > 3 * 3600 * 1000) {
+      const hours = Math.round(quiet / 3600000);
+      return `${at} It has not run for ${hours >= 48 ? Math.round(hours / 24) + ' days' : hours + ' hours'}: open the script in Google and check its triggers, or turn this off and on again.`;
+    }
+    if (state.lastResult) return `${at} Last check: ${state.lastResult}`;
+    if (Number.isFinite(last)) return `${at} Last check ${new Date(last).toLocaleString()}.`;
+    return `${at} The first check runs within the hour.`;
+  }
   const hour = state.hour ?? 5;
   const at = `Runs every day at ${(hour % 12) || 12}${hour < 12 ? 'am' : 'pm'}, reading the previous day only.`;
   if (state.lastResult) return `${at} Last run: ${state.lastResult}`;
