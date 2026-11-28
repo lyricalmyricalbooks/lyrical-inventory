@@ -80,6 +80,7 @@ import {
 import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { deductibleAmount, deductibleRate } from '../lib/deductibility.js';
+import { MAX_RECEIPT_PICKS } from '../lib/receipt-picks.js';
 import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels, settlementRepaidLookup } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
@@ -268,12 +269,12 @@ async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
     row.style.background = '';
   }
 
-  const files = e.dataTransfer?.files;
-  if (!files || !files.length) return;
+  const dropped = Array.from(e.dataTransfer?.files || []);
+  if (!dropped.length) return;
 
-  const file = files[0];
   let exp = null;
   let subfolder = 'General';
+  let bookTitle = '';
 
   if (sourceType === 'businessExpense') {
     exp = (TAX_CENTER.businessExpenses || []).find(x => String(x.id) === String(itemId));
@@ -281,7 +282,10 @@ async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
     const s = states[sourceId];
     if (s && s.expenses) {
       exp = s.expenses.find(x => String(x.id) === String(itemId));
-      if (BOOKS[sourceId]) subfolder = BOOKS[sourceId].title.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      if (BOOKS[sourceId]) {
+        bookTitle = BOOKS[sourceId].title;
+        subfolder = bookTitle.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      }
     }
   }
 
@@ -290,19 +294,47 @@ async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
     return;
   }
 
-  // Folder first, cloud second. The old fallback here invented a
-  // `local://<name>` reference for a file that had never been written, so the
-  // ledger showed a "View Local" link that could only ever fail to open.
-  const saved = await saveReceiptBestEffort(file, subfolder);
-  if (saved.storage === 'none') {
-    showToast(`⚠ Could not save "${file.name}" — nothing was attached`, 'err', 5000);
+  if (!Array.isArray(exp.receiptFiles)) exp.receiptFiles = exp.receipt ? [exp.receipt] : [];
+  const room = Math.max(0, MAX_RECEIPT_PICKS - exp.receiptFiles.length);
+  const files = dropped.slice(0, room);
+  if (!files.length) {
+    showToast(`This expense already has ${MAX_RECEIPT_PICKS} receipts`, 'warn');
     return;
   }
 
-  if (!Array.isArray(exp.receiptFiles)) exp.receiptFiles = exp.receipt ? [exp.receipt] : [];
-  exp.receiptFiles.push(saved.ref);
+  showToast(files.length > 1 ? `Saving ${files.length} receipts…` : 'Saving receipt…', 'ok', 4000);
+
+  const added = [];
+  let anyCloud = false;
+  let lastError = '';
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const meta = {
+      date: exp.date,
+      desc: exp.desc,
+      cat: exp.cat,
+      amount: exp.origAmount ?? exp.amount,
+      currency: exp.origCurrency || exp.currency || 'CAD',
+      ...(bookTitle ? { book: bookTitle } : {}),
+      index: exp.receiptFiles.length + added.length,
+    };
+    const saved = await saveReceiptBestEffort(file, subfolder, meta);
+    if (saved.storage === 'none' || !saved.ref) {
+      if (saved.error) lastError = saved.error;
+      continue;
+    }
+    added.push(saved.ref);
+    if (saved.storage === 'cloud') anyCloud = true;
+  }
+
+  if (!added.length) {
+    showToast(`⚠ ${lastError || `Could not save "${files[0].name}" — nothing was attached`}`, 'err', 5000);
+    return;
+  }
+
+  exp.receiptFiles.push(...added);
   exp.receipt = exp.receiptFiles[0] || '';
-  if (saved.storage === 'cloud' && !exp.receiptCloudAt) exp.receiptCloudAt = new Date().toISOString();
+  if (anyCloud && !exp.receiptCloudAt) exp.receiptCloudAt = new Date().toISOString();
 
   if (sourceType === 'businessExpense') {
     await saveTaxCenter();
@@ -311,12 +343,13 @@ async function tcExpenseRowDrop(e, row, sourceType, sourceId, itemId) {
   }
 
   renderTaxCenter();
+  const label = files.length === 1 ? `"${files[0].name}"` : `${added.length} receipts`;
   showToast(
-    saved.storage === 'cloud'
-      ? `✓ Attached "${file.name}" — saved to the cloud until your folder is available`
-      : `✓ Attached receipt "${file.name}" to "${exp.desc || 'Expense'}"`,
+    anyCloud
+      ? `✓ Attached ${label} — saved to the cloud until your folder is available`
+      : `✓ Attached ${label} to "${exp.desc || 'Expense'}"`,
     'ok',
-    saved.storage === 'cloud' ? 5000 : undefined
+    anyCloud ? 5000 : undefined
   );
 }
 

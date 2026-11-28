@@ -407,14 +407,14 @@ describe('cloud fallback wiring', () => {
     expect(appSource).toContain('async function uploadReceiptToCloud');
     expect(appSource).toContain('async function saveReceiptBestEffort');
     // Every place a receipt is attached goes through the shared best-effort
-    // saver: the Tax Centre form, the per-book form, the row drag-drop, and
-    // the batch sheet's two destinations, the email-import attachments, and
-    // adding more receipts to an expense already in the ledger.
+    // saver: the Tax Centre form, the Edit Expense modal, the per-book form,
+    // the row drag-drop, the batch sheet's two destinations, the email-import
+    // attachments, and adding more receipts to an expense already in the ledger.
     const callSites = appSource.match(/await saveReceiptBestEffort\(/g) || [];
-    expect(callSites.length).toBe(7);
+    expect(callSites.length).toBe(8);
     expect(appSource).toContain("saveReceiptBestEffort(file, 'General', { date, desc, cat, amount, currency })");
     expect(appSource).toContain('await saveReceiptBestEffort(file, book.title, {');
-    expect(appSource).toContain('await saveReceiptBestEffort(file, subfolder)');
+    expect(appSource).toContain('await saveReceiptBestEffort(file, subfolder, meta)');
   });
 
   it('stamps when a receipt started waiting in the cloud', () => {

@@ -240,6 +240,7 @@ const RECEIPT_FOLDER_STORE = 'handles';
 const RECEIPT_FOLDER_KEY = 'preferred-receipt-folder';
 const RECEIPT_CACHE_DB = 'lm-receipt-cache-db';
 const RECEIPT_CACHE_STORE = 'blobs';
+const RECEIPT_CACHE_META_STORE = 'meta';
 
 // ── LOCAL RECEIPT FILING
 async function openReceiptHandleDb() {
@@ -259,23 +260,31 @@ const RECEIPT_FOLDER_SANDBOXED = isTestProfileActive();
 async function saveReceiptFolderHandle(handle) {
   if (RECEIPT_FOLDER_SANDBOXED) return;
   const db = await openReceiptHandleDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readwrite');
-    tx.objectStore(RECEIPT_FOLDER_STORE).put(handle, RECEIPT_FOLDER_KEY);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readwrite');
+      tx.objectStore(RECEIPT_FOLDER_STORE).put(handle, RECEIPT_FOLDER_KEY);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function loadReceiptFolderHandle() {
   if (RECEIPT_FOLDER_SANDBOXED) return null;
   const db = await openReceiptHandleDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readonly');
-    const req = tx.objectStore(RECEIPT_FOLDER_STORE).get(RECEIPT_FOLDER_KEY);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
-  });
+  try {
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(RECEIPT_FOLDER_STORE, 'readonly');
+      const req = tx.objectStore(RECEIPT_FOLDER_STORE).get(RECEIPT_FOLDER_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  } finally {
+    db.close();
+  }
 }
 
 async function setupReceiptFolder({ reclaim = true } = {}) {
@@ -629,6 +638,7 @@ async function attachReceiptToExpenseRow(sourceType, sourceId, itemId) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*,.pdf';
+  input.multiple = true;
   input.onchange = async () => {
     if (!input.files || !input.files.length) return;
     const fakeEvent = { preventDefault: () => {}, stopPropagation: () => {}, dataTransfer: { files: input.files } };
@@ -658,10 +668,13 @@ async function handleFolderError(e, title, message) {
 // rendering at once.
 async function openReceiptCacheDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(RECEIPT_CACHE_DB, 1);
+    const req = indexedDB.open(RECEIPT_CACHE_DB, 2);
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(RECEIPT_CACHE_STORE)) {
         req.result.createObjectStore(RECEIPT_CACHE_STORE, { keyPath: 'key' });
+      }
+      if (!req.result.objectStoreNames.contains(RECEIPT_CACHE_META_STORE)) {
+        req.result.createObjectStore(RECEIPT_CACHE_META_STORE, { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -669,8 +682,8 @@ async function openReceiptCacheDb() {
   });
 }
 
-function _cacheTx(db, mode) {
-  return db.transaction(RECEIPT_CACHE_STORE, mode).objectStore(RECEIPT_CACHE_STORE);
+function _cacheTx(db, mode, storeName = RECEIPT_CACHE_STORE) {
+  return db.transaction(storeName, mode).objectStore(storeName);
 }
 
 function _reqPromise(req) {
@@ -678,6 +691,20 @@ function _reqPromise(req) {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
+}
+
+function _txPromise(tx) {
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+  });
+}
+
+function _cacheMetaFrom(entry) {
+  if (!entry || !entry.key) return null;
+  const { key, kind, name, type, size, cachedAt, lastSeenAt } = entry;
+  return { key, kind, name, type, size, cachedAt, lastSeenAt };
 }
 
 /**
@@ -714,13 +741,17 @@ async function cacheReceiptFile(ref, file, { kindHint = '' } = {}) {
   const key = cacheKeyFor(ref);
   if (!key || !file) return false;
 
+  let db = null;
   try {
     const plan = cachePlanFor({ size: file.size, type: file.type, name: file.name });
     let blob = file;
     let kind = 'original';
 
     if (plan.store === 'preview') {
-      const preview = await makeReceiptPreview(file);
+      const preview = await Promise.race([
+        makeReceiptPreview(file),
+        new Promise(res => setTimeout(() => res(null), 6000)),
+      ]);
       if (preview) {
         blob = preview;
         kind = 'preview';
@@ -733,24 +764,36 @@ async function cacheReceiptFile(ref, file, { kindHint = '' } = {}) {
       return false;
     }
 
-    const db = await openReceiptCacheDb();
+    db = await openReceiptCacheDb();
     const now = new Date().toISOString();
-    await _reqPromise(_cacheTx(db, 'readwrite').put({
+    const meta = {
       key,
-      blob,
       kind: kindHint || kind,
       name: file.name || key.split('/').pop(),
       type: blob.type || file.type || '',
       size: blob.size || 0,
       cachedAt: now,
       lastSeenAt: now,
-    }));
+    };
+    const storeNames = db.objectStoreNames.contains(RECEIPT_CACHE_META_STORE)
+      ? [RECEIPT_CACHE_STORE, RECEIPT_CACHE_META_STORE]
+      : [RECEIPT_CACHE_STORE];
+    const tx = db.transaction(storeNames, 'readwrite');
+    tx.objectStore(RECEIPT_CACHE_STORE).put({ ...meta, blob });
+    if (storeNames.includes(RECEIPT_CACHE_META_STORE)) {
+      tx.objectStore(RECEIPT_CACHE_META_STORE).put(meta);
+    }
+    await _txPromise(tx);
     db.close();
-    await evictReceiptCacheToBudget();
+    db = null;
+    // Eviction runs in the background so saving a receipt never waits on cache pruning.
+    evictReceiptCacheToBudget().catch(() => {});
     return true;
   } catch (e) {
     console.warn('Receipt cache write failed', e);
     return false;
+  } finally {
+    if (db) { try { db.close(); } catch (_) { /* ignore */ } }
   }
 }
 
@@ -758,65 +801,137 @@ async function cacheReceiptFile(ref, file, { kindHint = '' } = {}) {
 async function readCachedReceipt(ref) {
   const key = cacheKeyFor(ref);
   if (!key) return null;
+  let db = null;
   try {
-    const db = await openReceiptCacheDb();
+    db = await openReceiptCacheDb();
     const entry = await _reqPromise(_cacheTx(db, 'readonly').get(key));
     if (entry && entry.blob) {
       entry.lastSeenAt = new Date().toISOString();
-      try { await _reqPromise(_cacheTx(db, 'readwrite').put(entry)); } catch (_) { /* recency is best-effort */ }
+      try {
+        const hasMeta = db.objectStoreNames.contains(RECEIPT_CACHE_META_STORE);
+        const stores = hasMeta ? [RECEIPT_CACHE_STORE, RECEIPT_CACHE_META_STORE] : [RECEIPT_CACHE_STORE];
+        const tx = db.transaction(stores, 'readwrite');
+        tx.objectStore(RECEIPT_CACHE_STORE).put(entry);
+        if (hasMeta) tx.objectStore(RECEIPT_CACHE_META_STORE).put(_cacheMetaFrom(entry));
+        await _txPromise(tx);
+      } catch (_) { /* recency is best-effort */ }
     }
-    db.close();
     return entry && entry.blob ? entry : null;
   } catch (e) {
     console.warn('Receipt cache read failed', e);
     return null;
+  } finally {
+    if (db) { try { db.close(); } catch (_) { /* ignore */ } }
   }
 }
 
 /** Entry metadata without the blobs, for eviction planning and the readout. */
 async function listCachedReceiptMeta() {
+  let db = null;
   try {
-    const db = await openReceiptCacheDb();
+    db = await openReceiptCacheDb();
+    if (db.objectStoreNames.contains(RECEIPT_CACHE_META_STORE)) {
+      const metaList = await _reqPromise(_cacheTx(db, 'readonly', RECEIPT_CACHE_META_STORE).getAll());
+      if (metaList && metaList.length) {
+        return metaList.map(_cacheMetaFrom).filter(Boolean);
+      }
+      // One-time migration for v1 caches: stream keys/sizes with a cursor rather
+      // than loading up to 250 MB of blobs into memory at once with getAll().
+      const blobCount = await _reqPromise(_cacheTx(db, 'readonly', RECEIPT_CACHE_STORE).count());
+      if (!blobCount) return [];
+      const migrated = [];
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction([RECEIPT_CACHE_STORE, RECEIPT_CACHE_META_STORE], 'readwrite');
+        const blobs = tx.objectStore(RECEIPT_CACHE_STORE);
+        const metas = tx.objectStore(RECEIPT_CACHE_META_STORE);
+        const req = blobs.openCursor();
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) return;
+          const m = _cacheMetaFrom(cursor.value);
+          if (m) {
+            migrated.push(m);
+            metas.put(m);
+          }
+          cursor.continue();
+        };
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+      });
+      return migrated;
+    }
     const all = await _reqPromise(_cacheTx(db, 'readonly').getAll());
-    db.close();
-    return (all || []).map(({ key, kind, name, type, size, cachedAt, lastSeenAt }) =>
-      ({ key, kind, name, type, size, cachedAt, lastSeenAt }));
+    return (all || []).map(_cacheMetaFrom).filter(Boolean);
   } catch (e) {
     return [];
+  } finally {
+    if (db) { try { db.close(); } catch (_) { /* ignore */ } }
   }
 }
 
 async function evictReceiptCacheToBudget() {
+  let db = null;
   try {
     const entries = await listCachedReceiptMeta();
     const doomed = planEviction(entries);
     if (!doomed.length) return 0;
-    const db = await openReceiptCacheDb();
-    const store = _cacheTx(db, 'readwrite');
-    await Promise.all(doomed.map(key => _reqPromise(store.delete(key))));
-    db.close();
+    db = await openReceiptCacheDb();
+    const hasMeta = db.objectStoreNames.contains(RECEIPT_CACHE_META_STORE);
+    const stores = hasMeta ? [RECEIPT_CACHE_STORE, RECEIPT_CACHE_META_STORE] : [RECEIPT_CACHE_STORE];
+    const tx = db.transaction(stores, 'readwrite');
+    const blobStore = tx.objectStore(RECEIPT_CACHE_STORE);
+    const metaStore = hasMeta ? tx.objectStore(RECEIPT_CACHE_META_STORE) : null;
+    for (const key of doomed) {
+      blobStore.delete(key);
+      if (metaStore) metaStore.delete(key);
+    }
+    await _txPromise(tx);
     return doomed.length;
   } catch (e) {
     console.warn('Receipt cache eviction failed', e);
     return 0;
+  } finally {
+    if (db) { try { db.close(); } catch (_) { /* ignore */ } }
   }
 }
 
 async function deleteCachedReceipt(ref) {
   const key = cacheKeyFor(ref);
   if (!key) return;
+  let db = null;
   try {
-    const db = await openReceiptCacheDb();
-    await _reqPromise(_cacheTx(db, 'readwrite').delete(key));
-    db.close();
+    db = await openReceiptCacheDb();
+    const hasMeta = db.objectStoreNames.contains(RECEIPT_CACHE_META_STORE);
+    const stores = hasMeta ? [RECEIPT_CACHE_STORE, RECEIPT_CACHE_META_STORE] : [RECEIPT_CACHE_STORE];
+    const tx = db.transaction(stores, 'readwrite');
+    tx.objectStore(RECEIPT_CACHE_STORE).delete(key);
+    if (hasMeta) tx.objectStore(RECEIPT_CACHE_META_STORE).delete(key);
+    await _txPromise(tx);
   } catch (_) { /* a stale cache entry is harmless */ }
+  finally {
+    if (db) { try { db.close(); } catch (_) { /* ignore */ } }
+  }
 }
 
-async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
-  const dirHandle = await loadReceiptFolderHandle();
+async function saveReceiptToLocalFile(file, subfolderName = '', meta = null, { promptOnError = true } = {}) {
+  const withLocalTimeout = (promise, ms, label) => {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(label), { name: 'TimeoutError', timedOut: true })), ms);
+    });
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+  };
+  let dirHandle;
+  try {
+    dirHandle = await withLocalTimeout(loadReceiptFolderHandle(), 5000, 'Loading receipt folder timed out');
+  } catch (e) {
+    console.warn('Could not load receipt folder handle', e);
+    if (typeof _noteReceiptFolderHealth === 'function') _noteReceiptFolderHealth(false);
+    return null;
+  }
   if (!dirHandle) return null;
   try {
-    const permission = await dirHandle.queryPermission({ mode: 'readwrite' });
+    const permission = await withLocalTimeout(dirHandle.queryPermission({ mode: 'readwrite' }), 4000, 'Checking folder permission timed out');
     if (permission !== 'granted' && await dirHandle.requestPermission({ mode: 'readwrite' }) !== 'granted') return null;
 
     // The folder the owner picked IS the receipts folder. This used to nest a
@@ -832,35 +947,43 @@ async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
       ? receiptFolderPath(meta)
       : (subfolderName ? [subfolderName] : []);
 
-    let targetDir = dirHandle;
-    for (const segment of segments) {
-      targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
-    }
-
-    const desiredName = meta
-      ? receiptFileName({ ...meta, originalName: file.name, mimeType: file.type })
-      : `${localDay()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
-
-    // Two receipts saved the same day from files with the same name would land
-    // on the same path, and `create: true` + createWritable() truncates rather
-    // than refusing — the first receipt would be gone with nothing to show for
-    // it. Suffix instead, which matters most during a reclaim (a whole backlog
-    // written in one pass, where repeated names like "receipt.jpg" are normal).
-    const filename = await uniqueFileName(desiredName, async (name) => {
-      try {
-        await targetDir.getFileHandle(name, { create: false });
-        return true;
-      } catch (_) {
-        return false;
+    const relative = await withLocalTimeout((async () => {
+      let targetDir = dirHandle;
+      for (const segment of segments) {
+        targetDir = await targetDir.getDirectoryHandle(segment, { create: true });
       }
-    });
 
-    const fileHandle = await targetDir.getFileHandle(filename, { create: true });
-    const writable = await fileHandle.createWritable();
-    await writable.write(file);
-    await writable.close();
+      const desiredName = meta
+        ? receiptFileName({ ...meta, originalName: file.name, mimeType: file.type })
+        : `${localDay()}_${file.name.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
 
-    const relative = [...segments, filename].join('/');
+      // Two receipts saved the same day from files with the same name would land
+      // on the same path, and `create: true` + createWritable() truncates rather
+      // than refusing — the first receipt would be gone with nothing to show for
+      // it. Suffix instead, which matters most during a reclaim (a whole backlog
+      // written in one pass, where repeated names like "receipt.jpg" are normal).
+      const filename = await uniqueFileName(desiredName, async (name) => {
+        try {
+          await targetDir.getFileHandle(name, { create: false });
+          return true;
+        } catch (_) {
+          return false;
+        }
+      });
+
+      const fileHandle = await targetDir.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      try {
+        await writable.write(file);
+        await writable.close();
+      } catch (writeErr) {
+        try { await writable.abort(); } catch (_) { /* ignore */ }
+        throw writeErr;
+      }
+
+      return [...segments, filename].join('/');
+    })(), 12000, 'Saving to local receipt folder timed out');
+
     // Cache before returning, so a receipt is viewable even if the folder moves
     // between now and the next time the owner looks for it.
     await cacheReceiptFile(relative, file);
@@ -868,6 +991,11 @@ async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
   } catch (e) {
     if (e?.name === 'SecurityError' || e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
       console.warn('Local receipt folder permission unavailable during save', e);
+      return null;
+    }
+    if (!promptOnError) {
+      console.warn('Local receipt save failed, falling back to cloud', e);
+      if (typeof _noteReceiptFolderHealth === 'function') _noteReceiptFolderHealth(false);
       return null;
     }
     await handleFolderError(e, 'Error Saving Receipt', 'Receipt file save failed. The folder may have been moved or disconnected.');
@@ -886,34 +1014,94 @@ async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
  *
  * Resolves to a download URL, or throws — callers decide what a failure means.
  */
-async function uploadReceiptToCloud(file, subfolderName = 'General') {
+async function uploadReceiptToCloud(file, subfolderName = 'General', { onProgress } = {}) {
   if (typeof window._fbUploadReceipt !== 'function') {
-    throw new Error('Cloud receipt storage is unavailable');
+    throw new Error('Cloud receipt storage is unavailable.');
   }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error('You are offline — reconnect to save receipts to the cloud.');
+  }
+
   const stamp = new Date().getTime();
-  const cleanName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '');
   const safeFolder = (subfolderName || 'General').replace(/[^a-zA-Z0-9.\-_]/g, '_');
-  // Bound it so the submit button can never hang on a stalled upload.
-  const timeout = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Upload timed out')), 30000)
-  );
-  return Promise.race([
-    window._fbUploadReceipt(file, `${safeFolder}/${stamp}_${cleanName}`),
-    timeout,
-  ]);
+  let uploadFile = file;
+  let contentType = _receiptMimeFor(file);
+  const allowText = safeFolder === 'email-imports';
+  const isAllowedType = /^(image\/|application\/pdf$)/i.test(contentType)
+    || (allowText && /^text\/plain$/i.test(contentType));
+  if (!isAllowedType) {
+    throw new Error('Only image (JPG, PNG, WebP, HEIC) and PDF receipts can be saved to the cloud.');
+  }
+
+  // Firebase Storage rules cap uploads at 15 MB. Downscale oversized phone
+  // photos before uploading rather than letting Storage reject them.
+  const MAX_CLOUD_BYTES = 15 * 1024 * 1024;
+  if (uploadFile.size >= MAX_CLOUD_BYTES && /^image\//i.test(contentType)) {
+    const preview = await Promise.race([
+      makeReceiptPreview(uploadFile),
+      new Promise(res => setTimeout(() => res(null), 8000)),
+    ]);
+    if (preview && preview.size > 0 && preview.size < MAX_CLOUD_BYTES) {
+      const stem = String(file.name || 'receipt').replace(/\.[^.]+$/, '');
+      uploadFile = typeof File === 'function'
+        ? new File([preview], `${stem}.jpg`, { type: 'image/jpeg' })
+        : preview;
+      contentType = 'image/jpeg';
+    }
+  }
+  if (uploadFile.size >= MAX_CLOUD_BYTES) {
+    throw new Error('That receipt file is over 15 MB. Shrink or screenshot it and try again.');
+  }
+
+  const cleanName = (uploadFile.name || file.name || 'receipt').replace(/[^a-zA-Z0-9.\-_]/g, '');
+  const controller = new AbortController();
+  let totalTimer = null;
+  let stallTimer = null;
+  const resetStall = () => {
+    clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      controller.abort(new Error('Upload stalled — please try again.'));
+    }, 15000);
+  };
+  totalTimer = setTimeout(() => {
+    controller.abort(new Error('Upload timed out — please try again.'));
+  }, 25000);
+  resetStall();
+
+  try {
+    return await window._fbUploadReceipt(uploadFile, `${safeFolder}/${stamp}_${cleanName}`, {
+      contentType,
+      signal: controller.signal,
+      onProgress: (snap) => {
+        resetStall();
+        if (typeof onProgress === 'function') onProgress(snap);
+      },
+    });
+  } catch (e) {
+    if (e?.code === 'storage/unauthorized') {
+      throw new Error('Permission denied for cloud receipt upload — make sure you are signed in.');
+    }
+    if (e?.code === 'storage/canceled' && controller.signal.aborted && controller.signal.reason) {
+      throw controller.signal.reason;
+    }
+    throw e;
+  } finally {
+    clearTimeout(totalTimer);
+    clearTimeout(stallTimer);
+  }
 }
 
 /**
  * Save one receipt the best way currently available: the connected folder if it
  * can be reached, the cloud if it can't.
  *
- * Returns `{ ref, storage }` where storage is 'local' | 'cloud' | 'none', so the
- * caller can stamp receiptCloudAt and say something truthful in its toast.
+ * Returns `{ ref, storage, error? }` where storage is 'local' | 'cloud' | 'none',
+ * so the caller can stamp receiptCloudAt and say something truthful in its toast.
  */
-async function saveReceiptBestEffort(file, subfolderName = 'General', meta = null) {
+async function saveReceiptBestEffort(file, subfolderName = 'General', meta = null, { onProgress } = {}) {
   let localRef = null;
   try {
-    localRef = await saveReceiptToLocalFile(file, subfolderName, meta);
+    localRef = await saveReceiptToLocalFile(file, subfolderName, meta, { promptOnError: false });
   } catch (e) {
     console.error('Local receipt save failed', e);
     localRef = null;
@@ -921,12 +1109,13 @@ async function saveReceiptBestEffort(file, subfolderName = 'General', meta = nul
   if (localRef) return { ref: localRef, storage: 'local' };
 
   try {
-    const url = await uploadReceiptToCloud(file, subfolderName);
+    const url = await uploadReceiptToCloud(file, subfolderName, { onProgress });
     if (url) return { ref: url, storage: 'cloud' };
+    return { ref: '', storage: 'none', error: 'Cloud upload returned no link.' };
   } catch (e) {
     console.error('Cloud receipt fallback failed', e);
+    return { ref: '', storage: 'none', error: e?.message || 'Could not save receipt.' };
   }
-  return { ref: '', storage: 'none' };
 }
 
 // Build the ledger's receipt cell from an expense/ledger item. Supports the
@@ -7832,6 +8021,7 @@ async function _saveReceiptsForExpense(target, files, startIndex) {
   const book = BOOKS[activeBook] || getBook();
   const refs = [];
   let cloud = false;
+  const errors = [];
   for (let i = 0; i < files.length; i++) {
     if (window.IS_PUBLISHER && !isAuthor()) {
       const saved = await saveReceiptBestEffort(files[i], book.title, {
@@ -7840,6 +8030,7 @@ async function _saveReceiptsForExpense(target, files, startIndex) {
         book: book.title, index: startIndex + i,
       });
       if (saved.ref) refs.push(saved.ref);
+      else if (saved.error) errors.push(saved.error);
       if (saved.storage === 'cloud') cloud = true;
     } else {
       try {
@@ -7847,10 +8038,11 @@ async function _saveReceiptsForExpense(target, files, startIndex) {
         if (url) { refs.push(url); cloud = true; }
       } catch (e) {
         console.error(e);
+        if (e?.message) errors.push(e.message);
       }
     }
   }
-  return { refs, cloud };
+  return { refs, cloud, error: errors[0] || '' };
 }
 
 function _pickReceiptFiles() {
@@ -7859,7 +8051,14 @@ function _pickReceiptFiles() {
     input.type = 'file';
     input.accept = 'image/*,.pdf';
     input.multiple = true;
-    input.onchange = () => resolve(Array.from(input.files || []));
+    let done = false;
+    const finish = (list) => {
+      if (done) return;
+      done = true;
+      resolve(list);
+    };
+    input.onchange = () => finish(Array.from(input.files || []));
+    input.addEventListener('cancel', () => finish([]), { once: true });
     input.click();
   });
 }
@@ -7877,8 +8076,27 @@ async function addReceiptsToExpense(id) {
   const files = picked.slice(0, room);
   if (!files.length) return;
   const skipped = picked.length - files.length;
-  const { refs: added, cloud } = await _saveReceiptsForExpense(target, files, existing.length);
-  if (!added.length) { showToast('⚠ The receipt could not be saved — nothing was attached', 'err', 5000); return; }
+
+  const modalAddBtn = _openReceiptsExpenseId === id ? $('exp-receipts-add-btn') : null;
+  const oldBtnText = modalAddBtn ? modalAddBtn.textContent : '';
+  if (modalAddBtn) { modalAddBtn.disabled = true; modalAddBtn.textContent = 'Saving…'; }
+  showToast(files.length > 1 ? `Saving ${files.length} receipts…` : 'Saving receipt…', 'ok', 4000);
+
+  let added = [], cloud = false, error = '';
+  try {
+    ({ refs: added, cloud, error } = await _saveReceiptsForExpense(target, files, existing.length));
+  } finally {
+    if (modalAddBtn) {
+      modalAddBtn.textContent = oldBtnText;
+      const curExp = (states[bid]?.expenses || []).find(x => x.id === id);
+      modalAddBtn.disabled = receiptRefsOf(curExp || target).length >= MAX_RECEIPT_PICKS;
+    }
+  }
+
+  if (!added.length) {
+    showToast(`⚠ ${error || 'The receipt could not be saved — nothing was attached'}`, 'err', 5000);
+    return;
+  }
   const over = skipped > 0 ? ` (${skipped} over the ${MAX_RECEIPT_PICKS}-receipt limit left off)` : '';
 
   if (isAuthor()) {

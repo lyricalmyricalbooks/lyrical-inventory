@@ -965,6 +965,7 @@ import {
 } from './features/pos.js';
 import {
   changeExpenseCategory,
+  clearEditExpFile,
   exportTripCSV,
   openEditExpense,
   openEditSale,
@@ -19216,7 +19217,7 @@ Object.assign(window, {
   searchDirectGmailEmails, renderDirectGmailChips, renderDirectGmailEmailsList, toggleDirectEmailPreview, toggleDirectGmailSelection, toggleAllDirectGmailSelections,
   showCategoryDetail, changeExpenseCategory, tcSelectCashFlowBucket, tcSetCashFlowDetailType, tcClearCashFlowBucket,
   showTripDetail, openEditTrip, saveTripAssignment, renameTripPrompt,
-  openEditExpense, relinkEditExpenseReceipt, removeEditExpenseReceipt, saveExpenseEdit, openEditSale, openEditArtistPayout,
+  openEditExpense, relinkEditExpenseReceipt, removeEditExpenseReceipt, clearEditExpFile, saveExpenseEdit, openEditSale, openEditArtistPayout,
   // Invoices
   renderInvoices, openCreateInvoice, viewInvoice,
   addInvoiceItem, removeInvoiceItem, updateInvoiceItem,
@@ -20182,7 +20183,7 @@ function exposeLegacyInlineHandlers() {
     openPendingExpense, tcPendingValidate, tcPendingRemindIn, savePendingExpense,
     deletePendingExpense, snoozePendingExpense, confirmPendingExpense, _tcPendingList,
     _tcPdfToImages, _tcResolveReceiptImages, resolveLocalReceiptFile, ensurePdfJs,
-    openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt,
+    openEditTrip, saveTripAssignment, renderEditExpenseReceipts, relinkEditExpenseReceipt, removeEditExpenseReceipt, clearEditExpFile,
     batchScanAndRelinkReceipts, attachReceiptToExpenseRow, tcExpenseRowDragOver, tcExpenseRowDragLeave, tcExpenseRowDrop,
     openEditSale, openEditArtistPayout, openEditExpense, saveExpenseEdit, showTripDetail,
     renameTripPrompt, showCategoryDetail, saveTaxCenterSettings, scanReceiptWithAI,

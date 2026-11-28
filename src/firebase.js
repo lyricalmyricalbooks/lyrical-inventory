@@ -277,16 +277,44 @@ const safeParse = (str) => {
 // ─────────────────────────────────────────────
 // FILE STORAGE (Receipts)
 // ─────────────────────────────────────────────
-window._fbUploadReceipt = async (file, path) => {
+window._fbUploadReceipt = async (file, path, opts = {}) => {
   const storageRef = sRef(storage, `receipts/${path}`);
+  const metadata = opts && opts.contentType ? { contentType: opts.contentType } : undefined;
   return new Promise((resolve, reject) => {
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const signal = opts && opts.signal;
+    if (signal && signal.aborted) {
+      reject(signal.reason || new Error('Upload cancelled'));
+      return;
+    }
+    const uploadTask = metadata
+      ? uploadBytesResumable(storageRef, file, metadata)
+      : uploadBytesResumable(storageRef, file);
+    let settled = false;
+    const finish = (fn, val) => {
+      if (settled) return;
+      settled = true;
+      if (signal) signal.removeEventListener('abort', onAbort);
+      fn(val);
+    };
+    const onAbort = () => {
+      try { uploadTask.cancel(); } catch (_) { /* ignore */ }
+      finish(reject, signal.reason || new Error('Upload cancelled'));
+    };
+    if (signal) signal.addEventListener('abort', onAbort, { once: true });
     uploadTask.on('state_changed',
-      null,
-      (err) => reject(err),
+      (snap) => {
+        if (typeof opts?.onProgress === 'function' && snap) {
+          try { opts.onProgress(snap); } catch (_) { /* ignore */ }
+        }
+      },
+      (err) => finish(reject, err),
       async () => {
-        const url = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(url);
+        try {
+          const url = await getDownloadURL(uploadTask.snapshot.ref);
+          finish(resolve, url);
+        } catch (err) {
+          finish(reject, err);
+        }
       }
     );
   });
@@ -909,6 +937,14 @@ function withPendingSetting(key, cloudJson) {
   return value;
 }
 
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error(label), { code: 'deadline-exceeded', timedOut: true })), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // Returns 'pending' when the change was kept on this device to send later.
 async function writeMergedSetting(key, data) {
   const target = doc(fs, 'settings', key);
@@ -918,10 +954,23 @@ async function writeMergedSetting(key, data) {
   // skip the read and the write. Several background checks (postage sweeps,
   // start-up repairs) save the Tax Centre whether or not they changed it.
   if (_settingsBase[key] === localJson) { dropPendingSetting(key); return data; }
+  const deferPending = (reason, err) => {
+    console.warn(`[FB] settings/${key}: ${reason}`, err);
+    const already = Object.prototype.hasOwnProperty.call(_pendingSettings, key);
+    keepPendingSetting(key, _settingsBase[key], localJson);
+    if (typeof navigator === 'undefined' || navigator.onLine !== false) scheduleSettingsRetry();
+    if (!already && typeof window.showToast === 'function') {
+      window.showToast('Saved on this device. It uploads when the connection is back.', 'ok', 4000);
+    }
+    return 'pending';
+  };
+  if (typeof navigator !== 'undefined' && navigator.onLine === false && Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
+    return deferPending('offline, kept to send later');
+  }
   let value = data;
   if (Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
     try {
-      const snap = await getDocFromServer(target);
+      const snap = await withTimeout(getDocFromServer(target), 10000, 'cloud read timed out');
       const res = mergeSettingDoc(_settingsBase[key], snap.exists() ? snap.data().data : null, data);
       if (res.merged) {
         value = res.value;
@@ -929,17 +978,18 @@ async function writeMergedSetting(key, data) {
       }
     } catch (e) {
       // Offline or unreadable: keep it to merge and send later (see above).
-      console.warn(`[FB] settings/${key}: could not read the cloud copy to merge, kept to send later`, e);
-      const already = Object.prototype.hasOwnProperty.call(_pendingSettings, key);
-      keepPendingSetting(key, _settingsBase[key], localJson);
-      if (typeof navigator === 'undefined' || navigator.onLine !== false) scheduleSettingsRetry();
-      if (!already && typeof window.showToast === 'function') {
-        window.showToast('Saved on this device. It uploads when the connection is back.', 'ok', 4000);
-      }
-      return 'pending';
+      return deferPending('could not read the cloud copy to merge, kept to send later', e);
     }
   }
-  await setDoc(target, { data: JSON.stringify(value), ts: Date.now() });
+  try {
+    await withTimeout(setDoc(target, { data: JSON.stringify(value), ts: Date.now() }), 12000, 'cloud save timed out');
+  } catch (e) {
+    if (e && PERMANENT_WRITE_ERRORS.has(e.code)) throw e;
+    if (Object.prototype.hasOwnProperty.call(_settingsBase, key)) {
+      return deferPending('could not write to cloud yet, kept to send later', e);
+    }
+    throw e;
+  }
   // The base is this device's copy, not the merged result: the screen still shows
   // this copy, so the next save must treat whatever the other device added as
   // theirs to keep, not as something this device deleted.
