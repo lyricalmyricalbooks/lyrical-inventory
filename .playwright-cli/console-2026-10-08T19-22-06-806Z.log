@@ -1,0 +1,11 @@
+[  361433ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  361521ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  362419ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  376466ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  380105ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  478965ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  630529ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  648168ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  649863ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  665891ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:5180/output/playwright/stripe-automation-preview.html?html-proxy&index=0.js:0
+[  709706ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:5180/@vite/client:992

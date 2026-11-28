@@ -1,0 +1,39 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e2]:
+    - generic [aria-hidden] [ref=f1e3]:
+      - generic [ref=f1e4]: Lyrical
+      - generic [ref=f1e5]: Myrical
+      - generic [ref=f1e6]: Books
+    - generic [ref=f1e7]: Connecting to database…
+  - generic [ref=f1e10]:
+    - generic [ref=f1e11]: Lyricalmyrical Books
+    - generic "Lyricalmyrical Books" [ref=f1e12]:
+      - generic [ref=f1e13]: Lyrical
+      - generic [ref=f1e14]: Myrical
+      - generic [ref=f1e15]: Books
+    - generic [ref=f1e16]: inventory app
+    - button "Sign in w/ Google" [ref=f1e22] [cursor=pointer]
+    - generic [ref=f1e30]: Authorized personnel only
+  - text: + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + + ✉ ⚠ 1 2 3 5 0
+  - generic [aria-hidden]:
+    - generic [aria-hidden]:
+      - generic: Lyrical
+      - generic: Myrical
+      - generic: Books
+    - generic: Updating Lyricalmyrical Inventory…
+    - generic: Polishing the latest version. This will take just a moment.
+  - button "Update Lyricalmyrical Inventory to the latest version":
+    - generic:
+      - generic: ✨
+      - generic:
+        - strong: New version available
+        - generic: Update to get the latest features and fixes.
+    - generic:
+      - button "Later"
+      - button "Update Now"
+  - generic:
+    - generic:
+      - generic: Sending Campaign
+      - generic: Preparing email delivery...
+      - generic: Please keep Lyricalmyrical Inventory open until sending finishes.
+      - button "✕ Abort Send"

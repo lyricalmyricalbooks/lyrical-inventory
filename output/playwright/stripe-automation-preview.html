@@ -1,0 +1,401 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/src/styles/system.css"><link rel="stylesheet" href="/src/style.css"><link rel="stylesheet" href="/src/styles/theme-dark.css">
+<title>Stripe automation — local preview</title></head><body style="padding:var(--space-5);max-width:1600px;margin:auto;">
+<h1>Stripe sales</h1><p>Local preview with simulated payments and rates. No Stripe or account changes.</p>
+<div class="row" style="margin-bottom:var(--space-5)"><button class="btn tag" id="theme">Switch theme</button><button class="btn tag" id="group">Group payments</button></div>
+<div id="cards"></div><p id="notice" role="status"></p><pre id="history"></pre>
+<script type="module">
+import { createStripeRateResolver, stripeOrderNumber } from '/src/lib/stripe-sale-defaults.js';
+import { escapeHtml } from '/src/lib/html.js';
+import { roundCents } from '/src/lib/money.js';
+const BOOKS = { altrove:{id:'altrove',title:'Un Fantastico Altrove',currency:'CAD',listPrice:55}, other:{id:'other',title:'Another Book',currency:'USD',listPrice:25} };
+const BOOK_LIST = Object.values(BOOKS);
+const states = Object.fromEntries(BOOK_LIST.map(b => [b.id,{stock:10,sold:0,revenue:0,chStats:{},hist:[],invoices:[]}]));
+const activeBook = 'altrove';
+const mem = { recorded:{},dismissed:{} };
+const _reconSession = { logged:0 };
+const getBookCurrencyCode = b => b.currency;
+const bookCurrencyCode = getBookCurrencyCode;
+const normalizeCurrencyCode = (c, fb) => String(c || fb).toUpperCase();
+const _stripeFmtMoney = (amount, currency) => new Intl.NumberFormat('en-CA',{style:'currency',currency}).format(amount);
+const resolveStripeRate = createStripeRateResolver({storage:localStorage,fetchRate:async (from,to,date) => {
+  await new Promise(done => setTimeout(done,150));
+  return {rate:to==='CAD'?1.55:1.1,date};
+}});
+window._reconPayments = [
+  {id:'ch_PreviewAbCd42',date:'2026-10-08',amount:40,currency:'EUR',customer:'Simone Costamagna',email:'customer@example.test',description:'Un Fantastico Altrove (EUR 40.00)'},
+  {id:'ch_PreviewSecond42',date:'2026-10-08',amount:40,currency:'EUR',customer:'Another Customer',description:'Un Fantastico Altrove (EUR 40.00)'},
+];
+window._reconGroupMap = {0:window._reconPayments.map(p=>p.id)};
+const _reconFindPayment = id => window._reconPayments.find(p=>p.id===id);
+const _reconRecordedChargeIds = () => new Set(Object.values(states).flatMap(s=>s.hist.map(r=>r.payment.ref)));
+const getReconMemory = () => mem;
+const saveReconMemory = () => {};
+const showToast = message => { document.getElementById('notice').textContent=message; };
+const notesWithInvoiceDiscount = (_invoices,_num,notes) => notes;
+const recomputeAfters = () => {};
+const saveState = () => {};
+const syncToSheets = () => {};
+const updateDash = () => {};
+const cadEquivalentForSale = ({totalNative}) => totalNative;
+const today = () => '2026-10-08';
+const makeEventId = () => 'fixture';
+let grouped = false;
+function renderReconcile(){
+  const remaining=window._reconPayments.filter(p=>!mem.recorded[p.id]);
+  const c={kind:'direct',bookId:'altrove'};
+  document.getElementById('cards').innerHTML=grouped && remaining.length>1 ? _reconGroupCard(remaining.map(p=>({p,c})),0) : remaining.map(p=>_reconNeedCard(p,c)).join('');
+  document.querySelectorAll('[data-recon-default]').forEach(input=>reconUpdateDefaults(input.dataset.reconDefault,input.dataset.grouped==='1'));
+  document.getElementById('history').textContent=JSON.stringify(Object.values(states).flatMap(s=>s.hist),null,2);
+}
+function _reconBookOptions(selectedId, includeBlank) {
+  // includeBlank seeds a "— Choose book —" first option so an unmatched payment
+  // can't be logged against the first book by a stray click. Selected when no
+  // SKU match is known, which also leaves the Record button disabled.
+  const blank = includeBlank ? `<option value=""${selectedId ? '' : ' selected'}>— Choose book —</option>` : '';
+  return blank + BOOK_LIST.map(b =>
+    `<option value="${escapeHtml(b.id)}"${b.id === selectedId ? ' selected' : ''}>${escapeHtml(b.title)} · ${b.currency}${b.listPrice}</option>`
+  ).join('');
+}
+function _reconAmountBadge(p) {
+  return `<span style="font-family:var(--font-mono);font-weight:600;font-size:16px;">${_stripeFmtMoney(p.amount, p.currency)}</span>`;
+}
+function _reconMeta(p) {
+  const who = [p.customer, p.email].filter(Boolean).join(' · ') || '—';
+  const desc = p.description ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  return `<div style="font-size:var(--text-sm);color:var(--text2);margin-top:3px;">${escapeHtml(p.date)} · ${escapeHtml(who)}</div>${desc}`;
+}
+function _reconNeedCard(p, c) {
+  const idSafe = p.id.replace(/[^A-Za-z0-9_]/g, '');
+  const disputed = p.disputed ? ` <span class="pill" style="font-size:var(--text-2xs);background:var(--red-bg);color:var(--red);">⚠ Disputed</span>` : '';
+
+  // Invoice not yet marked paid → send her to the proper invoice flow.
+  if (c.kind === 'invoice') {
+    const goBtn = c.bookId
+      ? `<button class="btn gold sm" onclick="reconcileOpenInvoice('${idSafe}')">Open invoice ${escapeHtml(c.ref)} →</button>`
+      : `<span style="font-size:var(--text-xs);color:var(--amber);">Invoice ${escapeHtml(c.ref)} not found in this app</span>`;
+    return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+      <div class="row-between" style="align-items:flex-start;">
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:var(--text-2xs);background:var(--blue-bg);color:var(--blue);">Invoice</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">${goBtn}
+          <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale">Dismiss</button></div>
+      </div></div>`;
+  }
+
+  // Big Cartel order that was scanned but not yet applied → one-click apply.
+  if (c.kind === 'bigcartel' && c.scanned) {
+    return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+      <div class="row-between" style="align-items:flex-start;">
+        <div><div>${_reconAmountBadge(p)} <span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>${disputed}</div>${_reconMeta(p)}</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          <button class="btn gold sm" onclick="reconcileApplyBigCartel('${idSafe}')">Apply order</button>
+          <button class="btn tag sm" onclick="reconcileDismiss('${idSafe}')">Dismiss</button></div>
+      </div></div>`;
+  }
+
+  // Direct sale (bare pi_…) or Big Cartel order we never scanned → pick a book.
+  const kindPill = c.kind === 'bigcartel'
+    ? `<span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel ${escapeHtml(c.ref)}</span>`
+    : `<span class="pill gold" style="font-size:var(--text-2xs);">Direct sale</span>`;
+  const suggest = c.bookId ? `<span style="font-size:var(--text-2xs);color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+  const recDisabled = c.bookId ? '' : ' disabled';
+  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+    <div class="row-between" style="align-items:flex-start;">
+      <div><div>${_reconAmountBadge(p)} ${kindPill}${suggest}${disputed}</div>${_reconMeta(p)}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+        <label style="font-size:var(--text-2xs);">Book</label>
+        <select id="recon-book-${idSafe}" onchange="reconUpdateDefaults('${idSafe}', false, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+      </div>
+      <div class="form-group" style="margin:0;width:70px;">
+        <label style="font-size:var(--text-2xs);">Qty</label>
+        <input type="number" id="recon-qty-${idSafe}" value="1" min="1" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:280px;max-width:100%;">
+        <label for="recon-num-${idSafe}" style="font-size:var(--text-2xs);">Order #</label>
+        <input type="text" id="recon-num-${idSafe}" maxlength="80" value="${escapeHtml(stripeOrderNumber(p))}" autocomplete="off" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:120px;">
+        <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
+        <input type="number" id="recon-amount-${idSafe}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${idSafe}')" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:90px;">
+        <label style="font-size:var(--text-2xs);">Currency</label>
+        <input type="text" id="recon-currency-${idSafe}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${idSafe}', false, true)" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:130px;">
+        <label for="recon-rate-${idSafe}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
+        <input type="number" id="recon-rate-${idSafe}" data-recon-default="${idSafe}" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${idSafe}')" aria-describedby="recon-fx-${idSafe}" style="width:100%;">
+      </div>
+      <button class="btn gold sm" id="recon-rec-${idSafe}" style="height:38px;"${recDisabled} onclick="reconcileRecordSale('${idSafe}')">Record sale</button>
+      <button class="btn tag sm" style="height:38px;" onclick="reconcileDismiss('${idSafe}')" title="Not an inventory sale (donation, test charge, etc.)">Dismiss</button>
+    </div>
+    <div id="recon-fx-${idSafe}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">Stripe’s paid amount is preserved. A payment-date reference rate and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.</div>
+    </div>`;
+}
+function _reconGroupCard(items, gi) {
+  const p = items[0].p, c = items[0].c, n = items.length;
+  const kindPill = c.kind === 'bigcartel'
+    ? `<span class="pill" style="font-size:var(--text-2xs);background:var(--green-bg);color:var(--green);">Big Cartel</span>`
+    : `<span class="pill gold" style="font-size:var(--text-2xs);">Direct sale</span>`;
+  const suggest = c.bookId ? `<span style="font-size:var(--text-2xs);color:var(--green);margin-left:6px;">SKU match → ${escapeHtml(BOOKS[c.bookId].title)}</span>` : '';
+  const total = _stripeFmtMoney(items.reduce((s, it) => s + it.p.amount, 0), p.currency);
+  const desc = p.description ? `<div style="font-size:var(--text-xs);color:var(--text3);margin-top:2px;">${escapeHtml(p.description)}</div>` : '';
+  const recDisabled = c.bookId ? '' : ' disabled';
+  return `<div class="card" style="margin-bottom:10px;padding:12px 14px;">
+    <div class="row-between" style="align-items:flex-start;">
+      <div><div>${_reconAmountBadge(p)} <span style="font-size:var(--text-sm);color:var(--text2);font-weight:600;">× ${n}</span> ${kindPill}${suggest}</div>
+        <div style="font-size:var(--text-sm);color:var(--text2);margin-top:3px;">${n} identical payments · ${escapeHtml(total)} total</div>${desc}</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px;">
+      <div class="form-group" style="margin:0;flex:1;min-width:160px;">
+        <label style="font-size:var(--text-2xs);">Book (applies to all ${n})</label>
+        <select id="recon-gbook-${gi}" onchange="reconUpdateDefaults('${gi}', true, true)">${_reconBookOptions(c.bookId, !c.bookId)}</select>
+      </div>
+      <div class="form-group" style="margin:0;width:80px;">
+        <label style="font-size:var(--text-2xs);">Qty each</label>
+        <input type="number" id="recon-gqty-${gi}" value="1" min="1" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:120px;">
+        <label style="font-size:var(--text-2xs);">Stripe amount paid</label>
+        <input type="number" id="recon-gamount-${gi}" value="${Number(p.amount).toFixed(2)}" min="0.01" step="0.01" inputmode="decimal" oninput="reconUpdateDefaults('${gi}', true)" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:90px;">
+        <label style="font-size:var(--text-2xs);">Currency</label>
+        <input type="text" id="recon-gcurrency-${gi}" value="${escapeHtml(p.currency)}" maxlength="3" pattern="[A-Za-z]{3}" autocapitalize="characters" autocomplete="off" onchange="reconUpdateDefaults('${gi}', true, true)" style="width:100%;">
+      </div>
+      <div class="form-group" style="margin:0;width:130px;">
+        <label for="recon-grate-${gi}" style="font-size:var(--text-2xs);">Automatic exchange rate</label>
+        <input type="number" id="recon-grate-${gi}" data-recon-default="${gi}" data-grouped="1" min="0.000001" step="any" inputmode="decimal" placeholder="Fetched automatically" oninput="this.dataset.manual='1';reconUpdateDefaults('${gi}', true)" aria-describedby="recon-gfx-${gi}" style="width:100%;">
+      </div>
+      <button class="btn gold sm" id="recon-grec-${gi}" style="height:38px;"${recDisabled} onclick="reconRecordGroup(${gi})">Record all ${n}</button>
+      <button class="btn tag sm" style="height:38px;" onclick="reconDismissGroup(${gi})">Dismiss all ${n}</button>
+    </div>
+    <div id="recon-gfx-${gi}" role="status" aria-live="polite" style="font-size:var(--text-xs);color:var(--text2);margin-top:6px;">Preparing the exchange rate…</div>
+    <div style="font-size:var(--text-xs);color:var(--text3);margin-top:6px;">${escapeHtml(p.date)} · Each payment keeps its own order number. The paid amount and reference exchange rate apply to each sale. Ungroup to edit individual orders.</div>
+    </div>`;
+}
+async function reconUpdateDefaults(id, grouped = false, reset = false) {
+  const prefix = grouped ? 'recon-g' : 'recon-';
+  const input = document.getElementById(`${prefix}rate-${id}`);
+  const status = document.getElementById(`${prefix}fx-${id}`);
+  const button = document.getElementById(`${prefix}rec-${id}`);
+  const bookId = document.getElementById(`${prefix}book-${id}`)?.value;
+  const p = grouped
+    ? (window._reconPayments || []).find(p => p.id === window._reconGroupMap?.[id]?.[0])
+    : _reconFindPayment(id);
+  if (!input || !status || !button || !p) return;
+  const request = String(Number(input.dataset.request || 0) + 1);
+  input.dataset.request = request;
+  if (reset) { input.value = ''; delete input.dataset.manual; }
+  if (!bookId || !BOOKS[bookId]) {
+    button.disabled = true;
+    status.textContent = 'Choose a book to calculate the converted total.';
+    return;
+  }
+  const currency = normalizeCurrencyCode(document.getElementById(`${prefix}currency-${id}`)?.value, '');
+  const bookCurrency = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
+  const pair = `${currency}:${bookCurrency}:${p.date}`;
+  if (input.dataset.pair && input.dataset.pair !== pair) {
+    input.value = '';
+    delete input.dataset.manual;
+  }
+  input.dataset.pair = pair;
+  input.disabled = currency === bookCurrency;
+  const manual = input.dataset.manual === '1' && Number(input.value) > 0;
+  button.disabled = !manual && currency !== bookCurrency;
+  status.textContent = currency === bookCurrency ? 'No conversion needed.' : 'Fetching the payment-date exchange rate…';
+  const result = manual ? { rate: Number(input.value), source: 'manual' }
+    : await resolveStripeRate({ ...p, currency }, bookCurrency);
+  if (!input.isConnected || input.dataset.request !== request) return;
+  const overridden = input.dataset.manual === '1';
+  if (!overridden) input.value = result.rate ? String(result.rate) : '';
+  input.dataset.source = overridden ? 'manual' : (result.source || '');
+  input.dataset.rateDate = overridden ? '' : (result.date || '');
+  const rate = Number(input.value);
+  const amount = Number(document.getElementById(`${prefix}amount-${id}`)?.value);
+  button.disabled = false; // Invalid/missing values are explained on Record.
+  if (!(rate > 0) || !Number.isFinite(rate)) {
+    status.textContent = 'Payment-date rate unavailable. Retry when online, or enter a rate above. ';
+    const retry = document.createElement('button');
+    retry.type = 'button';
+    retry.className = 'btn tag sm';
+    retry.textContent = 'Retry rate';
+    retry.addEventListener('click', () => reconUpdateDefaults(id, grouped));
+    status.appendChild(retry);
+    return;
+  }
+  const total = Number.isFinite(amount) && amount > 0 ? `${bookCurrency} ${_stripeFmtMoney(roundCents(amount * rate), bookCurrency)}` : 'Enter the paid amount';
+  const source = currency === bookCurrency ? 'No conversion needed'
+    : overridden ? 'Your exchange rate' : `Reference rate${result.date ? ` · ${result.date}` : ` for ${p.date}`}`;
+  status.textContent = `${source} · ${total}${grouped ? ' per payment' : ''}`;
+}
+function _reconReadSaleInputs(idSafe, bookId, grouped = false) {
+  const prefix = grouped ? 'recon-g' : 'recon-';
+  const amount = Number(document.getElementById(`${prefix}amount-${idSafe}`)?.value);
+  const currencyRaw = document.getElementById(`${prefix}currency-${idSafe}`)?.value || '';
+  const currency = normalizeCurrencyCode(currencyRaw, '');
+  const rateRaw = document.getElementById(`${prefix}rate-${idSafe}`)?.value;
+  const rate = rateRaw === '' || rateRaw == null ? null : Number(rateRaw);
+  const num = grouped ? '' : String(document.getElementById(`${prefix}num-${idSafe}`)?.value || '').trim();
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showToast('Enter the amount that was paid in Stripe', 'warn');
+    return null;
+  }
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    showToast('Enter the payment currency as a three-letter code, such as EUR or CAD', 'warn');
+    return null;
+  }
+  const bookCurrency = normalizeCurrencyCode(getBookCurrencyCode(BOOKS[bookId]), 'CAD');
+  if (currency !== bookCurrency && (!(rate > 0) || !Number.isFinite(rate))) {
+    showToast(`Enter how much ${bookCurrency} equals 1 ${currency}`, 'warn');
+    return null;
+  }
+  if (rate != null && (!(rate > 0) || !Number.isFinite(rate))) {
+    showToast('Enter a valid conversion rate greater than zero', 'warn');
+    return null;
+  }
+  const rateInput = document.getElementById(`${prefix}rate-${idSafe}`);
+  return { amount: roundCents(amount), currency, rate, num,
+    rateSource: rateInput?.dataset.manual === '1' ? 'manual' : rateInput?.dataset.source || 'manual',
+    rateDate: rateInput?.dataset.rateDate || '',
+  };
+}
+function _reconApplyPaymentToBook(p, bookId, qty, { chan = '', notes = 'Stripe direct', auto = false, num = '', amount, currency, rate, rateSource = '', rateDate = '' } = {}) {
+  const bk = BOOKS[bookId];
+  if (!bk) throw new Error('Unknown book');
+  const bookCur = normalizeCurrencyCode(getBookCurrencyCode(bk), 'CAD');
+  const paidCurrency = normalizeCurrencyCode(currency || p.currency, '');
+  const paidAmount = Number(amount ?? p.amount);
+  if (!/^[A-Z]{3}$/.test(paidCurrency) || !(paidAmount > 0) || !Number.isFinite(paidAmount)) {
+    throw new Error('Enter a valid paid amount and three-letter currency code');
+  }
+  const fxRate = paidCurrency === bookCur ? 1 : Number(rate);
+  if (!(fxRate > 0) || !Number.isFinite(fxRate)) throw new Error(`Enter the rate from ${paidCurrency} to ${bookCur}`);
+  const convertedTotal = roundCents(paidAmount * fxRate);
+  // Keep the per-copy figure precise enough that a quantity greater than one
+  // still adds back to the actual converted payment when the total is rounded.
+  const price = convertedTotal / qty;
+  const payment = {
+    currency: paidCurrency,
+    amount: roundCents(paidAmount),
+    rate: paidCurrency === bookCur ? null : fxRate,
+    convertedTotal,
+    ref: p.id,
+  };
+  if (paidCurrency !== bookCur) {
+    payment.rateSource = rateSource || 'manual';
+    payment.rateDate = payment.rateSource === 'Frankfurter' ? rateDate : (rateDate || p.date);
+    payment.rateRequestedDate = p.date;
+  }
+  _reconApplySaleToBook(bookId, qty, price, payment, p.id, notes, {
+    date: p.date, email: p.email, chan: chan || (p.cardPresent ? 'In Person' : 'Website'), auto, num: num || stripeOrderNumber(p),
+  });
+}
+function _reconApplySaleToBook(bookId, qty, price, payment, chargeId, notes, extra = {}) {
+  const row = { shipEmail: extra.email || '' };
+  if (extra.auto) row.autoRecorded = true;
+  writeOrderToLedger(bookId, {
+    num: extra.num || '',
+    chan: extra.chan || 'Website',
+    qty, price, payment,
+    notes: notes || 'Stripe',
+    enteredBy: 'Publisher',
+    date: extra.date || today(),
+    sheetsId: 'stripe-' + chargeId,
+    extra: row,
+  });
+}
+function writeOrderToLedger(bookId, { num = '', chan, qty, price, notes = '', payment = null, enteredBy = 'Publisher', date, sheetsId, extra = {} } = {}) {
+  const s = states[bookId], book = BOOKS[bookId];
+  if (!s || !book) throw new Error('Unknown book');
+  if (enteredBy === 'Artist') {
+    deductSaleFromStockBreakdown(s, qty, true);
+  }
+  s.stock = Math.max(0, s.stock - qty);
+  s.sold += qty; s.revenue += qty * price;
+  if (!s.chStats[chan]) s.chStats[chan] = { txns: 0, units: 0, revenue: 0 };
+  s.chStats[chan].txns++; s.chStats[chan].units += qty; s.chStats[chan].revenue += qty * price;
+  const updatedNotes = notesWithInvoiceDiscount(s.invoices, num, notes);
+
+  const id = sheetsId || makeEventId();
+  const when = date || today();
+  const row = { recordedAt: new Date().toISOString(), ...extra, num, chan, qty, price, after: s.stock, notes: updatedNotes, date: when, payment, enteredBy, sheetsId: id, cur: bookCurrencyCode(book) };
+  s.hist.unshift(row);
+  recomputeAfters(s, book);
+  saveState(bookId);
+  const nativeCur = normalizeCurrencyCode(getBookCurrencyCode(book), 'CAD');
+  const totalNative = qty * price;
+  const cadEquiv = cadEquivalentForSale({ nativeCurrency: nativeCur, totalNative, payment });
+  syncToSheets({
+    // The row's own running balance: a backdated sale (a Stripe payment from
+    // last week) sits earlier in the timeline than today's on-hand count.
+    type: 'order', book: book.title, date: when, num, chan, qty, price, total: totalNative, stockAfter: row.after ?? s.stock, notes: updatedNotes,
+    sheetsId: id,
+    currency: nativeCur,
+    paymentCurrency: normalizeCurrencyCode(payment?.currency || nativeCur, 'CAD'),
+    paymentAmount: payment?.amount ?? totalNative,
+    paymentRate: payment?.rate ?? '',
+    convertedTotal: cadEquiv
+  });
+}
+function reconcileRecordSale(idSafe) {
+  const p = _reconFindPayment(idSafe);
+  if (!p) return;
+  // The background sweep may have recorded this charge since the list was
+  // painted, without repainting it. Recording it again would count the sale twice.
+  if (_reconRecordedChargeIds().has(p.id)) {
+    showToast('This payment is already in your order history', 'warn');
+    renderReconcile();
+    return;
+  }
+  const bookId = document.getElementById('recon-book-' + idSafe)?.value;
+  const qty = Math.max(1, parseInt(document.getElementById('recon-qty-' + idSafe)?.value, 10) || 1);
+  if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }
+  const saleInputs = _reconReadSaleInputs(idSafe, bookId);
+  if (!saleInputs) return;
+  saleInputs.num ||= stripeOrderNumber(p);
+  try {
+    _reconApplyPaymentToBook(p, bookId, qty, saleInputs);
+  } catch (e) { showToast('Could not record: ' + (e.message || e), 'err'); return; }
+  const mem = getReconMemory();
+  mem.recorded[p.id] = { bookId, num: saleInputs.num, at: Date.now() };
+  saveReconMemory(mem);
+  _reconSession.logged++;
+  if (bookId === activeBook) updateDash();
+  showToast(`✓ Logged ${qty}× ${BOOKS[bookId].title}${saleInputs.num ? ` · ${saleInputs.num}` : ''} → stock ${states[bookId].stock}`);
+  renderReconcile();
+}
+function reconRecordGroup(gi) {
+  const ids = (window._reconGroupMap || {})[gi];
+  if (!ids || !ids.length) return;
+  const bookId = document.getElementById('recon-gbook-' + gi)?.value;
+  const qty = Math.max(1, parseInt(document.getElementById('recon-gqty-' + gi)?.value, 10) || 1);
+  if (!bookId || !BOOKS[bookId]) { showToast('Pick a book first', 'warn'); return; }
+  const saleInputs = _reconReadSaleInputs(gi, bookId, true);
+  if (!saleInputs) return;
+  const mem = getReconMemory();
+  let n = 0;
+  const recordedIds = _reconRecordedChargeIds();
+  ids.forEach(id => {
+    const p = (window._reconPayments || []).find(x => x.id === id);
+    if (!p || mem.recorded[id] || mem.dismissed[id] || recordedIds.has(id)) return;
+    const num = stripeOrderNumber(p);
+    try {
+      _reconApplyPaymentToBook(p, bookId, qty, { ...saleInputs, num });
+      mem.recorded[id] = { bookId, num, at: Date.now() };
+      _reconSession.logged++; n++;
+    } catch (e) { /* skip the bad one, keep going */ }
+  });
+  saveReconMemory(mem);
+  if (bookId === activeBook) updateDash();
+  if (n) showToast(`✓ Logged ${n}× sale${n === 1 ? '' : 's'} → ${BOOKS[bookId].title}`);
+  renderReconcile();
+}
+Object.assign(window,{reconUpdateDefaults,reconcileRecordSale,reconRecordGroup,reconcileDismiss:()=>{},reconDismissGroup:()=>{}});
+document.getElementById('theme').onclick=()=>{document.documentElement.dataset.theme=document.documentElement.dataset.theme==='dark'?'light':'dark';};
+document.getElementById('group').onclick=()=>{grouped=!grouped;renderReconcile();};
+renderReconcile();
+</script></body></html>

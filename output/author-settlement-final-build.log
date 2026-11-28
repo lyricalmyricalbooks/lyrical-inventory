@@ -1,0 +1,29 @@
+
+> lyrical-inventory@0.0.0 build
+> vite build
+
+vite v8.1.5 building client environment for production...
+[2K
+transforming...✓ 146 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/manifest.webmanifest                            0.53 kB
+dist/index.html                                    461.66 kB │ gzip:  98.33 kB
+dist/assets/index-uzoI4o0F.css                     626.43 kB │ gzip:  99.41 kB
+dist/assets/workbox-window.prod.es5-Bd17z0YL.js      5.65 kB │ gzip:   2.20 kB
+dist/assets/index-BzakcR4s.js                    1,941.86 kB │ gzip: 600.45 kB
+
+[INEFFECTIVE_DYNAMIC_IMPORT] src/lib/chitchats.js is dynamically imported by src/features/taxcentre.js but also statically imported by src/features/shipping.js, dynamic import will not move module into another chunk.
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.13s
+PWA v1.3.0
+mode      generateSW
+precache  18 entries (2965.04 KiB)
+files generated
+  dist/sw.js
+  dist/workbox-294346ee.js

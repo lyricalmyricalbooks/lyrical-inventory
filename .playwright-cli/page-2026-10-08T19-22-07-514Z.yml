@@ -1,0 +1,75 @@
+- generic [active] [ref=f1e1]:
+  - heading "Stripe sales" [level=1] [ref=f1e2]
+  - paragraph [ref=f1e3]: Local preview with simulated payments and rates. No Stripe or account changes.
+  - generic [ref=f1e4]:
+    - button "Switch theme" [ref=f1e5] [cursor=pointer]
+    - button "Group payments" [ref=f1e6] [cursor=pointer]
+  - generic [ref=f1e7]:
+    - generic [ref=f1e8]:
+      - generic [ref=f1e10]:
+        - generic [ref=f1e11]:
+          - text: €40.00
+          - generic [ref=f1e12]: Direct sale
+          - text: SKU match → Un Fantastico Altrove
+        - generic [ref=f1e13]: 2026-10-08 · Simone Costamagna · customer@example.test
+        - generic [ref=f1e14]: Un Fantastico Altrove (EUR 40.00)
+      - generic [ref=f1e15]:
+        - generic [ref=f1e16]:
+          - generic [ref=f1e17]: Book
+          - combobox [ref=f1e18] [cursor=pointer]:
+            - option "Un Fantastico Altrove · CAD55" [selected]
+            - option "Another Book · USD25"
+        - generic [ref=f1e19]:
+          - generic [ref=f1e20]: Qty
+          - spinbutton [ref=f1e21]: "1"
+        - generic [ref=f1e22]:
+          - generic [ref=f1e23]: "Order #"
+          - 'textbox "Order #" [ref=f1e24]': STRIPE-PreviewAbCd42
+        - generic [ref=f1e25]:
+          - generic [ref=f1e26]: Stripe amount paid
+          - spinbutton [ref=f1e27]: "40.00"
+        - generic [ref=f1e28]:
+          - generic [ref=f1e29]: Currency
+          - textbox [ref=f1e30]: EUR
+        - generic [ref=f1e31]:
+          - generic [ref=f1e32]: Automatic exchange rate
+          - spinbutton "Automatic exchange rate" [ref=f1e33]
+        - button "Record sale" [disabled] [ref=f1e34]
+        - button "Dismiss" [ref=f1e35] [cursor=pointer]
+      - status [ref=f1e36]: Fetching the payment-date exchange rate…
+      - generic [ref=f1e37]: Stripe’s paid amount is preserved. A payment-date reference rate and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.
+    - generic [ref=f1e38]:
+      - generic [ref=f1e40]:
+        - generic [ref=f1e41]:
+          - text: €40.00
+          - generic [ref=f1e42]: Direct sale
+          - text: SKU match → Un Fantastico Altrove
+        - generic [ref=f1e43]: 2026-10-08 · Another Customer
+        - generic [ref=f1e44]: Un Fantastico Altrove (EUR 40.00)
+      - generic [ref=f1e45]:
+        - generic [ref=f1e46]:
+          - generic [ref=f1e47]: Book
+          - combobox [ref=f1e48] [cursor=pointer]:
+            - option "Un Fantastico Altrove · CAD55" [selected]
+            - option "Another Book · USD25"
+        - generic [ref=f1e49]:
+          - generic [ref=f1e50]: Qty
+          - spinbutton [ref=f1e51]: "1"
+        - generic [ref=f1e52]:
+          - generic [ref=f1e53]: "Order #"
+          - 'textbox "Order #" [ref=f1e54]': STRIPE-PreviewSecond42
+        - generic [ref=f1e55]:
+          - generic [ref=f1e56]: Stripe amount paid
+          - spinbutton [ref=f1e57]: "40.00"
+        - generic [ref=f1e58]:
+          - generic [ref=f1e59]: Currency
+          - textbox [ref=f1e60]: EUR
+        - generic [ref=f1e61]:
+          - generic [ref=f1e62]: Automatic exchange rate
+          - spinbutton "Automatic exchange rate" [ref=f1e63]
+        - button "Record sale" [disabled] [ref=f1e64]
+        - button "Dismiss" [ref=f1e65] [cursor=pointer]
+      - status [ref=f1e66]: Fetching the payment-date exchange rate…
+      - generic [ref=f1e67]: Stripe’s paid amount is preserved. A payment-date reference rate and an order number fill automatically; you can edit them. The reference rate may differ from Stripe’s payout conversion.
+  - status
+  - generic [ref=f1e68]: "[]"

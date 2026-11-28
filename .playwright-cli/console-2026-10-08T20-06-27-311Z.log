@@ -1,0 +1,563 @@
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169712ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  169744ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js?t=1791490084357:25051
+[  169950ms] [ERROR] fbLoadCatalog failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadCatalog (http://127.0.0.1:5191/src/firebase.js:760:15)
+    at async loadCatalog (http://127.0.0.1:5191/src/main.js?t=1791490084357:1232:20)
+    at async http://127.0.0.1:5191/src/main.js?t=1791490084357:25056:13 @ http://127.0.0.1:5191/@vite/client:524
+[  169991ms] [WARNING] [2026-10-08T20:09:17.302Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/bookOwners failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  169992ms] [ERROR] fbSaveBookOwners (RTDB) failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  169996ms] [WARNING] [2026-10-08T20:09:17.307Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/catalog failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  169997ms] [ERROR] fbSaveCatalog failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  170086ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadPaymentLinks (http://127.0.0.1:5191/src/main.js?t=1791490084357:16112:20)
+    at async Promise.all (index 0)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170152ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadProductionCosts (http://127.0.0.1:5191/src/main.js?t=1791490084357:16069:20)
+    at async Promise.all (index 1)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170153ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadWebsitePaymentMethods (http://127.0.0.1:5191/src/main.js?t=1791490084357:16119:20)
+    at async Promise.all (index 2)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170153ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadCustomerSuppression (http://127.0.0.1:5191/src/features/customers.js?t=1791490084357:62:20)
+    at async Promise.all (index 3)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170153ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadMailingList (http://127.0.0.1:5191/src/features/customers.js?t=1791490084357:104:10)
+    at async Promise.all (index 4)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170153ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadCampaigns (http://127.0.0.1:5191/src/features/customers.js?t=1791490084357:624:10)
+    at async Promise.all (index 5)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170154ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2307:10)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170171ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js:25051
+[  170239ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2365:20
+    at async Promise.allSettled (index 0)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170244ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2365:20
+    at async Promise.allSettled (index 1)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170245ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2365:20
+    at async Promise.allSettled (index 2)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170245ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2365:20
+    at async Promise.allSettled (index 3)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170245ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2365:20
+    at async Promise.allSettled (index 4)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js?t=1791490084357:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170251ms] [ERROR] fbLoadCatalog failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadCatalog (http://127.0.0.1:5191/src/firebase.js:760:15)
+    at async loadCatalog (http://127.0.0.1:5191/src/main.js:1232:20)
+    at async http://127.0.0.1:5191/src/main.js:25056:13 @ http://127.0.0.1:5191/@vite/client:524
+[  170305ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/altrove: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170311ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/hound: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170312ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/archaeology: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170312ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/sistema: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170312ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/collective: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170312ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadTaxCenter (http://127.0.0.1:5191/src/main.js?t=1791490084357:3815:18)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js?t=1791490084357:3864:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170313ms] [WARNING] [2026-10-08T20:09:17.623Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/bookOwners failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  170313ms] [ERROR] fbSaveBookOwners (RTDB) failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  170313ms] [WARNING] [2026-10-08T20:09:17.624Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/catalog failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  170313ms] [ERROR] fbSaveCatalog failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  170354ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=98665&CVER=22&X-HTTP-Session-Id=gsessionid&zx=w9gwuwfjjstz&t=1:0
+[  170355ms] [WARNING] [2026-10-08T20:09:17.666Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbeb0 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  170361ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=80996&CVER=22&X-HTTP-Session-Id=gsessionid&zx=gzeqvg2rsv49&t=1:0
+[  170362ms] [WARNING] [2026-10-08T20:09:17.672Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbeb1 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  170364ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadPaymentLinks (http://127.0.0.1:5191/src/main.js:16112:20)
+    at async Promise.all (index 0)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170364ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadProductionCosts (http://127.0.0.1:5191/src/main.js:16069:20)
+    at async Promise.all (index 1)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170366ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadWebsitePaymentMethods (http://127.0.0.1:5191/src/main.js:16119:20)
+    at async Promise.all (index 2)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170367ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadCustomerSuppression (http://127.0.0.1:5191/src/features/customers.js?t=1791490084357:62:20)
+    at async Promise.all (index 3)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170367ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadMailingList (http://127.0.0.1:5191/src/features/customers.js?t=1791490084357:104:10)
+    at async Promise.all (index 4)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170367ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadCampaigns (http://127.0.0.1:5191/src/features/customers.js?t=1791490084357:624:10)
+    at async Promise.all (index 5)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170367ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js?t=1791490084357:2307:10)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:17077:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170408ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/altrove: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170408ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/hound: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170408ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/archaeology: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170409ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/sistema: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170416ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/collective: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[  170417ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadTaxCenter (http://127.0.0.1:5191/src/main.js:3815:18)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3864:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170459ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=9603&CVER=22&X-HTTP-Session-Id=gsessionid&zx=htquudtu859f&t=1:0
+[  170459ms] [WARNING] [2026-10-08T20:09:17.769Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbeb2 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  170467ms] [WARNING] [2026-10-08T20:09:17.778Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/taxCenter failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  170468ms] [ERROR] fbSaveSettings failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  170472ms] [ERROR] [2026-10-08T20:09:17.783Z]  @firebase/firestore: Firestore (12.19.0): Could not reach Cloud Firestore backend. Connection failed 1 times. Most recent error: FirebaseError: [code=unavailable]: The operation could not be completed
+This typically indicates that your device does not have a healthy Internet connection at the moment. The client will operate in offline mode until it is able to successfully connect to the backend. @ http://127.0.0.1:5191/@vite/client:524
+[  170478ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadSystemBackups (http://127.0.0.1:5191/src/main.js?t=1791490084357:15365:20)
+    at async ensureDailySystemBackup (http://127.0.0.1:5191/src/main.js?t=1791490084357:15507:3)
+    at async maybeRunDailyBackup (http://127.0.0.1:5191/src/main.js?t=1791490084357:15523:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170480ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadBigCartelConfig (http://127.0.0.1:5191/src/features/bigcartel.js?t=1791490084357:269:23)
+    at async checkBigCartelLedgerGaps (http://127.0.0.1:5191/src/features/bigcartel.js?t=1791490084357:1558:18)
+    at async autoCheckBigCartelLedgerGaps (http://127.0.0.1:5191/src/features/bigcartel.js?t=1791490084357:1647:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170481ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=44896&CVER=22&X-HTTP-Session-Id=gsessionid&zx=xpsd2kbjce05&t=1:0
+[  170481ms] [WARNING] [2026-10-08T20:09:17.792Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbeb3 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  170498ms] [WARNING] [2026-10-08T20:09:17.808Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/taxCenter failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  170498ms] [ERROR] fbSaveSettings failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  170505ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadSystemBackups (http://127.0.0.1:5191/src/main.js:15365:20)
+    at async ensureDailySystemBackup (http://127.0.0.1:5191/src/main.js:15507:3)
+    at async maybeRunDailyBackup (http://127.0.0.1:5191/src/main.js:15523:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170508ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadBigCartelConfig (http://127.0.0.1:5191/src/features/bigcartel.js?t=1791490084357:269:23)
+    at async checkBigCartelLedgerGaps (http://127.0.0.1:5191/src/features/bigcartel.js?t=1791490084357:1558:18)
+    at async autoCheckBigCartelLedgerGaps (http://127.0.0.1:5191/src/features/bigcartel.js?t=1791490084357:1647:3) @ http://127.0.0.1:5191/@vite/client:524
+[  170529ms] [WARNING] [2026-10-08T20:09:17.840Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/backups/sb-1791490157789 failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  170530ms] [ERROR] System backup snapshot write failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  170551ms] [WARNING] [2026-10-08T20:09:17.861Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/backups/sb-1791490157816 failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[  170552ms] [ERROR] System backup snapshot write failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[  171603ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=14715&CVER=22&X-HTTP-Session-Id=gsessionid&zx=11rke7bt1gax&t=1:0
+[  171603ms] [WARNING] [2026-10-08T20:09:18.914Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbeb4 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  171843ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=34887&CVER=22&X-HTTP-Session-Id=gsessionid&zx=qvv38cpjeo4r&t=1:0
+[  171844ms] [WARNING] [2026-10-08T20:09:19.154Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbeb5 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  172663ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=55336&CVER=22&X-HTTP-Session-Id=gsessionid&zx=av0fi3xenoif&t=1:0
+[  172664ms] [WARNING] [2026-10-08T20:09:19.974Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbeb6 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  172693ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=84621&CVER=22&X-HTTP-Session-Id=gsessionid&zx=4s8ugsnslr6a&t=1:0
+[  172693ms] [WARNING] [2026-10-08T20:09:20.004Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbeb7 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  173970ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=5775&CVER=22&X-HTTP-Session-Id=gsessionid&zx=98iejqvzypcl&t=1:0
+[  173970ms] [WARNING] [2026-10-08T20:09:21.280Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbeb8 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  175720ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=64928&CVER=22&X-HTTP-Session-Id=gsessionid&zx=z7p4afdft4mw&t=1:0
+[  175721ms] [WARNING] [2026-10-08T20:09:23.031Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbeb9 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  178469ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=47603&CVER=22&X-HTTP-Session-Id=gsessionid&zx=8l9y8q3vmpru&t=1:0
+[  178470ms] [WARNING] [2026-10-08T20:09:25.780Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbeba transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  178483ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=49801&CVER=22&X-HTTP-Session-Id=gsessionid&zx=tjo5mc3c6eeo&t=1:0
+[  178484ms] [WARNING] [2026-10-08T20:09:25.794Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbebb transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  182085ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=61022&CVER=22&X-HTTP-Session-Id=gsessionid&zx=y3yuvs8qcrxi&t=1:0
+[  182085ms] [WARNING] [2026-10-08T20:09:29.395Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbebc transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  185675ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=2915&CVER=22&X-HTTP-Session-Id=gsessionid&zx=4shz78ezf9hl&t=1:0
+[  185676ms] [WARNING] [2026-10-08T20:09:32.986Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbebd transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  190728ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=38066&CVER=22&X-HTTP-Session-Id=gsessionid&zx=52rky67gh6dz&t=1:0
+[  190729ms] [WARNING] [2026-10-08T20:09:38.039Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbebe transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  195261ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=3754&CVER=22&X-HTTP-Session-Id=gsessionid&zx=ibo7ak42muc8&t=1:0
+[  195262ms] [WARNING] [2026-10-08T20:09:42.572Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbebf transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  200796ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=84148&CVER=22&X-HTTP-Session-Id=gsessionid&zx=p76al25kd39z&t=1:0
+[  200797ms] [WARNING] [2026-10-08T20:09:48.107Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbec0 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  210131ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=45828&CVER=22&X-HTTP-Session-Id=gsessionid&zx=h4ee1dj3762t&t=1:0
+[  210131ms] [WARNING] [2026-10-08T20:09:57.442Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbec1 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  222939ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=6281&CVER=22&X-HTTP-Session-Id=gsessionid&zx=wrybmqcp91np&t=1:0
+[  222940ms] [WARNING] [2026-10-08T20:10:10.250Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbec2 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  223586ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=89161&CVER=22&X-HTTP-Session-Id=gsessionid&zx=ce8vx8mafm2h&t=1:0
+[  223586ms] [WARNING] [2026-10-08T20:10:10.896Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbec3 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  241496ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=46520&CVER=22&X-HTTP-Session-Id=gsessionid&zx=dpx2384jjv8c&t=1:0
+[  241496ms] [WARNING] [2026-10-08T20:10:28.807Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbec4 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  244242ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=21430&CVER=22&X-HTTP-Session-Id=gsessionid&zx=avbnpat69m3p&t=1:0
+[  244242ms] [WARNING] [2026-10-08T20:10:31.553Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbec5 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  281787ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=11373&CVER=22&X-HTTP-Session-Id=gsessionid&zx=n7gvgo95m5yq&t=1:0
+[  281788ms] [WARNING] [2026-10-08T20:11:09.098Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbec6 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  293727ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=71964&CVER=22&X-HTTP-Session-Id=gsessionid&zx=ft2gyum3etfs&t=1:0
+[  293727ms] [WARNING] [2026-10-08T20:11:21.038Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbec7 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  347680ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Write/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=46160&CVER=22&X-HTTP-Session-Id=gsessionid&zx=kos8ihkv0x7l&t=1:0
+[  347680ms] [WARNING] [2026-10-08T20:12:14.991Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Write' stream 0x425fbec8 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  351001ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://firestore.googleapis.com/google.firestore.v1.Firestore/Listen/channel?VER=8&database=projects%2Flyricalmyrical-37c46%2Fdatabases%2F(default)&RID=11876&CVER=22&X-HTTP-Session-Id=gsessionid&zx=rf7cycjyndxz&t=1:0
+[  351001ms] [WARNING] [2026-10-08T20:12:18.312Z]  @firebase/firestore: Firestore (12.19.0): WebChannelConnection RPC 'Listen' stream 0x425fbec9 transport errored. Name: undefined Message: undefined @ http://127.0.0.1:5191/@vite/client:524
+[  405234ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:5191/@vite/client:992
+[  405236ms] [ERROR] WebSocket connection to 'wss://s-gke-usc1-nssi2-41.firebaseio.com/.ws?v=5&ls=cptQz3BwLw0MwRs8QPxSCgIaUhvWssmo&p=1:448719824639:web:2aa79291b13bf6716ececa&ns=lyricalmyrical-37c46-default-rtdb' failed: Error in connection establishment: net::ERR_NETWORK_IO_SUSPENDED @ https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:0
+[  409291ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=93495058&cb=1&v=5&ls=cptQz3BwLw0MwRs8QPxSCgIaUhvWssmo&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410248ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  410265ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js?t=1791490385293:25051
+[  410376ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=92902638&cb=1&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  410574ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=67769528&cb=2&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  410945ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=31649120&cb=3&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  411452ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=80592742&cb=4&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  412620ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=62473935&cb=5&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  415488ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=49052841&cb=6&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  416255ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=70864595&cb=7&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  418254ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=45104961&cb=8&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  421755ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=20856938&cb=9&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  425104ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=61346620&cb=10&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  428992ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=57090960&cb=11&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  437786ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=62039492&cb=12&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441609ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  441630ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js?t=1791490404982:25069
+[  441728ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=5142314&cb=1&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  441893ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js:25069
+[  441954ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=32373560&cb=2&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  442277ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=10118246&cb=3&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  442344ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=63127293&cb=4&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  444409ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=16397949&cb=5&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  444998ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=74932932&cb=6&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  446315ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=53300147&cb=7&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  446875ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=33984620&cb=8&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  447752ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=51513390&cb=9&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  449111ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=6549911&cb=10&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  451648ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=59211874&cb=11&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  463806ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=26286846&cb=12&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  477329ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=13011795&cb=13&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  482492ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=83553182&cb=14&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503470ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  503485ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js?t=1791490404982:25069
+[  503624ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=67214795&cb=1&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  503642ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=10609711&cb=2&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  503784ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js:25069
+[  503809ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=21109184&cb=3&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  504431ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=72969575&cb=4&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  505290ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=81600742&cb=5&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  507386ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=38518781&cb=6&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  507800ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=96450820&cb=7&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  511655ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=75910295&cb=8&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  517887ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=72888019&cb=9&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  519553ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=18760798&cb=10&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  520679ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=36076180&cb=11&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  521756ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=41682980&cb=12&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  529498ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=64560403&cb=13&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  532872ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=91243680&cb=14&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  534471ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=46884903&cb=15&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  542580ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:5191/@vite/client:992
+[  950467ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=14130917&cb=16&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952573ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[  952586ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js?t=1791490404982:25069
+[  953073ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=78934720&cb=1&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  953540ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=82287479&cb=2&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  954195ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=65822654&cb=3&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  955742ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=66957722&cb=4&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  956109ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=61224529&cb=5&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  956682ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=27517827&cb=6&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  957173ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=25797317&cb=7&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  958866ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=98522669&cb=8&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  961839ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=21762708&cb=9&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  968765ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=73651392&cb=10&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  970125ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=7209004&cb=11&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  974919ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=49892534&cb=12&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  985390ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=73544252&cb=13&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  996544ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=47381537&cb=14&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[  998692ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=70165495&cb=15&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0
+[ 1012210ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://lyricalmyrical-37c46-default-rtdb.firebaseio.com/.lp?start=t&ser=15311574&cb=16&v=5&p=1:448719824639:web:2aa79291b13bf6716ececa:0

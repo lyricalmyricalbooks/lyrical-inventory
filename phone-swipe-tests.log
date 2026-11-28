@@ -1,0 +1,13 @@
+
+> lyrical-inventory@0.0.0 test
+> vitest run
+
+
+ RUN  v4.1.10 C:/Users/julia/.antigravity/lyrical-inventory
+
+
+ Test Files  320 passed (320)
+      Tests  5115 passed (5115)
+   Start at  19:34:05
+   Duration  32.45s (transform 71.00s, setup 0ms, import 69.67s, tests 244.64s, environment 74.22s)
+

@@ -1,0 +1,312 @@
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    3948ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5191/:0
+[    4002ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5191/src/main.js:24881
+[    4357ms] [ERROR] fbLoadCatalog failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadCatalog (http://127.0.0.1:5191/src/firebase.js:760:15)
+    at async loadCatalog (http://127.0.0.1:5191/src/main.js:1230:20)
+    at async http://127.0.0.1:5191/src/main.js:24886:13 @ http://127.0.0.1:5191/@vite/client:524
+[    4397ms] [WARNING] [2026-10-08T19:37:19.181Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/bookOwners failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[    4398ms] [ERROR] fbSaveBookOwners (RTDB) failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[    4403ms] [WARNING] [2026-10-08T19:37:19.188Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/catalog failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[    4404ms] [ERROR] fbSaveCatalog failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[    4509ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadPaymentLinks (http://127.0.0.1:5191/src/main.js:15951:20)
+    at async Promise.all (index 0)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4511ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadProductionCosts (http://127.0.0.1:5191/src/main.js:15908:20)
+    at async Promise.all (index 1)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4512ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadWebsitePaymentMethods (http://127.0.0.1:5191/src/main.js:15958:20)
+    at async Promise.all (index 2)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4513ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadCustomerSuppression (http://127.0.0.1:5191/src/features/customers.js:62:20)
+    at async Promise.all (index 3)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4513ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadMailingList (http://127.0.0.1:5191/src/features/customers.js:104:10)
+    at async Promise.all (index 4)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4513ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadCampaigns (http://127.0.0.1:5191/src/features/customers.js:624:10)
+    at async Promise.all (index 5)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4514ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2307:10)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4562ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js:2365:20
+    at async Promise.allSettled (index 0)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4564ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js:2365:20
+    at async Promise.allSettled (index 1)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4565ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js:2365:20
+    at async Promise.allSettled (index 2)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4565ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js:2365:20
+    at async Promise.allSettled (index 3)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4566ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async http://127.0.0.1:5191/src/features/opencall.js:2365:20
+    at async Promise.allSettled (index 4)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2392:19)
+    at async loadOpenCalls (http://127.0.0.1:5191/src/features/opencall.js:2340:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5191/src/main.js:16916:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4610ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async loadBook (http://127.0.0.1:5191/src/main.js:3621:18)
+    at async Promise.all (index 0)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3861:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4614ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async loadBook (http://127.0.0.1:5191/src/main.js:3621:18)
+    at async Promise.all (index 1)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3861:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4614ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async loadBook (http://127.0.0.1:5191/src/main.js:3621:18)
+    at async Promise.all (index 2)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3861:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4616ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async loadBook (http://127.0.0.1:5191/src/main.js:3621:18)
+    at async Promise.all (index 3)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3861:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4618ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5191/src/firebase.js:387:15)
+    at async loadBook (http://127.0.0.1:5191/src/main.js:3621:18)
+    at async Promise.all (index 4)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3861:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4652ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/altrove: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4653ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/altrove: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4654ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/hound: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4654ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/hound: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4655ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/archaeology: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4655ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/archaeology: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4656ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/sistema: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4657ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/sistema: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4657ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/collective: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4658ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/collective: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5191/@vite/client:524
+[    4659ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadTaxCenter (http://127.0.0.1:5191/src/main.js:3813:18)
+    at async loadAllBooks (http://127.0.0.1:5191/src/main.js:3862:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4948ms] [WARNING] [2026-10-08T19:37:19.732Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/taxCenter failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[    4948ms] [ERROR] fbSaveSettings failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[    4951ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadSystemBackups (http://127.0.0.1:5191/src/main.js:15204:20)
+    at async ensureDailySystemBackup (http://127.0.0.1:5191/src/main.js:15346:3)
+    at async maybeRunDailyBackup (http://127.0.0.1:5191/src/main.js:15362:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4954ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5191/src/firebase.js:643:15)
+    at async loadBigCartelConfig (http://127.0.0.1:5191/src/features/bigcartel.js:269:23)
+    at async checkBigCartelLedgerGaps (http://127.0.0.1:5191/src/features/bigcartel.js:1558:18)
+    at async autoCheckBigCartelLedgerGaps (http://127.0.0.1:5191/src/features/bigcartel.js:1647:3) @ http://127.0.0.1:5191/@vite/client:524
+[    4974ms] [ERROR] fbSaveBookOwners (Firestore) failed FirebaseError: Missing or insufficient permissions. @ http://127.0.0.1:5191/@vite/client:524
+[    4993ms] [WARNING] [2026-10-08T19:37:19.778Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/backups/sb-1791488239737 failed: permission_denied  @ http://127.0.0.1:5191/@vite/client:524
+[    4994ms] [ERROR] System backup snapshot write failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5191/@vite/client:524
+[    5098ms] [ERROR] inbox watch failed FirebaseError: Missing or insufficient permissions. @ http://127.0.0.1:5191/@vite/client:524

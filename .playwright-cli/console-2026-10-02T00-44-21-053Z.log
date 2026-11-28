@@ -1,0 +1,443 @@
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1580ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[    1629ms] [LOG] [Dev Bypass] Localhost/dev environment detected, bypassing login gate as publisher. @ http://127.0.0.1:5176/src/main.js:24541
+[    2012ms] [ERROR] fbLoadCatalog failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadCatalog (http://127.0.0.1:5176/src/firebase.js:750:15)
+    at async loadCatalog (http://127.0.0.1:5176/src/main.js:1231:20)
+    at async http://127.0.0.1:5176/src/main.js:24546:13 @ http://127.0.0.1:5176/@vite/client:524
+[    2056ms] [WARNING] [2026-10-02T00:44:23.109Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/bookOwners failed: permission_denied  @ http://127.0.0.1:5176/@vite/client:524
+[    2057ms] [ERROR] fbSaveBookOwners (RTDB) failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5176/@vite/client:524
+[    2062ms] [WARNING] [2026-10-02T00:44:23.114Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/catalog failed: permission_denied  @ http://127.0.0.1:5176/@vite/client:524
+[    2062ms] [ERROR] fbSaveCatalog failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5176/@vite/client:524
+[    2210ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadPaymentLinks (http://127.0.0.1:5176/src/main.js:15702:20)
+    at async Promise.all (index 0)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2211ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadProductionCosts (http://127.0.0.1:5176/src/main.js:15659:20)
+    at async Promise.all (index 1)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2211ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadWebsitePaymentMethods (http://127.0.0.1:5176/src/main.js:15709:20)
+    at async Promise.all (index 2)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2212ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadCustomerSuppression (http://127.0.0.1:5176/src/features/customers.js:62:20)
+    at async Promise.all (index 3)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2212ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadMailingList (http://127.0.0.1:5176/src/features/customers.js:104:10)
+    at async Promise.all (index 4)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2212ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadCampaigns (http://127.0.0.1:5176/src/features/customers.js:624:10)
+    at async Promise.all (index 5)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2212ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2300:10)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2334ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async http://127.0.0.1:5176/src/features/opencall.js:2358:20
+    at async Promise.allSettled (index 0)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2385:19)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2333:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2335ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async http://127.0.0.1:5176/src/features/opencall.js:2358:20
+    at async Promise.allSettled (index 1)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2385:19)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2333:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2335ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async http://127.0.0.1:5176/src/features/opencall.js:2358:20
+    at async Promise.allSettled (index 2)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2385:19)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2333:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2336ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async http://127.0.0.1:5176/src/features/opencall.js:2358:20
+    at async Promise.allSettled (index 3)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2385:19)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2333:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2336ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async http://127.0.0.1:5176/src/features/opencall.js:2358:20
+    at async Promise.allSettled (index 4)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2385:19)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2333:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2337ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async http://127.0.0.1:5176/src/features/opencall.js:2358:20
+    at async Promise.allSettled (index 5)
+    at async migrateLegacyOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2385:19)
+    at async loadOpenCalls (http://127.0.0.1:5176/src/features/opencall.js:2333:3)
+    at async Promise.all (index 6)
+    at async boot (http://127.0.0.1:5176/src/main.js:16667:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2447ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async loadBook (http://127.0.0.1:5176/src/main.js:3612:18)
+    at async Promise.all (index 0)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3848:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2450ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async loadBook (http://127.0.0.1:5176/src/main.js:3612:18)
+    at async Promise.all (index 1)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3848:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2451ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async loadBook (http://127.0.0.1:5176/src/main.js:3612:18)
+    at async Promise.all (index 2)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3848:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2451ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async loadBook (http://127.0.0.1:5176/src/main.js:3612:18)
+    at async Promise.all (index 3)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3848:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2452ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async loadBook (http://127.0.0.1:5176/src/main.js:3612:18)
+    at async Promise.all (index 4)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3848:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2452ms] [ERROR] fbLoad failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoad (http://127.0.0.1:5176/src/firebase.js:377:15)
+    at async loadBook (http://127.0.0.1:5176/src/main.js:3612:18)
+    at async Promise.all (index 5)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3848:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2512ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/altrove: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2513ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/altrove: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2516ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/hound: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2516ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/hound: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2516ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/archaeology: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2517ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/archaeology: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2517ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/sistema: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2517ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/sistema: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2517ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/nobody: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2518ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/nobody: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2518ms] [ERROR] RTDB sub watch failed Error: permission_denied at /lyrical/submissions/collective: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2519ms] [ERROR] RTDB watch failed Error: permission_denied at /lyrical/books/collective: Client doesn't have permission to access the desired data.
+    at errorForServerCode (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133877)
+    at onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:133955)
+    at Object.onComplete (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:145620)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:52221
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470)
+    at WebSocketConnection.handleIncomingFrame (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:35022) @ http://127.0.0.1:5176/@vite/client:524
+[    2519ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadTaxCenter (http://127.0.0.1:5176/src/main.js:3800:18)
+    at async loadAllBooks (http://127.0.0.1:5176/src/main.js:3849:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2831ms] [WARNING] [2026-10-02T00:44:23.884Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/settings/taxCenter failed: permission_denied  @ http://127.0.0.1:5176/@vite/client:524
+[    2832ms] [ERROR] fbSaveSettings failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5176/@vite/client:524
+[    2835ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadSystemBackups (http://127.0.0.1:5176/src/main.js:14955:20)
+    at async ensureDailySystemBackup (http://127.0.0.1:5176/src/main.js:15097:3)
+    at async maybeRunDailyBackup (http://127.0.0.1:5176/src/main.js:15113:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2837ms] [ERROR] fbLoadSettings failed Error: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:168023
+    at async window._fbLoadSettings (http://127.0.0.1:5176/src/firebase.js:633:15)
+    at async loadBigCartelConfig (http://127.0.0.1:5176/src/features/bigcartel.js:269:23)
+    at async checkBigCartelLedgerGaps (http://127.0.0.1:5176/src/features/bigcartel.js:1558:18)
+    at async autoCheckBigCartelLedgerGaps (http://127.0.0.1:5176/src/features/bigcartel.js:1647:3) @ http://127.0.0.1:5176/@vite/client:524
+[    2896ms] [WARNING] [2026-10-02T00:44:23.948Z]  @firebase/database: FIREBASE WARNING: set at /lyrical/backups/sb-1790901863888 failed: permission_denied  @ http://127.0.0.1:5176/@vite/client:524
+[    2896ms] [ERROR] System backup snapshot write failed Error: PERMISSION_DENIED: Permission denied
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149774
+    at exceptionGuard (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:19733)
+    at repoCallOnCompleteCallback (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:149662)
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:148613
+    at https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:55779
+    at PersistentConnection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:56121)
+    at Connection.onDataMessage_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40686)
+    at Connection.onPrimaryMessageReceived_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:40619)
+    at WebSocketConnection.onMessage (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:38932)
+    at WebSocketConnection.appendFrame_ (https://www.gstatic.com/firebasejs/12.19.0/firebase-database.js:1:34470) @ http://127.0.0.1:5176/@vite/client:524
+[    2927ms] [ERROR] fbSaveBookOwners (Firestore) failed FirebaseError: Missing or insufficient permissions. @ http://127.0.0.1:5176/@vite/client:524
+[    3116ms] [ERROR] inbox watch failed FirebaseError: Missing or insufficient permissions. @ http://127.0.0.1:5176/@vite/client:524
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  150922ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  203594ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  204611ms] [ERROR] Access to fetch at 'https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18' from origin 'http://127.0.0.1:5176' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://127.0.0.1:5176/:0
+[  204612ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18:0
+[  204612ms] [WARNING] Shipping email sweep failed TypeError: Failed to fetch
+    at gmailJson (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1844:21)
+    at sweepShippingEmails (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1897:25)
+    at startWatch.intervalMs (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1979:22)
+    at startWatch (http://127.0.0.1:5176/src/lib/watch-schedule.js:83:18)
+    at startShippingEmailSweep (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1979:3)
+    at http://127.0.0.1:5176/src/main.js:16739:9 @ http://127.0.0.1:5176/@vite/client:524
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  256487ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  257437ms] [ERROR] Access to fetch at 'https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18' from origin 'http://127.0.0.1:5176' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://127.0.0.1:5176/:0
+[  257437ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18:0
+[  257437ms] [WARNING] Shipping email sweep failed TypeError: Failed to fetch
+    at gmailJson (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1844:21)
+    at sweepShippingEmails (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1897:25)
+    at startWatch.intervalMs (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1979:22)
+    at startWatch (http://127.0.0.1:5176/src/lib/watch-schedule.js:83:18)
+    at startShippingEmailSweep (http://127.0.0.1:5176/src/features/shipping.js?t=1790901922685:1979:3)
+    at http://127.0.0.1:5176/src/main.js:16739:9 @ http://127.0.0.1:5176/@vite/client:524
+[  295399ms] [LOG] [vite] server connection lost. Polling for restart... @ http://127.0.0.1:5176/@vite/client:992
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  304957ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338825ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  338826ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:5176/:0
+[  339611ms] [ERROR] Access to fetch at 'https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18' from origin 'http://127.0.0.1:5176' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://127.0.0.1:5176/:0
+[  339611ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18:0
+[  339611ms] [WARNING] Shipping email sweep failed TypeError: Failed to fetch
+    at gmailJson (http://127.0.0.1:5176/src/features/shipping.js:1844:21)
+    at sweepShippingEmails (http://127.0.0.1:5176/src/features/shipping.js:1897:25)
+    at startWatch.intervalMs (http://127.0.0.1:5176/src/features/shipping.js:1979:22)
+    at startWatch (http://127.0.0.1:5176/src/lib/watch-schedule.js:83:18)
+    at startShippingEmailSweep (http://127.0.0.1:5176/src/features/shipping.js:1979:3)
+    at http://127.0.0.1:5176/src/main.js:16739:9 @ http://127.0.0.1:5176/@vite/client:524
+[ 2139628ms] [ERROR] Access to fetch at 'https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18' from origin 'http://127.0.0.1:5176' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource. @ http://127.0.0.1:5176/:0
+[ 2139628ms] [ERROR] Failed to load resource: net::ERR_FAILED @ https://script.google.com/macros/s/chitchats-browser-fixture/exec?action=listReceiptEmails&limit=25&q=%7Bfrom%3Acanadapost.ca%20OR%20from%3Acanadapost-postescanada.ca%20OR%20from%3Aups.com%20OR%20from%3Afedex.com%20OR%20from%3Adhl.com%20OR%20from%3Apurolator.com%20OR%20from%3Astamps.com%20OR%20from%3Apirateship.com%20OR%20from%3Ashipstation.com%20OR%20subject%3A%22shipping%20label%22%20OR%20subject%3A%22shipment%20confirmation%22%20OR%20subject%3A%22tracking%20number%22%20OR%20subject%3A%22your%20label%22%20OR%20subject%3A%22postage%22%7D%20after%3A2026%2F09%2F18:0
+[ 2139628ms] [WARNING] Shipping email sweep failed TypeError: Failed to fetch
+    at gmailJson (http://127.0.0.1:5176/src/features/shipping.js:1844:21)
+    at sweepShippingEmails (http://127.0.0.1:5176/src/features/shipping.js:1897:25)
+    at startWatch.intervalMs (http://127.0.0.1:5176/src/features/shipping.js:1979:22) @ http://127.0.0.1:5176/@vite/client:524
