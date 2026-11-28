@@ -8,9 +8,9 @@ const html = readFileSync(path.join(root, 'index.html'), 'utf8');
 const taxCentre = readFileSync(path.join(root, 'src/features/taxcentre.js'), 'utf8');
 
 test('opening the email import tab launches the importer instead of a landing screen', () => {
-  const switchSubTab = taxCentre.match(/function switchTaxCenterSubTab\(subTabName\) \{([\s\S]*?)\n\}/)?.[1] || '';
+  const switchSubTab = taxCentre.match(/function switchReceiptsSubTab\(subTabName\) \{([\s\S]*?)\n\}/)?.[1] || '';
 
-  expect(switchSubTab).toMatch(/activeTaxCenterSubTab === 'email-import'[\s\S]*?openEmailReceiptImportModal\(\)/);
+  expect(switchSubTab).toMatch(/activeReceiptsSubTab === 'email-import'[\s\S]*?openEmailReceiptImportModal\(\)/);
   expect(html).not.toContain('tc-email-import-hero');
   expect(html).not.toContain('Turn forwarded receipts into clean expenses.');
 });

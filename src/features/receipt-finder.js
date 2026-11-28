@@ -38,7 +38,7 @@ const READER_VERSION = 4;
 const RENDER_INTERVAL_MS = 200;
 
 let deps, host, state = emptyState(), uid = '', accessToken = '', tokenExpiresAt = 0;
-let controller = null, busy = false, flushing = false, scanTotal = 0, scanDone = 0, scanSkipped = 0, scanCached = 0, scanFiled = 0;
+let controller = null, busy = false, flushing = false, flushAgain = false, scanTotal = 0, scanDone = 0, scanSkipped = 0, scanCached = 0, scanFiled = 0;
 // Message ids this scan must not pay to read: already filed as an expense by
 // any route (this finder, the no-AI Gmail import, the Gmail add-on), or
 // already holding a found receipt. Built once per scan, not once per email.
@@ -171,6 +171,13 @@ function renderConnection() {
     // Says the same thing as the connection bar below it, never something else.
     pill.textContent = tokenLive() ? `● ${state.account}` : state.account ? '○ Reconnect Gmail' : '○ Gmail not connected';
     pill.className = `pill ${tokenLive() ? 'green' : 'gray'} email-connected-pill`;
+    const actionHint = tokenLive()
+      ? 'Connected to Gmail. Click to disconnect on this device.'
+      : state.account
+        ? 'Gmail needs a reconnect. Click to reconnect.'
+        : 'Gmail is not connected. Click to connect.';
+    pill.title = actionHint;
+    pill.setAttribute('aria-label', actionHint);
   }
   const button = host?.querySelector('[data-action="connect"]');
   if (button) {
@@ -372,6 +379,13 @@ async function mountReceiptFinder(element, dependencies) {
   host.addEventListener('click', onClick);
   host.addEventListener('change', onChange);
   host.addEventListener('toggle', onToggle, true);
+  const accountPill = document.getElementById('email-account-pill');
+  if (accountPill && accountPill.dataset.rfConnectWired !== '1') {
+    accountPill.dataset.rfConnectWired = '1';
+    accountPill.addEventListener('click', () => {
+      if (!busy && active()) toggleConnection().catch(report);
+    });
+  }
   host.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
     const row = event.target.closest?.('details[data-draft][open]');
@@ -922,6 +936,9 @@ function renderDraft(draft, open) {
         <button type="button" class="btn" data-dismiss>Not a receipt</button>
         ${canNever ? `<button type="button" class="btn quiet rf-never" data-never="${esc(domain)}" title="Never read emails from ${esc(domain)}">Never read this shop</button>` : ''}
         <button type="button" class="btn gold rf-file" data-file-one ${fileable && !busy ? '' : 'disabled'} title="${fileable ? 'File this receipt as an expense' : 'Fix what is listed above first'}">Looks right, file it</button>
+      </div>` : status === 'queued' && draft.error ? `<div class="rf-detail-foot">
+        <button type="button" class="btn" data-unqueue>Edit again</button>
+        <button type="button" class="btn gold" data-action="retry" ${busy || flushing ? 'disabled' : ''}>Try filing again</button>
       </div>` : status === 'ignored' ? `<div class="rf-detail-foot"><button type="button" class="btn" data-restore>Restore receipt</button>
         ${canNever ? `<button type="button" class="btn" data-never="${esc(domain)}">Never read emails from ${esc(domain)}</button>` : ''}</div>` : ''}
     </div></details>`;
@@ -1077,6 +1094,12 @@ async function onClick(event) {
     }
     const draft = state.drafts.find(row => row.id === button.closest('[data-draft]')?.dataset.draft);
     if (draft && button.hasAttribute('data-restore')) { draft.status = 'draft'; draft.updatedAt = Date.now(); await persist(); render(); return; }
+    if (draft && button.hasAttribute('data-unqueue') && draft.status === 'queued') {
+      draft.status = 'draft'; draft.error = ''; draft.updatedAt = Date.now();
+      await persist(); render();
+      announce('Moved back to review so you can edit or dismiss it.');
+      return;
+    }
     if (draft && button.hasAttribute('data-not-duplicate')) {
       draft.notDuplicate = true; draft.updatedAt = Date.now(); await persist(); render();
       announce('Kept as a separate purchase. It now waits with your other receipts.'); return;
@@ -1910,50 +1933,77 @@ async function testReader() {
 function stopReceiptFinder() { controller?.abort(); }
 
 async function resumeReceiptImports() {
-  if (flushing || !active() || !navigator.onLine) return;
+  if (!active() || !navigator.onLine) return;
+  if (flushing) { flushAgain = true; return; }
   flushing = true;
   const owner = uid;
+  let totalImported = 0;
+  let totalFailed = 0;
+  let firstError = '';
   try {
-    await flushReceiptOutbox(state, {
-      canSync: () => active() && uid === owner && navigator.onLine,
-      expenses: deps.expenses, rate: deps.rate, commit: deps.commit, accept: deps.accept,
-      subscription: deps.subscription,
-      save: persist, render,
-      files: async email => {
-        const output = [];
-        const body = new File([`From: ${email.from}\nSubject: ${email.subject}\nDate: ${email.date}\n\n${email.body}`], 'email.txt', { type: 'text/plain' });
-        // An attachment the reader had to skip (over 12 MB, or it would not
-        // download) has no bytes to file. It keeps its slot, empty, so the other
-        // files still line up with their attachments — and it must not block the
-        // receipt: the email body and the other files are filed, and the Gmail
-        // link on the expense still leads to the original.
-        const files = [{ file: body, name: 'email.txt' }, ...email.fileParts.map((part, index) => {
-          if (!part.base64) return { skipped: true, name: '' };
-          return { file: new File([decodeGmailBase64(part.base64)], part.name, { type: part.mime }), name: `${index}-${part.name.replace(/[^a-zA-Z0-9._-]/g, '_')}` };
-        })];
-        if (!email.savedFiles) email.savedFiles = {};
-        for (const entry of files) {
-          if (!active() || uid !== owner) throw new Error('Sign in as the same publisher to finish importing');
-          if (entry.skipped) { output.push(''); continue; }
-          if (!email.savedFiles[entry.name]) {
-            let timer;
-            try {
-              const path = `email-imports/${encodeURIComponent(email.account)}/${email.id}/${entry.name}`;
-              email.savedFiles[entry.name] = await Promise.race([
-                deps.upload(entry.file, path),
-                new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Receipt upload timed out. Retry pending imports.')), 45000); }),
-              ]);
-              if (!email.savedFiles[entry.name]) throw new Error('Receipt upload did not return a file link');
-            } finally { clearTimeout(timer); }
-            await persist();
+    do {
+      flushAgain = false;
+      const queuedBefore = new Set(state.drafts.filter(row => row.status === 'queued').map(row => row.id));
+      await flushReceiptOutbox(state, {
+        canSync: () => active() && uid === owner && navigator.onLine,
+        expenses: deps.expenses, rate: deps.rate, commit: deps.commit, accept: deps.accept,
+        subscription: deps.subscription,
+        save: persist, render,
+        files: async email => {
+          const output = [];
+          const body = new File([`From: ${email.from}\nSubject: ${email.subject}\nDate: ${email.date}\n\n${email.body}`], 'email.txt', { type: 'text/plain' });
+          // An attachment the reader had to skip (over 12 MB, or it would not
+          // download) has no bytes to file. It keeps its slot, empty, so the other
+          // files still line up with their attachments — and it must not block the
+          // receipt: the email body and the other files are filed, and the Gmail
+          // link on the expense still leads to the original.
+          const files = [{ file: body, name: 'email.txt' }, ...email.fileParts.map((part, index) => {
+            if (!part.base64 || !/^(text\/plain|image\/|application\/pdf)$/i.test(String(part.mime || '').split(';')[0].trim())) {
+              return { skipped: true, name: '' };
+            }
+            return { file: new File([decodeGmailBase64(part.base64)], part.name, { type: part.mime }), name: `${index}-${part.name.replace(/[^a-zA-Z0-9._-]/g, '_')}` };
+          })];
+          if (!email.savedFiles) email.savedFiles = {};
+          for (const entry of files) {
+            if (!active() || uid !== owner) throw new Error('Sign in as the same publisher to finish importing');
+            if (entry.skipped) { output.push(''); continue; }
+            if (!email.savedFiles[entry.name]) {
+              let timer;
+              try {
+                const path = `email-imports/${encodeURIComponent(email.account)}/${email.id}/${entry.name}`;
+                email.savedFiles[entry.name] = await Promise.race([
+                  deps.upload(entry.file, path),
+                  new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Receipt upload timed out. Retry pending imports.')), 45000); }),
+                ]);
+                if (!email.savedFiles[entry.name]) throw new Error('Receipt upload did not return a file link');
+              } finally { clearTimeout(timer); }
+              await persist();
+            }
+            output.push(email.savedFiles[entry.name]);
           }
-          output.push(email.savedFiles[entry.name]);
+          return output;
+        },
+      });
+      for (const draft of state.drafts) {
+        if (!queuedBefore.has(draft.id)) continue;
+        if (draft.status === 'imported') totalImported++;
+        else if (draft.status === 'queued' && draft.error) {
+          totalFailed++;
+          if (!firstError) firstError = draft.error;
         }
-        return output;
-      },
-    });
+      }
+    } while (flushAgain && active() && navigator.onLine);
+
+    if (totalImported) {
+      const msg = totalImported === 1 ? '✓ Receipt filed to your expenses' : `✓ ${totalImported} receipts filed to your expenses`;
+      deps.toast(msg, 'ok');
+      announce(msg);
+    }
+    if (totalFailed) {
+      deps.toast(firstError || 'Some receipts could not be filed', 'err');
+    }
   } catch (error) { report(error); }
-  finally { flushing = false; render(); }
+  finally { flushing = false; flushAgain = false; render(); }
 }
 
 export { startReceiptFinder, mountReceiptFinder, stopReceiptFinder, resumeReceiptImports };

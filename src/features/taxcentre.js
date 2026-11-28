@@ -114,8 +114,8 @@ import {
 async function saveTaxCenter({ rethrow = false } = {}) {
   if (isAuthor()) return;
   try {
-    await window._fbSaveSettings('taxCenter', TAX_CENTER);
-    return true;
+    const ok = await window._fbSaveSettings('taxCenter', TAX_CENTER);
+    return ok !== false;
   } catch (e) {
     console.error(e);
     if (rethrow) throw e;
@@ -215,7 +215,7 @@ function processRecurringExpenses() {
  * Offline, the load keeps what is held and the posting still runs.
  */
 async function refreshRecurringCharges() {
-  await loadTaxCenter();
+  await loadTaxCenter({ ratesInBackground: true });
   processRecurringExpenses();
 }
 

@@ -3416,7 +3416,7 @@
           <div class="tc-integrations-title"><span>Email Receipt Import</span></div>
           <div class="tc-integrations-sub">Find the proof, check the details, file it once.</div>
         </div>
-        <span class="pill green email-connected-pill" id="email-account-pill">● Gmail Connected</span>
+        <button type="button" class="pill green email-connected-pill" id="email-account-pill">● Gmail Connected</button>
       </div>
 
       <!-- Sub-Tabs: Apple/Linear-style Segmented Control. Each tab says in a
@@ -3424,7 +3424,7 @@
            receipt in does not need a guess. -->
       <div class="modal-tabs segmented-control email-import-tabs" role="tablist" aria-label="How to bring receipts in">
         <button type="button" class="modal-tab-btn" id="email-tab-review" onclick="switchEmailImportTab('review')" role="tab" aria-selected="false" aria-controls="email-panel-review">
-          <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">🧾</span> Review</span>
+          <span class="email-tab-head"><span class="tab-icon" aria-hidden="true">🧾</span> Review <span class="tc-email-import-badge" id="email-review-tab-badge" style="display:none;"></span></span>
           <span class="email-tab-sub">Check before filing</span>
         </button>
         <button type="button" class="modal-tab-btn active" id="email-tab-gmail" onclick="switchEmailImportTab('gmail')" role="tab" aria-selected="true" aria-controls="email-panel-gmail">

@@ -1,7 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildHarness, extractDecl } from './helpers/extract-decl.js';
+import { escapeHtml } from '../src/lib/html.js';
 import { roundCents } from '../src/lib/money.js';
 import { datedCadRate } from '../src/lib/sale-fx.js';
 import { totalsByCurrency } from '../src/lib/expense-totals.js';
@@ -425,5 +427,364 @@ describe('the Gmail add-on does not guess a bare $ is USD', () => {
 describe('sanity', () => {
   it('extractDecl still finds the helpers', () => {
     expect(extractDecl('_pastedDraftFileIndex')).toContain('rowIndex');
+  });
+});
+
+describe('email receipt import filing & Tax Centre save contract', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('saveTaxCenter returns false when _fbSaveSettings returns false (e.g. preview or write failure)', async () => {
+    const save = buildHarness({
+      names: ['saveTaxCenter'],
+      deps: {
+        isAuthor: () => false,
+        TAX_CENTER: { businessExpenses: [] },
+        window: { _fbSaveSettings: vi.fn(async () => false) },
+        console,
+      },
+      returns: 'saveTaxCenter',
+    });
+    expect(await save()).toBe(false);
+
+    const saveOk = buildHarness({
+      names: ['saveTaxCenter'],
+      deps: {
+        isAuthor: () => false,
+        TAX_CENTER: { businessExpenses: [] },
+        window: { _fbSaveSettings: vi.fn(async () => true) },
+        console,
+      },
+      returns: 'saveTaxCenter',
+    });
+    expect(await saveOk()).toBe(true);
+  });
+
+  it('refreshRecurringCharges loads Tax Centre with ratesInBackground so import does not block on rate sync', async () => {
+    const loadTaxCenter = vi.fn(async () => {});
+    const processRecurringExpenses = vi.fn();
+    const refresh = buildHarness({
+      names: ['refreshRecurringCharges'],
+      deps: { loadTaxCenter, processRecurringExpenses },
+      returns: 'refreshRecurringCharges',
+    });
+    await refresh();
+    expect(loadTaxCenter).toHaveBeenCalledWith({ ratesInBackground: true });
+    expect(processRecurringExpenses).toHaveBeenCalledOnce();
+  });
+
+  it('switchEmailImportTab hides the Paste & Upload / Direct action button on the Review tab', () => {
+    document.body.innerHTML = `
+      <button id="email-tab-review"></button>
+      <button id="email-tab-gmail"></button>
+      <button id="email-tab-manual"></button>
+      <button id="email-tab-direct"></button>
+      <button id="email-tab-bank"></button>
+      <div id="email-panel-review"></div>
+      <div id="email-panel-gmail"></div>
+      <div id="email-panel-manual"></div>
+      <div id="email-panel-direct"></div>
+      <div id="email-panel-bank"></div>
+      <div id="email-receipt-results"></div>
+      <div id="email-bulk-category-bar"></div>
+      <button id="email-receipt-scan-btn"></button>
+    `;
+    const switchTabFn = buildHarness({
+      names: ['switchEmailImportTab'],
+      deps: {
+        $: id => document.getElementById(id),
+        renderDirectGmailChips: () => {},
+        receiptFinderDependencies: () => ({}),
+        confirmDialog: async () => true,
+        showToast: () => {},
+        _updateEmailExtractButtonLabel: () => {},
+      },
+      moduleState: "let _activeEmailImportTab = 'gmail';",
+      returns: 'switchEmailImportTab',
+    });
+
+    switchTabFn('review');
+    expect(document.getElementById('email-receipt-scan-btn').hidden).toBe(true);
+    expect(document.getElementById('email-receipt-results').hidden).toBe(false);
+
+    switchTabFn('manual');
+    expect(document.getElementById('email-receipt-scan-btn').hidden).toBe(false);
+
+    switchTabFn('direct');
+    expect(document.getElementById('email-receipt-scan-btn').hidden).toBe(false);
+
+    switchTabFn('gmail');
+    expect(document.getElementById('email-receipt-scan-btn').hidden).toBe(true);
+  });
+
+  it('importEmailReceiptDrafts re-renders after filing and shows confirmation instead of getting stuck on Importing…', async () => {
+    document.body.innerHTML = `
+      <select id="email-receipt-default-cat"><option value="Software & Subscriptions" selected>Software</option></select>
+      <input id="email-receipt-files" type="file">
+      <textarea id="email-receipt-source">receipt text</textarea>
+      <div id="email-receipt-results">
+        <button class="btn gold" type="button">File selected receipts</button>
+      </div>
+    `;
+    const renderDrafts = vi.fn();
+    const renderFiles = vi.fn();
+    const renderMeta = vi.fn();
+    const toasts = [];
+    const h = buildHarness({
+      names: ['importEmailReceiptDrafts'],
+      deps: {
+        $: id => document.getElementById(id),
+        showToast: (msg, type) => toasts.push({ msg, type }),
+        _renderEmailReceiptFiles: renderFiles,
+        _renderEmailPasteMeta: renderMeta,
+        escapeHtml,
+        console,
+        switchTab: vi.fn(),
+        switchTaxCenterSubTab: vi.fn(),
+        switchEmailImportTab: vi.fn(),
+        renderEmailReceiptDrafts: drafts => renderDrafts(drafts.slice()),
+        _fileReceiptDrafts: async () => {
+          h.clear();
+          return {
+            imported: 1, importedNeedsAmount: 0, relinked: 0, skippedDup: 0,
+            attachedLost: 0, saved: true, attached: 0, countedEarly: 0, held: 0,
+          };
+        },
+      },
+      moduleState: `
+        let _importingEmailDrafts = false;
+        let _emailReceiptDrafts = [{ vendor: 'Google Play', amount: 30.5, currency: 'CAD', include: true }];
+      `,
+      returns: '({ run: importEmailReceiptDrafts, clear: () => { _emailReceiptDrafts = []; }, getBusy: () => _importingEmailDrafts })',
+    });
+
+    await h.run();
+    expect(renderDrafts).toHaveBeenCalledWith([]);
+    expect(h.getBusy()).toBe(false);
+    expect(document.getElementById('email-receipt-results').textContent).toContain('Filed to your expenses');
+    expect(document.getElementById('email-receipt-results').textContent).toContain('View in Tax Centre Ledger');
+    expect(document.getElementById('email-receipt-source').value).toBe('');
+    expect(renderFiles).toHaveBeenCalledOnce();
+    expect(renderMeta).toHaveBeenCalledOnce();
+    expect(toasts[0]).toMatchObject({ type: 'ok' });
+  });
+
+  it('importEmailReceiptDrafts keeps drafts and re-enables button when save fails or filing throws', async () => {
+    document.body.innerHTML = `
+      <select id="email-receipt-default-cat"><option value="Other" selected>Other</option></select>
+      <div id="email-receipt-results">
+        <button class="btn gold" type="button">File selected receipts</button>
+      </div>
+    `;
+    const toasts = [];
+    const failedSave = buildHarness({
+      names: ['importEmailReceiptDrafts'],
+      deps: {
+        $: id => document.getElementById(id),
+        showToast: (msg, type) => toasts.push({ msg, type }),
+        _renderEmailReceiptFiles: () => {},
+        _renderEmailPasteMeta: () => {},
+        escapeHtml,
+        console,
+        switchTab: vi.fn(),
+        switchTaxCenterSubTab: vi.fn(),
+        switchEmailImportTab: vi.fn(),
+        renderEmailReceiptDrafts: vi.fn(),
+        _fileReceiptDrafts: async () => ({
+          imported: 1, importedNeedsAmount: 0, relinked: 0, skippedDup: 0,
+          attachedLost: 0, saved: false, attached: 0, countedEarly: 0, held: 0,
+        }),
+      },
+      moduleState: `
+        let _importingEmailDrafts = false;
+        let _emailReceiptDrafts = [{ vendor: 'Shop', amount: 10, include: true }];
+      `,
+      returns: '({ run: importEmailReceiptDrafts, drafts: () => _emailReceiptDrafts, busy: () => _importingEmailDrafts })',
+    });
+
+    await failedSave.run();
+    const btn = document.querySelector('#email-receipt-results .btn.gold');
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('File selected receipts');
+    expect(failedSave.drafts()).toHaveLength(1);
+    expect(failedSave.busy()).toBe(false);
+
+    const threw = buildHarness({
+      names: ['importEmailReceiptDrafts'],
+      deps: {
+        $: id => document.getElementById(id),
+        showToast: (msg, type) => toasts.push({ msg, type }),
+        _renderEmailReceiptFiles: () => {},
+        _renderEmailPasteMeta: () => {},
+        escapeHtml,
+        console: { error: () => {} },
+        switchTab: vi.fn(),
+        switchTaxCenterSubTab: vi.fn(),
+        switchEmailImportTab: vi.fn(),
+        renderEmailReceiptDrafts: vi.fn(),
+        _fileReceiptDrafts: async () => { throw new Error('Network error'); },
+      },
+      moduleState: `
+        let _importingEmailDrafts = false;
+        let _emailReceiptDrafts = [{ vendor: 'Shop', amount: 10, include: true }];
+      `,
+      returns: '({ run: importEmailReceiptDrafts, busy: () => _importingEmailDrafts })',
+    });
+
+    await threw.run();
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('File selected receipts');
+    expect(threw.busy()).toBe(false);
+    expect(toasts.at(-1)).toMatchObject({ msg: 'Could not import receipts — Network error', type: 'err' });
+  });
+
+  it('importEmailReceiptDrafts clears skipped-duplicate rows and renders confirmation', async () => {
+    document.body.innerHTML = `
+      <select id="email-receipt-default-cat"><option value="Other" selected>Other</option></select>
+      <div id="email-receipt-results">
+        <button class="btn gold" type="button">File selected receipts</button>
+      </div>
+    `;
+    const h = buildHarness({
+      names: ['importEmailReceiptDrafts'],
+      deps: {
+        $: id => document.getElementById(id),
+        showToast: vi.fn(),
+        _renderEmailReceiptFiles: vi.fn(),
+        _renderEmailPasteMeta: vi.fn(),
+        escapeHtml,
+        console,
+        switchTab: vi.fn(),
+        switchTaxCenterSubTab: vi.fn(),
+        switchEmailImportTab: vi.fn(),
+        renderEmailReceiptDrafts: vi.fn(),
+        _fileReceiptDrafts: async () => {
+          h.clear();
+          return {
+            imported: 0, importedNeedsAmount: 0, relinked: 0, skippedDup: 1,
+            attachedLost: 0, saved: true, attached: 0, countedEarly: 0, held: 0,
+          };
+        },
+      },
+      moduleState: `
+        let _importingEmailDrafts = false;
+        let _emailReceiptDrafts = [{ vendor: 'Shop', amount: 10, include: true }];
+      `,
+      returns: '({ run: importEmailReceiptDrafts, clear: () => { _emailReceiptDrafts = []; } })',
+    });
+
+    await h.run();
+    expect(document.getElementById('email-receipt-results').textContent).toContain('Already in your expenses');
+    expect(document.getElementById('email-receipt-results').textContent).toContain('1 duplicate skipped');
+  });
+
+  it('importDirectGmailEmails resets the primary action button and refreshes the list instead of freezing', async () => {
+    document.body.innerHTML = `
+      <button id="email-receipt-scan-btn" type="button">Archive 1 email without AI</button>
+      <select id="email-receipt-default-cat"><option value="Other" selected>Other</option></select>
+    `;
+    const renderList = vi.fn();
+    const renderTax = vi.fn();
+    const updateBtn = vi.fn(() => {
+      const b = document.getElementById('email-receipt-scan-btn');
+      b.disabled = false;
+      b.textContent = 'Select emails to archive';
+    });
+    const toasts = [];
+    const h = buildHarness({
+      names: ['importDirectGmailEmails'],
+      deps: {
+        $: id => document.getElementById(id),
+        TAX_CENTER: { settings: { baseCurrency: 'CAD' }, businessExpenses: [] },
+        showToast: (msg, type) => toasts.push({ msg, type }),
+        _fetchEmailContent: async id => ({ id, subject: 'Order #1', date: '2026-11-26', body: 'Total $10', fileParts: [] }),
+        _directGmailVendor: () => 'Shop',
+        _saveDraftReceiptFiles: async () => ['https://cloud/email.txt'],
+        normalizeReceiptDate: () => '2026-11-26',
+        today: () => '2026-11-27',
+        saveTaxCenter: async () => true,
+        renderTaxCenter: renderTax,
+        renderDirectGmailEmailsList: renderList,
+        _updateEmailExtractButtonLabel: updateBtn,
+        console,
+      },
+      moduleState: `
+        let _directGmailSelectedIds = new Set(['m1']);
+        let _directGmailEmailsFetched = [{ id: 'm1', from: 'Shop <shop@example.com>', subject: 'Order #1', date: '2026-11-26' }];
+      `,
+      returns: '({ run: importDirectGmailEmails, selected: () => [..._directGmailSelectedIds] })',
+    });
+
+    await h.run();
+    const btn = document.getElementById('email-receipt-scan-btn');
+    expect(btn.disabled).toBe(false);
+    expect(btn.textContent).toBe('Select emails to archive');
+    expect(renderList).toHaveBeenCalledOnce();
+    expect(renderTax).toHaveBeenCalledOnce();
+    expect(h.selected()).toEqual([]);
+    expect(toasts[0]).toMatchObject({ type: 'ok' });
+  });
+
+  it('_saveDraftReceiptFiles falls back to plain-text cloud upload when no local folder is connected', async () => {
+    const uploaded = [];
+    const saveFiles = buildHarness({
+      names: ['_saveDraftReceiptFiles'],
+      deps: {
+        localizeInboxReceiptFiles: async () => [],
+        saveReceiptToLocalFile: async () => null,
+        uploadReceiptToCloud: async (file, folder) => {
+          uploaded.push({ name: file.name, type: file.type, folder });
+          return `https://cloud/${file.name}`;
+        },
+        _emailContentCache: {},
+        sheetsUrl: '',
+        _fetchEmailContent: async () => null,
+        _emailBodyToReceiptFile: (_email, item) => new File(['<html></html>'], `${item.vendor || 'receipt'}.html`, { type: 'text/html' }),
+        atob,
+        File,
+        navigator: { onLine: false },
+        window: { _fbUploadReceipt: vi.fn() },
+        console,
+      },
+      returns: '_saveDraftReceiptFiles',
+    });
+
+    const refs = await saveFiles({
+      msgId: 'msg-1',
+      vendor: 'Google Play',
+      date: '2026-11-27',
+      emailSubject: 'Your Google Play Order',
+      emailFrom: 'googleplay-noreply@google.com',
+      sourceSnippet: 'Google AI Pro 30.50 CAD',
+      selectedAtts: [],
+    }, { gmailSavedByMsg: {}, savedReceiptPaths: [], draftIdx: 0 });
+
+    expect(refs).toEqual(['https://cloud/Google Play.txt']);
+    expect(uploaded[0]).toMatchObject({ name: 'Google Play.txt', type: 'text/plain', folder: 'email-imports' });
+  });
+
+  it('saveReceiptToLocalFile returns null silently on SecurityError instead of showing a disconnect dialog', async () => {
+    const handleErr = vi.fn();
+    const saveLocal = buildHarness({
+      names: ['saveReceiptToLocalFile'],
+      deps: {
+        loadReceiptFolderHandle: async () => ({
+          queryPermission: async () => { throw new DOMException('User activation required', 'SecurityError'); },
+        }),
+        receiptFolderPath: () => [],
+        receiptFileName: () => 'r.txt',
+        localDay: () => '2026-11-27',
+        uniqueFileName: async n => n,
+        cacheReceiptFile: async () => {},
+        handleFolderError: handleErr,
+        console: { warn: () => {}, error: () => {} },
+      },
+      returns: 'saveReceiptToLocalFile',
+    });
+
+    const result = await saveLocal(new File(['hi'], 'r.txt', { type: 'text/plain' }), 'email-imports');
+    expect(result).toBeNull();
+    expect(handleErr).not.toHaveBeenCalled();
   });
 });

@@ -866,6 +866,10 @@ async function saveReceiptToLocalFile(file, subfolderName = '', meta = null) {
     await cacheReceiptFile(relative, file);
     return `local://${relative}`;
   } catch (e) {
+    if (e?.name === 'SecurityError' || e?.name === 'NotAllowedError' || e?.name === 'AbortError') {
+      console.warn('Local receipt folder permission unavailable during save', e);
+      return null;
+    }
     await handleFolderError(e, 'Error Saving Receipt', 'Receipt file save failed. The folder may have been moved or disconnected.');
     return null;
   }
@@ -2840,9 +2844,15 @@ async function discardReviewedReceipt(draft) {
   return true;
 }
 
+function _updateReviewTabBadge(count) {
+  const reviewBadge = $('email-review-tab-badge');
+  if (!reviewBadge) return;
+  reviewBadge.textContent = count ? String(count) : '';
+  reviewBadge.style.display = count ? '' : 'none';
+}
+
 function updateEmailInboxBadge() {
   const badge = $('email-inbox-badge');
-  if (!badge) return;
   const sweepDrafts = (_emailReceiptDrafts || []).filter(d => d._fromSweep).length;
   // A sweep-found draft lives only in memory, so right after a reload — before
   // the next tick repopulates the real drafts — there is nothing in
@@ -2852,8 +2862,11 @@ function updateEmailInboxBadge() {
   // renderIntegrationBadges() already does for the health marks.
   const persistedPending = sweepDrafts ? 0 : readReceiptSweepPending().length;
   const n = _emailInboxItems.length + sweepDrafts + persistedPending;
-  badge.textContent = n ? String(n) : '';
-  badge.style.display = n ? '' : 'none';
+  if (badge) {
+    badge.textContent = n ? String(n) : '';
+    badge.style.display = n ? '' : 'none';
+  }
+  _updateReviewTabBadge((_emailReceiptDrafts || []).length || n);
 }
 
 // Map an inbox doc to the editable-draft shape the import table expects.
@@ -2989,7 +3002,7 @@ function switchEmailImportTab(tab) {
   tabDirect?.setAttribute('aria-selected', String(tab === 'direct'));
   if ($('email-receipt-results')) $('email-receipt-results').hidden = tab !== 'manual' && tab !== 'review';
   if ($('email-bulk-category-bar')) $('email-bulk-category-bar').hidden = tab !== 'manual' && tab !== 'review';
-  if ($('email-receipt-scan-btn')) $('email-receipt-scan-btn').hidden = tab === 'gmail';
+  if ($('email-receipt-scan-btn')) $('email-receipt-scan-btn').hidden = tab !== 'manual' && tab !== 'direct';
   tabReview?.classList.toggle('active', tab === 'review');
   tabGmail?.classList.toggle('active', tab === 'gmail');
   tabManual?.classList.toggle('active', tab === 'manual');
@@ -6264,8 +6277,10 @@ async function extractReceiptsFromEmailText() {
     }
     showToast('Could not extract receipts', 'err');
   } finally {
-    if (btn) btn.disabled = false;
-    btn.textContent = prev;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prev;
+    }
   }
 }
 
@@ -6447,6 +6462,7 @@ function _subscriptionPickHtml(r, i) {
 function renderEmailReceiptDrafts(receipts) {
   const wrap = $('email-receipt-results');
   const bulkCatBar = $('email-bulk-category-bar');
+  if (typeof _updateReviewTabBadge === 'function') _updateReviewTabBadge(Array.isArray(receipts) ? receipts.length : 0);
   if (!wrap) return;
   if (!Array.isArray(receipts) || !receipts.length) {
     wrap.innerHTML = '<div class="empty-state" style="padding:14px;font-size:var(--text-sm);color:var(--text3);">No receipts waiting for review.</div>';
@@ -6502,7 +6518,7 @@ function renderEmailReceiptDrafts(receipts) {
               ${r.amountUnknown ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ no confident amount — check before importing</div>` : ''}
               ${lowConf ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
-        ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → receipts folder on import</div>`
+        ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → saved with expense on import</div>`
         : ''}
               ${(r.sourceSnippet || r.emailSubject || r.emailFrom || r.emailDate || r.selectedAtts?.length || r.receiptUrls?.length || r.receipt)
         ? `<details class="email-receipt-source"><summary>View source details</summary>
@@ -6660,30 +6676,72 @@ async function _saveDraftReceiptFiles(item, ctx) {
   if (item._inboxId) addonFiles = await localizeInboxReceiptFiles(item);
 
   let emailFiles = [];
-  if (item.msgId && typeof saveReceiptToLocalFile === 'function') {
+  const canSaveLocal = typeof saveReceiptToLocalFile === 'function';
+  const canSaveCloud = typeof window !== 'undefined' && typeof window._fbUploadReceipt === 'function' && typeof uploadReceiptToCloud === 'function';
+  if (item.msgId && (canSaveLocal || canSaveCloud)) {
     if (gmailSavedByMsg[item.msgId] !== undefined) {
       emailFiles = gmailSavedByMsg[item.msgId];
     } else {
-      const email = _emailContentCache[item.msgId];
+      let email = _emailContentCache[item.msgId];
+      if (!email && typeof sheetsUrl === 'string' && sheetsUrl && typeof _fetchEmailContent === 'function' && (typeof navigator === 'undefined' || navigator.onLine !== false)) {
+        try {
+          const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined;
+          email = await _fetchEmailContent(item.msgId, signal);
+        } catch (_) { /* best-effort hydration; fall back to draft metadata below */ }
+      }
+      if (!email && (item.emailSubject || item.emailFrom || item.emailDate || item.sourceSnippet || item.description || item.vendor)) {
+        email = {
+          subject: item.emailSubject || item.description || item.vendor || 'Email receipt',
+          from: item.emailFrom || '',
+          date: item.emailDate || item.date || '',
+          body: item.sourceSnippet || '',
+        };
+      }
       const atts = item.selectedAtts || [];
       const isPdf = a => /pdf/i.test(a.mime || '') || /\.pdf$/i.test(a.name || '');
       const ordered = [...atts.filter(isPdf), '__BODY__', ...atts.filter(a => !isPdf(a))];
       const paths = [];
       for (const entry of ordered) {
         try {
+          let localFile = null;
+          let cloudFile = null;
           if (entry === '__BODY__') {
             if (email && (email.body || email.subject)) {
-              const bp = await saveReceiptToLocalFile(_emailBodyToReceiptFile(email, item), 'email-imports');
-              if (bp) paths.push(bp);
+              localFile = _emailBodyToReceiptFile(email, item);
+              // storage.rules permits text/plain|image/*|application/pdf under
+              // receipts/email-imports/ (not text/html), so the cloud fallback
+              // archives a plain-text copy.
+              const plainName = localFile.name.replace(/\.html?$/i, '') + '.txt';
+              const plainBody = [
+                email.from ? `From: ${email.from}` : '',
+                email.subject ? `Subject: ${email.subject}` : '',
+                email.date ? `Date: ${email.date}` : '',
+                item.reference ? `Reference: ${item.reference}` : '',
+                '',
+                email.body || '',
+              ].filter((line, idx) => idx < 4 ? Boolean(line) : true).join('\n');
+              cloudFile = new File([plainBody], plainName, { type: 'text/plain' });
             }
-          } else {
+          } else if (entry?.base64) {
             const byteChars = atob(entry.base64.replace(/\s/g, ''));
             const byteArray = new Uint8Array(byteChars.length);
             for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-            const file = new File([byteArray], entry.name, { type: entry.mime });
-            const lp = await saveReceiptToLocalFile(file, 'email-imports');
-            if (lp) paths.push(lp);
+            localFile = new File([byteArray], entry.name, { type: entry.mime });
+            const bareMime = String(entry.mime || '').split(';')[0].trim();
+            if (/^(text\/plain|image\/|application\/pdf)$/i.test(bareMime)) {
+              cloudFile = localFile;
+            }
           }
+          if (!localFile) continue;
+          let savedRef = canSaveLocal ? await saveReceiptToLocalFile(localFile, 'email-imports') : null;
+          if (!savedRef && cloudFile && canSaveCloud) {
+            try {
+              savedRef = await uploadReceiptToCloud(cloudFile, 'email-imports');
+            } catch (cloudErr) {
+              console.warn('Cloud fallback for email receipt file failed', cloudErr);
+            }
+          }
+          if (savedRef) paths.push(savedRef);
         } catch (err) {
           console.error('Failed to save receipt file locally', err);
         }
@@ -6711,6 +6769,8 @@ async function _saveDraftReceiptFiles(item, ctx) {
   return fallback ? [fallback] : [];
 }
 
+let _importingEmailDrafts = false;
+
 async function importDirectGmailEmails() {
   const msgIds = Array.from(_directGmailSelectedIds);
   const selectedEmails = new Map(_directGmailEmailsFetched.map(email => [email.id, email]));
@@ -6731,99 +6791,147 @@ async function importDirectGmailEmails() {
   const failed = [];
   let imported = 0;
 
-  for (const msgId of todo) {
-    try {
-      const email = await _fetchEmailContent(msgId);
-      const listed = selectedEmails.get(msgId) || email;
-      const vendor = _directGmailVendor(listed);
-      const item = {
-        msgId,
-        vendor,
-        description: email.subject || listed.subject || `Email receipt from ${vendor}`,
-        reference: `email-import:${msgId}`,
-        selectedAtts: Array.isArray(email.fileParts) ? email.fileParts : []
-      };
-      const receiptFiles = await _saveDraftReceiptFiles(item, {
-        gmailSavedByMsg,
-        savedReceiptPaths: [],
-        draftIdx: imported
-      });
-      const receipt = receiptFiles[0] || '';
-      const date = normalizeReceiptDate(email.date || listed.date) || today();
-      TAX_CENTER.businessExpenses.unshift({
-        id: Date.now() + Math.floor(Math.random() * 100000),
-        desc: item.description,
-        vendor,
-        cat: fallbackCategory,
-        currency: baseCurrency,
-        amount: 0,
-        amountUnknown: true,
-        origCurrency: baseCurrency,
-        origAmount: 0,
-        fxRate: 1,
-        baseAmount: 0,
-        date,
-        ref: item.reference,
-        receipt,
-        receiptFiles,
-        emailMsgId: msgId,
-        sourceSnippet: String(email.body || listed.snippet || '').replace(/\s+/g, ' ').slice(0, 240),
-        importedFromEmail: true,
-        importedWithoutAi: true,
-        importedAt: new Date().toISOString()
-      });
-      imported++;
-    } catch (error) {
-      console.error('[importDirectGmailEmails]', error);
-      failed.push(msgId);
+  try {
+    for (const msgId of todo) {
+      try {
+        const email = await _fetchEmailContent(msgId);
+        const listed = selectedEmails.get(msgId) || email;
+        const vendor = _directGmailVendor(listed);
+        const item = {
+          msgId,
+          vendor,
+          description: email.subject || listed.subject || `Email receipt from ${vendor}`,
+          reference: `email-import:${msgId}`,
+          selectedAtts: Array.isArray(email.fileParts) ? email.fileParts : []
+        };
+        const receiptFiles = await _saveDraftReceiptFiles(item, {
+          gmailSavedByMsg,
+          savedReceiptPaths: [],
+          draftIdx: imported
+        });
+        const receipt = receiptFiles[0] || '';
+        const date = normalizeReceiptDate(email.date || listed.date) || today();
+        TAX_CENTER.businessExpenses.unshift({
+          id: Date.now() + Math.floor(Math.random() * 100000),
+          desc: item.description,
+          vendor,
+          cat: fallbackCategory,
+          currency: baseCurrency,
+          amount: 0,
+          amountUnknown: true,
+          origCurrency: baseCurrency,
+          origAmount: 0,
+          fxRate: 1,
+          baseAmount: 0,
+          date,
+          ref: item.reference,
+          receipt,
+          receiptFiles,
+          emailMsgId: msgId,
+          sourceSnippet: String(email.body || listed.snippet || '').replace(/\s+/g, ' ').slice(0, 240),
+          importedFromEmail: true,
+          importedWithoutAi: true,
+          importedAt: new Date().toISOString()
+        });
+        imported++;
+      } catch (error) {
+        console.error('[importDirectGmailEmails]', error);
+        failed.push(msgId);
+      }
     }
-  }
 
-  if (imported) {
-    await saveTaxCenter();
-    renderTaxCenter();
-    todo.filter(msgId => !failed.includes(msgId)).forEach(msgId => _directGmailSelectedIds.delete(msgId));
+    let saved = true;
+    if (imported) {
+      saved = (await saveTaxCenter()) !== false;
+      if (saved) {
+        renderTaxCenter();
+        todo.filter(msgId => !failed.includes(msgId)).forEach(msgId => _directGmailSelectedIds.delete(msgId));
+      }
+    }
+    if (imported || failed.length) renderDirectGmailEmailsList();
+    if (imported && !saved) {
+      showToast('Could not save archived emails — please try again', 'err');
+    } else {
+      showToast(
+        imported
+          ? `Archived ${imported} email${imported === 1 ? '' : 's'} — add the amount when you review the expense.${failed.length ? ` ${failed.length} could not be archived.` : ''}`
+          : 'Could not archive the selected emails',
+        imported ? 'ok' : 'err'
+      );
+    }
+  } finally {
+    if (btn) _updateEmailExtractButtonLabel();
   }
-  if (failed.length) renderDirectGmailEmailsList();
-  showToast(
-    imported
-      ? `Archived ${imported} email${imported === 1 ? '' : 's'} — add the amount when you review the expense.${failed.length ? ` ${failed.length} could not be archived.` : ''}`
-      : 'Could not archive the selected emails',
-    imported ? 'ok' : 'err'
-  );
-  if (imported && !failed.length) closeEmailReceiptImportModal();
-  else if (btn) _updateEmailExtractButtonLabel();
 }
 
 async function importEmailReceiptDrafts() {
+  if (_importingEmailDrafts) return;
   const drafts = (_emailReceiptDrafts || []).filter(r => r.include !== false);
   if (!drafts.length) { showToast('No drafts selected', 'warn'); return; }
 
+  _importingEmailDrafts = true;
   const btn = document.querySelector('#email-receipt-results .btn.gold');
   if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
 
-  const counts = await _fileReceiptDrafts(drafts, {
-    fallbackCat: $('email-receipt-default-cat')?.value || 'Other',
-    attachedFiles: Array.from($('email-receipt-files')?.files || []),
-  });
-  const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held } = counts;
+  try {
+    const counts = await _fileReceiptDrafts(drafts, {
+      fallbackCat: $('email-receipt-default-cat')?.value || 'Other',
+      attachedFiles: Array.from($('email-receipt-files')?.files || []),
+    });
+    const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held } = counts;
 
-  const msgParts = [];
-  if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
-  if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
-  if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
-  if (attached) msgParts.push(`🔁 ${attached} kept as proof for subscription charges already counted`);
-  if (countedEarly) msgParts.push(`🔁 ${countedEarly} subscription charge${countedEarly > 1 ? 's' : ''} counted now`);
-  if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
-  if (held) msgParts.push(`${held} left waiting — choose what ${held > 1 ? 'each one is' : 'it is'} in the list`);
-  if (attachedLost) msgParts.push(`⚠ ${attachedLost} attached file${attachedLost > 1 ? 's' : ''} could not be saved — attach from the ledger row`);
-  if (saved === false) msgParts.push('⚠ could not save — nothing was cleared, try again');
-  const filedAny = imported || relinked || attached || countedEarly;
-  showToast(msgParts.join(' · ') || 'Nothing imported', filedAny && !attachedLost && !held && saved !== false ? 'ok' : 'warn');
+    const msgParts = [];
+    if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
+    if (importedNeedsAmount) msgParts.push(`${importedNeedsAmount} need${importedNeedsAmount > 1 ? '' : 's'} an amount`);
+    if (relinked) msgParts.push(`📎 ${relinked} receipt${relinked > 1 ? 's' : ''} linked to existing`);
+    if (attached) msgParts.push(`🔁 ${attached} kept as proof for subscription charges already counted`);
+    if (countedEarly) msgParts.push(`🔁 ${countedEarly} subscription charge${countedEarly > 1 ? 's' : ''} counted now`);
+    if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
+    if (held) msgParts.push(`${held} left waiting — choose what ${held > 1 ? 'each one is' : 'it is'} in the list`);
+    if (attachedLost) msgParts.push(`⚠ ${attachedLost} attached file${attachedLost > 1 ? 's' : ''} could not be saved — attach from the ledger row`);
+    if (saved === false) msgParts.push('⚠ could not save — nothing was cleared, try again');
+    const filedAny = imported || relinked || attached || countedEarly;
+    showToast(msgParts.join(' · ') || 'Nothing imported', filedAny && !attachedLost && !held && saved !== false ? 'ok' : 'warn');
 
-  if (filedAny && !held && saved !== false) closeEmailReceiptImportModal();
-  else if (held) renderEmailReceiptDrafts(_emailReceiptDrafts);
-  else if (btn) { btn.disabled = false; btn.textContent = 'File selected receipts'; }
+    if (saved === false) {
+      if (btn) { btn.disabled = false; btn.textContent = 'File selected receipts'; }
+      return;
+    }
+
+    renderEmailReceiptDrafts(_emailReceiptDrafts);
+    if ((filedAny || skippedDup) && !held && _emailReceiptDrafts.length === 0) {
+      const fileInput = $('email-receipt-files');
+      if (fileInput) { fileInput.value = ''; _renderEmailReceiptFiles(); }
+      const sourceInput = $('email-receipt-source');
+      if (sourceInput && sourceInput.value) { sourceInput.value = ''; _renderEmailPasteMeta(); }
+      const wrap = $('email-receipt-results');
+      if (wrap) {
+        const summary = msgParts.join(' · ') || 'Receipts filed.';
+        wrap.innerHTML = `<div class="empty-state" style="padding:18px 16px;">
+          <div style="font-weight:700;font-size:var(--text-base);color:var(--content-primary);margin-bottom:4px;">${filedAny ? '✓ Filed to your expenses' : 'Already in your expenses'}</div>
+          <div style="font-size:var(--text-sm);color:var(--content-secondary);margin-bottom:12px;">${escapeHtml(summary)}</div>
+          <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+            <button type="button" class="btn gold sm" data-erd-done="ledger">View in Tax Centre Ledger</button>
+            <button type="button" class="btn sm" data-erd-done="gmail">Check Gmail Finder</button>
+          </div>
+        </div>`;
+        wrap.querySelector('[data-erd-done="ledger"]')?.addEventListener('click', () => {
+          switchTab('taxcenter');
+          switchTaxCenterSubTab('ledger');
+        });
+        wrap.querySelector('[data-erd-done="gmail"]')?.addEventListener('click', () => {
+          switchEmailImportTab('gmail');
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[importEmailReceiptDrafts]', err);
+    showToast('Could not import receipts — ' + (err?.message || 'please try again'), 'err');
+    const currentBtn = document.querySelector('#email-receipt-results .btn.gold');
+    if (currentBtn) { currentBtn.disabled = false; currentBtn.textContent = 'File selected receipts'; }
+  } finally {
+    _importingEmailDrafts = false;
+  }
 }
 
 /**

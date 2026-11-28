@@ -855,3 +855,62 @@ describe('receipt finder with app AI keys', () => {
     expect(mocks.saved.scans['publisher@example.com:m2'].done).toBe(true);
   });
 });
+
+describe('receipt finder reconnect pill, filing queue, and stuck draft recovery', () => {
+  it('reconnects Gmail when the header account pill is clicked while lapsed', async () => {
+    await mount();
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+    const pill = document.getElementById('email-account-pill');
+    expect(pill.textContent).toContain('Reconnect Gmail');
+    pill.click(); await settle();
+    expect(window._fbConnectReceiptGmail).toHaveBeenCalledOnce();
+    expect(pill.textContent).toContain('publisher@example.com');
+  });
+
+  it('queues a second receipt filed mid-upload and flushes both without stranding it', async () => {
+    const second = normalizeFoundReceipt({ vendor: 'Paper Co', amount: 25, currency: 'CAD', date: '2026-09-02', reference: 'INV-2', confidence: 0.95 }, { ...source, id: 'm2' });
+    mocks.saved.drafts[0].confidence = 0.95;
+    mocks.saved.drafts.push(second);
+    mocks.saved.emails['publisher@example.com:m2'] = { ...source, id: 'm2' };
+    let releaseUpload;
+    let uploadCalls = 0;
+    deps.upload = vi.fn(async (_file, path) => {
+      uploadCalls++;
+      if (uploadCalls === 1) await new Promise(r => { releaseUpload = r; });
+      return `https://cloud/${path}`;
+    });
+    deps.commit = vi.fn(async expense => ({ expense }));
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+
+    await mount();
+    const rows = document.querySelectorAll('[data-draft]');
+    rows[0].querySelector('[data-file-one]').click(); await settle();
+    expect(releaseUpload).toBeTypeOf('function');
+
+    // File the second receipt while the first upload is still in flight.
+    document.querySelectorAll('[data-draft]')[1].querySelector('[data-file-one]').click(); await settle();
+    releaseUpload();
+    await settle(); await settle();
+
+    expect(deps.commit).toHaveBeenCalledTimes(2);
+    expect(mocks.saved.drafts.every(d => d.status === 'imported')).toBe(true);
+    expect(deps.toast).toHaveBeenCalledWith('✓ 2 receipts filed to your expenses', 'ok');
+  });
+
+  it('toasts the failure reason and lets the owner unqueue a failed receipt back to edit', async () => {
+    mocks.saved.drafts[0].confidence = 0.95;
+    deps.upload = vi.fn(async () => { throw new Error('Storage permission denied'); });
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+
+    await mount();
+    document.querySelector('[data-file-one]').click(); await settle(); await settle();
+
+    expect(mocks.saved.drafts[0]).toMatchObject({ status: 'queued', error: 'Storage permission denied' });
+    expect(deps.toast).toHaveBeenCalledWith('Storage permission denied', 'err');
+
+    const unqueue = document.querySelector('[data-unqueue]');
+    expect(unqueue).not.toBeNull();
+    unqueue.click(); await settle();
+    expect(mocks.saved.drafts[0]).toMatchObject({ status: 'draft', error: '' });
+  });
+});
