@@ -10,7 +10,8 @@ import { totalsByCurrency } from '../src/lib/expense-totals.js';
 import { uniqueZipPath } from '../src/lib/zip.js';
 import { receiptDuplicate, receiptExpense } from '../src/lib/receipt-finder.js';
 import { flushReceiptOutbox } from '../src/lib/receipt-finder-outbox.js';
-import { toLocalRef } from '../src/lib/receipt-storage.js';
+import { toLocalRef, gmailMessageIdOf, backfillableGmailExpenses, writeReceiptRefs, isOurCloudReceipt } from '../src/lib/receipt-storage.js';
+import { extensionFor } from '../src/lib/receipt-naming.js';
 
 const read = (p) => fs.readFileSync(path.join(process.cwd(), p), 'utf8');
 const receiptsSrc = read('src/features/receipts.js');
@@ -536,6 +537,7 @@ describe('email receipt import filing & Tax Centre save contract', () => {
       deps: {
         $: id => document.getElementById(id),
         showToast: (msg, type) => toasts.push({ msg, type }),
+        ensureReceiptFolderPermission: async () => true,
         _renderEmailReceiptFiles: renderFiles,
         _renderEmailPasteMeta: renderMeta,
         escapeHtml,
@@ -583,6 +585,7 @@ describe('email receipt import filing & Tax Centre save contract', () => {
       deps: {
         $: id => document.getElementById(id),
         showToast: (msg, type) => toasts.push({ msg, type }),
+        ensureReceiptFolderPermission: async () => true,
         _renderEmailReceiptFiles: () => {},
         _renderEmailPasteMeta: () => {},
         escapeHtml,
@@ -615,6 +618,7 @@ describe('email receipt import filing & Tax Centre save contract', () => {
       deps: {
         $: id => document.getElementById(id),
         showToast: (msg, type) => toasts.push({ msg, type }),
+        ensureReceiptFolderPermission: async () => true,
         _renderEmailReceiptFiles: () => {},
         _renderEmailPasteMeta: () => {},
         escapeHtml,
@@ -651,6 +655,7 @@ describe('email receipt import filing & Tax Centre save contract', () => {
       deps: {
         $: id => document.getElementById(id),
         showToast: vi.fn(),
+        ensureReceiptFolderPermission: async () => true,
         _renderEmailReceiptFiles: vi.fn(),
         _renderEmailPasteMeta: vi.fn(),
         escapeHtml,
@@ -698,6 +703,8 @@ describe('email receipt import filing & Tax Centre save contract', () => {
         $: id => document.getElementById(id),
         TAX_CENTER: { settings: { baseCurrency: 'CAD' }, businessExpenses: [] },
         showToast: (msg, type) => toasts.push({ msg, type }),
+        ensureReceiptFolderPermission: async () => true,
+        isOurCloudReceipt,
         _fetchEmailContent: async id => ({ id, subject: 'Order #1', date: '2026-11-26', body: 'Total $10', fileParts: [] }),
         _directGmailVendor: () => 'Shop',
         _saveDraftReceiptFiles: async () => ['https://cloud/email.txt'],
@@ -786,5 +793,184 @@ describe('email receipt import filing & Tax Centre save contract', () => {
     const result = await saveLocal(new File(['hi'], 'r.txt', { type: 'text/plain' }), 'email-imports');
     expect(result).toBeNull();
     expect(handleErr).not.toHaveBeenCalled();
+  });
+});
+
+describe('physical receipt attachment filing and backfill', () => {
+  it('extensionFor recognizes text/html and text/plain MIME types', () => {
+    expect(extensionFor('receipt', 'text/html')).toBe('html');
+    expect(extensionFor('receipt', 'text/plain')).toBe('txt');
+  });
+
+  it('_inboxItemToDraft preserves Gmail msgId (stripping sweep index suffix) and headers', () => {
+    const toDraft = buildHarness({
+      names: ['_inboxItemToDraft'],
+      deps: {
+        normalizeReceiptDate: d => d,
+        today: () => '2026-11-28',
+        EXPENSE_CATEGORIES: ['Other', 'Software & Subscriptions'],
+        inferReceiptCategory: () => 'Other',
+      },
+      returns: '_inboxItemToDraft',
+    });
+    const draft = toDraft({
+      vendor: 'Adobe',
+      date: '2026-11-27',
+      amount: 20,
+      currency: 'CAD',
+      gmailMessageId: '18c9abcd1234-0',
+      emailSubject: 'Your Adobe invoice',
+      emailFrom: 'Adobe <billing@adobe.com>',
+      emailDate: '2026-11-27',
+      _inboxId: 'sweep_1',
+    });
+    expect(draft.msgId).toBe('18c9abcd1234');
+    expect(draft.emailSubject).toBe('Your Adobe invoice');
+    expect(draft.emailFrom).toBe('Adobe <billing@adobe.com>');
+  });
+
+  it('_saveDraftReceiptFiles organizes by Year/Category meta, puts PDF/image before HTML email, and saves pasted-text receipts', async () => {
+    const calls = [];
+    const saveFiles = buildHarness({
+      names: ['_pastedDraftFileIndex', '_saveDraftReceiptFiles'],
+      deps: {
+        localizeInboxReceiptFiles: async () => [],
+        saveReceiptToLocalFile: async (file, _sub, meta) => {
+          calls.push({ name: file.name, type: file.type, meta });
+          return `local://2026/Software & Subscriptions/${meta.index}_${file.name}`;
+        },
+        uploadReceiptToCloud: async () => '',
+        _emailContentCache: {
+          m1: {
+            id: 'm1',
+            subject: 'Invoice',
+            from: 'Vendor <v@example.com>',
+            date: '2026-11-27',
+            body: 'Paid $30.50',
+          },
+        },
+        sheetsUrl: '',
+        _fetchEmailContent: async () => null,
+        _hydrateSelectedAttachmentBytes: async () => {},
+        _emailBodyToReceiptFile: (_email, item) => new File(['<html></html>'], `${item.vendor || 'receipt'}.html`, { type: 'text/html' }),
+        atob,
+        File,
+        navigator: { onLine: true },
+        window: {},
+        console,
+      },
+      returns: '_saveDraftReceiptFiles',
+    });
+
+    const meta = { date: '2026-11-27', vendor: 'Adobe', desc: 'Adobe CC', cat: 'Software & Subscriptions', amount: 30.5, currency: 'CAD' };
+    const refs = await saveFiles({
+      msgId: 'm1',
+      vendor: 'Adobe',
+      selectedAtts: [
+        { name: 'photo.jpg', mime: 'image/jpeg', base64: btoa('img') },
+        { name: 'invoice.pdf', mime: 'application/pdf', base64: btoa('%PDF') },
+      ],
+    }, { gmailSavedByMsg: {}, savedReceiptPaths: [], draftIdx: 0, meta });
+
+    expect(calls.map(c => [c.name, c.type, c.meta.index])).toEqual([
+      ['invoice.pdf', 'application/pdf', 0],
+      ['photo.jpg', 'image/jpeg', 1],
+      ['Adobe.html', 'text/html', 2],
+    ]);
+    expect(refs[0]).toContain('invoice.pdf');
+    expect(refs[2]).toContain('Adobe.html');
+
+    calls.length = 0;
+    const pastedRefs = await saveFiles({
+      vendor: 'Local Shop',
+      description: 'Paper',
+      date: '2026-11-27',
+      rowIndex: 0,
+    }, { gmailSavedByMsg: {}, savedReceiptPaths: [], draftIdx: 0, meta, pastedText: 'Receipt #123 Total $15.00' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].type).toBe('text/html');
+    expect(pastedRefs).toHaveLength(1);
+  });
+
+  it('_fileReceiptDrafts holds a draft and never creates an attachmentless expense when no file can be saved', async () => {
+    const TC = { settings: { baseCurrency: 'CAD' }, businessExpenses: [] };
+    const h = buildHarness({
+      names: ['_fileReceiptDrafts'],
+      deps: {
+        TAX_CENTER: TC,
+        saveReceiptBestEffort: async () => ({ ref: '', storage: 'none' }),
+        resolveExpenseRate: async () => 1,
+        refreshRecurringCharges: async () => {},
+        _buildDuplicateExpenseIndex: () => new Map(),
+        _duplicateExpenseKey: (d, a, c) => `${d}|${a}|${c}`,
+        _subscriptionMatch: () => null,
+        _findDuplicateExpense: () => null,
+        _expenseHasReceipt: () => false,
+        _saveDraftReceiptFiles: async () => [],
+        _pastedDraftFileIndex: () => null,
+        EXPENSE_CATEGORIES: ['Other'],
+        today: () => '2026-11-28',
+        roundCents: n => Math.round(n * 100) / 100,
+        isOurCloudReceipt: () => false,
+        saveTaxCenter: async () => true,
+        window: {},
+        filterDismissedReceipts: d => d,
+        mergeReceiptDrafts: d => d,
+        writePersistedEmailReceiptDrafts: () => {},
+        _clearResolvedSweepPending: () => {},
+        updateEmailInboxBadge: () => {},
+        renderTaxCenter: () => {},
+      },
+      moduleState: 'let _emailReceiptDrafts = []; let _emailInboxItems = [];',
+      returns: '_fileReceiptDrafts',
+    });
+
+    const draft = { vendor: 'Google Play', description: 'AI Pro', date: '2026-11-27', amount: 30.5, currency: 'CAD', category: 'Other', msgId: 'm1', include: true };
+    const result = await h([draft], { fallbackCat: 'Other', attachedFiles: [] });
+    expect(result.imported).toBe(0);
+    expect(result.held).toBe(1);
+    expect(result.attachFailed).toBe(1);
+    expect(draft._attachError).toContain('Could not save the receipt file');
+    expect(TC.businessExpenses).toHaveLength(0);
+  });
+
+  it('backfillableGmailExpenses and backfillMissingGmailReceipts attach files to existing Gmail expenses missing receipts', async () => {
+    const expenses = [
+      { id: 1, desc: 'With receipt', emailMsgId: 'm_done', receipt: 'local://2026/Other/done.pdf' },
+      { id: 2, desc: 'No receipt from emailMsgId', vendor: 'Google Play', cat: 'Software & Subscriptions', amount: 30.5, currency: 'CAD', date: '2026-11-27', emailMsgId: 'm_miss1' },
+      { id: 3, desc: 'No receipt from ref', vendor: 'Adobe', cat: 'Software & Subscriptions', amount: 20, currency: 'CAD', date: '2026-11-26', ref: 'receipt-email:m_miss2:0' },
+      { id: 4, desc: 'Manual expense no msg id', amount: 10, currency: 'CAD', date: '2026-11-25' },
+    ];
+    expect(gmailMessageIdOf(expenses[2])).toBe('m_miss2');
+    expect(backfillableGmailExpenses(expenses).map(e => e.id)).toEqual([2, 3]);
+
+    const TC = { settings: { baseCurrency: 'CAD' }, businessExpenses: expenses };
+    const toasts = [];
+    const backfill = buildHarness({
+      names: ['backfillMissingGmailReceipts'],
+      deps: {
+        window: { IS_PUBLISHER: true },
+        isAuthor: () => false,
+        showToast: (m, t) => toasts.push({ m, t }),
+        ensureReceiptFolderPermission: async () => true,
+        backfillableGmailExpenses,
+        gmailMessageIdOf,
+        TAX_CENTER: TC,
+        today: () => '2026-11-28',
+        _saveDraftReceiptFiles: async (item) => [`local://2026/Software & Subscriptions/${item.msgId}.pdf`],
+        writeReceiptRefs,
+        isOurCloudReceipt,
+        saveTaxCenter: async () => true,
+        renderTaxCenter: () => {},
+      },
+      returns: 'backfillMissingGmailReceipts',
+    });
+
+    const out = await backfill();
+    expect(out).toEqual({ attached: 2, failed: 0 });
+    expect(expenses[1].receipt).toBe('local://2026/Software & Subscriptions/m_miss1.pdf');
+    expect(expenses[2].receipt).toBe('local://2026/Software & Subscriptions/m_miss2.pdf');
+    expect(expenses[2].emailMsgId).toBe('m_miss2');
+    expect(toasts.at(-1)).toMatchObject({ t: 'ok' });
   });
 });

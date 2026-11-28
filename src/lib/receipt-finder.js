@@ -275,6 +275,16 @@ export function receiptReviewStatus(draft, expenses = []) {
 export function receiptExpense(draft, rate, receiptFiles = []) {
   if (receiptProblems(draft).length) throw new Error(receiptProblems(draft).join('. '));
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('A currency conversion rate is required');
+  const structured = receiptFiles && !Array.isArray(receiptFiles) && typeof receiptFiles === 'object';
+  const bodyRef = structured ? (receiptFiles.bodyRef || '') : '';
+  const attRefs = structured
+    ? (Array.isArray(receiptFiles.attachmentRefs) ? receiptFiles.attachmentRefs : [])
+    : (Array.isArray(receiptFiles) ? receiptFiles.slice(1) : []);
+  const ordered = structured
+    ? [...attRefs.filter(Boolean), ...(bodyRef ? [bodyRef] : [])]
+    : (Array.isArray(receiptFiles) ? receiptFiles.filter(Boolean) : []);
+  const hasCloud = !!(structured && receiptFiles.hasCloud)
+    || ordered.some(r => /^https?:\/\//i.test(String(r || '')) && /firebasestorage/i.test(String(r || '')));
   return {
     id: draft.id, receiptImportId: draft.id, desc: draft.description || draft.vendor, vendor: draft.vendor,
     cat: draft.category, date: draft.date, ref: draft.reference, currency: draft.currency,
@@ -283,12 +293,13 @@ export function receiptExpense(draft, rate, receiptFiles = []) {
     invoiceDate: draft.date, dueDate: draft.dueDate, subtotal: draft.subtotal, tax: draft.tax, shipping: draft.shipping,
     lineItems: draft.lineItems, paymentStatus: draft.paymentStatus, documentType: draft.documentType,
     emailMsgId: draft.messageId, emailAccount: draft.account, emailAttachmentIds: draft.attachmentIds,
-    emailAttachments: (draft.attachments || []).map((file, index) => ({ ...file, downloadUrl: receiptFiles[index + 1] || '' })),
+    emailAttachments: (draft.attachments || []).map((file, index) => ({ ...file, downloadUrl: attRefs[index] || '' })),
     emailUrl: `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(draft.account)}#all/${encodeURIComponent(draft.messageId)}`,
     // A skipped attachment leaves an empty slot (so the others keep their place
     // in emailAttachments above); it is not a receipt file.
-    receipt: receiptFiles.find(Boolean) || '', receiptFiles: receiptFiles.filter(Boolean), sourceSnippet: draft.sourceSnippet,
+    receipt: ordered[0] || '', receiptFiles: ordered, sourceSnippet: draft.sourceSnippet,
     importedFromEmail: true, importedAt: new Date().toISOString(),
+    ...(hasCloud ? { receiptCloudAt: new Date().toISOString() } : {}),
     ...(draft.receiptLink ? { receiptLink: draft.receiptLink } : {}),
   };
 }

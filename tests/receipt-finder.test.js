@@ -57,6 +57,29 @@ describe('receipt discovery and review', () => {
     expect(expense).toMatchObject({ amount: 113.17, baseAmount: 150.86, paymentStatus: 'unpaid', dueDate: '2026-10-01', emailMsgId: 'mail1', receipt: 'file.pdf', emailAttachmentIds: ['pdf1'] });
     expect(() => receiptExpense(row, 0)).toThrow('conversion rate');
   });
+  it('places PDF/image attachments before the email body and stamps receiptCloudAt only for cloud URLs', () => {
+    const row = draft({ attachments: [{ name: 'invoice.pdf', mime: 'application/pdf' }] });
+    const localExp = receiptExpense(row, 1, {
+      bodyRef: 'local://2026/Other/2026-09-01_Printer_CAD-113.00_2.html',
+      attachmentRefs: ['local://2026/Other/2026-09-01_Printer_CAD-113.00.pdf'],
+      hasCloud: false,
+    });
+    expect(localExp.receipt).toBe('local://2026/Other/2026-09-01_Printer_CAD-113.00.pdf');
+    expect(localExp.receiptFiles).toEqual([
+      'local://2026/Other/2026-09-01_Printer_CAD-113.00.pdf',
+      'local://2026/Other/2026-09-01_Printer_CAD-113.00_2.html',
+    ]);
+    expect(localExp.emailAttachments[0].downloadUrl).toBe('local://2026/Other/2026-09-01_Printer_CAD-113.00.pdf');
+    expect(localExp.receiptCloudAt).toBeUndefined();
+
+    const cloudExp = receiptExpense(row, 1, {
+      bodyRef: 'https://firebasestorage.googleapis.com/v0/b/x/o/email.txt?alt=media',
+      attachmentRefs: [],
+      hasCloud: true,
+    });
+    expect(cloudExp.receipt).toContain('firebasestorage');
+    expect(cloudExp.receiptCloudAt).toBeTruthy();
+  });
 });
 
 describe('receipt duplicates', () => {
@@ -246,6 +269,13 @@ describe('durable import outbox', () => {
     deps.commit.mockRejectedValueOnce(new Error('Network lost'));
     await flushReceiptOutbox(state, deps);
     expect(state.drafts.map(row => row.status)).toEqual(['queued', 'imported']);
+  });
+  it('holds the receipt and never commits an attachmentless expense when no file can be saved', async () => {
+    const { state, row, deps } = fixture({ files: async () => ({ bodyRef: '', attachmentRefs: [], hasCloud: false }) });
+    await flushReceiptOutbox(state, deps);
+    expect(row.status).toBe('queued');
+    expect(row.error).toContain('Could not save the receipt file');
+    expect(deps.commit).not.toHaveBeenCalled();
   });
 });
 

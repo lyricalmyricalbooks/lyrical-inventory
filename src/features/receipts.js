@@ -113,10 +113,12 @@ import {
   subscriptionMatchLine,
 } from '../lib/subscription-receipts.js';
 import {
+  backfillableGmailExpenses,
   cloudReceiptRefs,
   expenseMissingReceipt,
   expensesWithSettlements,
   externalLinkRefs,
+  gmailMessageIdOf,
   isCloudReceipt,
   isExternalLink,
   isGratuityExpense,
@@ -168,6 +170,9 @@ function receiptFinderDependencies() {
     ruleCategory: (vendor, description) => findExpenseRule(TAX_CENTER.expenseRules, { vendor, description }, { allowed: EXPENSE_CATEGORIES })?.category || '',
     habitCategory: vendor => vendorFilingHabit(vendor, _receiptHabitIndex(), { allowed: EXPENSE_CATEGORIES })?.category || '',
     toast: showToast, confirm: confirmDialog,
+    prepareFolder: ensureReceiptFolderPermission,
+    saveLocal: (file, meta) => saveReceiptToLocalFile(file, '', meta),
+    formatEmailHtml: (email, draft) => _emailBodyToReceiptFile(email, draft || {}),
     upload: (file, path) => window._fbUploadReceipt(file, path),
     commit: (expense, draft) => window._fbCommitFoundReceipt(expense, draft),
     // The rate published for the receipt's own date (else today's, else none) —
@@ -518,6 +523,23 @@ async function authorizeReceiptFolder() {
     }
   } catch (e) {
     showToast('⚠ Authorization failed', 'err');
+  }
+}
+
+/**
+ * Unlock read/write permission on the connected receipts folder while a user
+ * click is still fresh, so filing a batch saves straight to disk instead of
+ * failing permission checks after network calls finish.
+ */
+async function ensureReceiptFolderPermission() {
+  const handle = await loadReceiptFolderHandle().catch(() => null);
+  if (!handle) return false;
+  try {
+    const perm = await handle.queryPermission({ mode: 'readwrite' });
+    if (perm === 'granted') return true;
+    return (await handle.requestPermission({ mode: 'readwrite' })) === 'granted';
+  } catch (_) {
+    return false;
   }
 }
 
@@ -3081,6 +3103,10 @@ function _inboxItemToDraft(item) {
     // Receipt file(s) the add-on uploaded to Firebase Storage.
     receipt: item.receipt || '',
     receiptUrls: Array.isArray(item.receiptUrls) ? item.receiptUrls : (item.receipt ? [item.receipt] : []),
+    msgId: item.msgId || String(item.gmailMessageId || '').replace(/-\d+$/, ''),
+    emailSubject: item.emailSubject || '',
+    emailFrom: item.emailFrom || '',
+    emailDate: item.emailDate || '',
     _inboxId: item._inboxId
   };
 }
@@ -3135,7 +3161,7 @@ function loadGmailInboxDrafts() {
 // here: they are listed on item._cloudToDelete for the caller to remove once
 // the expense that points at the local copies has been saved. Deleting first
 // would leave nothing to retry from if that save failed.
-async function localizeInboxReceiptFiles(item) {
+async function localizeInboxReceiptFiles(item, meta = null) {
   const urls = (Array.isArray(item.receiptUrls) && item.receiptUrls.length)
     ? item.receiptUrls
     : (item.receipt && /^https?:/i.test(item.receipt) ? [item.receipt] : []);
@@ -3163,7 +3189,8 @@ async function localizeInboxReceiptFiles(item) {
     if (!blob) { refs.push(url); continue; }
     try {
       const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
-      const local = await saveReceiptToLocalFile(file, 'email-imports');
+      const fileMeta = meta ? { ...meta, index: refs.length } : null;
+      const local = await saveReceiptToLocalFile(file, 'email-imports', fileMeta);
       if (local) {
         refs.push(local);
         item._cloudToDelete.push(url);
@@ -6704,11 +6731,12 @@ function renderEmailReceiptDrafts(receipts) {
               ${dup ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ matches an existing expense</div>` : ''}
               ${subByRow[i] ? `<div style="font-size:var(--text-2xs);color:var(${subByRow[i].tone === 'warn' ? '--amber' : '--blue'});margin-top:2px;font-weight:600;">🔁 ${esc(subByRow[i].text)}</div>` : ''}
               ${_subscriptionPickHtml(r, i)}
+              ${r._attachError ? `<div style="font-size:var(--text-2xs);color:var(--red);margin-top:2px;font-weight:600;">⚠ ${esc(r._attachError)}</div>` : ''}
               ${r.amountUnknown ? `<div style="font-size:var(--text-2xs);color:var(--amber);margin-top:2px;font-weight:600;">⚠ no confident amount — check before importing</div>` : ''}
               ${lowConf ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">low confidence (${(r.confidence * 100 | 0)}%)</div>` : ''}
               ${r.msgId
-        ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → saved with expense on import</div>`
-        : ''}
+        ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">${(r.selectedAtts && r.selectedAtts.length) ? `📎 ${r.selectedAtts.length} file${r.selectedAtts.length > 1 ? 's' : ''} + email` : `📄 email`} → ${esc(describeDestination({ date: r.date || today(), cat: EXPENSE_CATEGORIES.includes(r.category) ? r.category : 'Other' }))}</div>`
+        : (!r._inboxId ? `<div style="font-size:var(--text-2xs);color:var(--content-muted);margin-top:2px;">📄 receipt copy → ${esc(describeDestination({ date: r.date || today(), cat: EXPENSE_CATEGORIES.includes(r.category) ? r.category : 'Other' }))}</div>` : '')}
               ${(r.sourceSnippet || r.emailSubject || r.emailFrom || r.emailDate || r.selectedAtts?.length || r.receiptUrls?.length || r.receipt)
         ? `<details class="email-receipt-source"><summary>View source details</summary>
                     ${r.emailSubject ? `<div><strong>Subject:</strong> ${esc(r.emailSubject)}</div>` : ''}
@@ -6859,14 +6887,49 @@ function _pastedDraftFileIndex(item) {
 }
 
 async function _saveDraftReceiptFiles(item, ctx) {
-  const { gmailSavedByMsg, savedReceiptPaths, draftIdx } = ctx;
-
-  let addonFiles = [];
-  if (item._inboxId) addonFiles = await localizeInboxReceiptFiles(item);
-
-  let emailFiles = [];
+  const { gmailSavedByMsg, savedReceiptPaths, draftIdx, meta = null, pastedText = '' } = ctx;
   const canSaveLocal = typeof saveReceiptToLocalFile === 'function';
   const canSaveCloud = typeof window !== 'undefined' && typeof window._fbUploadReceipt === 'function' && typeof uploadReceiptToCloud === 'function';
+  const metaFor = idx => (meta ? { ...meta, index: idx } : null);
+
+  const saveFileWithFallback = async (localFile, cloudFile, idx) => {
+    let savedRef = canSaveLocal ? await saveReceiptToLocalFile(localFile, 'email-imports', metaFor(idx)) : null;
+    if (!savedRef && cloudFile && canSaveCloud) {
+      try {
+        savedRef = await uploadReceiptToCloud(cloudFile, 'email-imports');
+      } catch (cloudErr) {
+        console.warn('Cloud fallback for email receipt file failed', cloudErr);
+      }
+    }
+    return savedRef || '';
+  };
+
+  const buildBodyFiles = (email) => {
+    const localFile = _emailBodyToReceiptFile(email, item);
+    if (!localFile) return null;
+    // storage.rules permits text/plain|image/*|application/pdf under
+    // receipts/email-imports/ (not text/html), so the cloud fallback
+    // archives a plain-text copy.
+    const plainName = localFile.name.replace(/\.html?$/i, '') + '.txt';
+    const plainBody = [
+      email.from ? `From: ${email.from}` : '',
+      email.subject ? `Subject: ${email.subject}` : '',
+      email.date ? `Date: ${email.date}` : '',
+      item.reference ? `Reference: ${item.reference}` : '',
+      '',
+      email.body || '',
+    ].filter((line, idx) => idx < 4 ? Boolean(line) : true).join('\n');
+    return { localFile, cloudFile: new File([plainBody], plainName, { type: 'text/plain' }) };
+  };
+
+  let addonFiles = [];
+  if (item._inboxId) addonFiles = await localizeInboxReceiptFiles(item, meta);
+  // Every file the add-on staged stays on the expense, already localized when a
+  // folder is connected; when an hourly-sweep draft has no staged URLs, fall
+  // through to hydrate directly from Gmail via item.msgId.
+  if (addonFiles.length) return addonFiles.slice();
+
+  let emailFiles = [];
   if (item.msgId && (canSaveLocal || canSaveCloud)) {
     if (gmailSavedByMsg[item.msgId] !== undefined) {
       emailFiles = gmailSavedByMsg[item.msgId];
@@ -6886,53 +6949,37 @@ async function _saveDraftReceiptFiles(item, ctx) {
           body: item.sourceSnippet || '',
         };
       }
-      const atts = item.selectedAtts || [];
+      let atts = Array.isArray(item.selectedAtts) && item.selectedAtts.length
+        ? item.selectedAtts
+        : ((email && Array.isArray(email.fileParts)) ? email.fileParts : []);
+      if (atts.some(a => a && !a.base64 && a.attachmentId) && typeof _hydrateSelectedAttachmentBytes === 'function') {
+        try { await _hydrateSelectedAttachmentBytes(item.msgId, atts); } catch (_) { /* keep whatever bytes exist */ }
+      }
       const isPdf = a => /pdf/i.test(a.mime || '') || /\.pdf$/i.test(a.name || '');
-      const ordered = [...atts.filter(isPdf), '__BODY__', ...atts.filter(a => !isPdf(a))];
+      // PDF/image attachments first as primary proof, followed by the formatted email record.
+      const ordered = [...atts.filter(isPdf), ...atts.filter(a => !isPdf(a)), '__BODY__'];
       const paths = [];
       for (const entry of ordered) {
         try {
-          let localFile = null;
-          let cloudFile = null;
           if (entry === '__BODY__') {
             if (email && (email.body || email.subject)) {
-              localFile = _emailBodyToReceiptFile(email, item);
-              // storage.rules permits text/plain|image/*|application/pdf under
-              // receipts/email-imports/ (not text/html), so the cloud fallback
-              // archives a plain-text copy.
-              const plainName = localFile.name.replace(/\.html?$/i, '') + '.txt';
-              const plainBody = [
-                email.from ? `From: ${email.from}` : '',
-                email.subject ? `Subject: ${email.subject}` : '',
-                email.date ? `Date: ${email.date}` : '',
-                item.reference ? `Reference: ${item.reference}` : '',
-                '',
-                email.body || '',
-              ].filter((line, idx) => idx < 4 ? Boolean(line) : true).join('\n');
-              cloudFile = new File([plainBody], plainName, { type: 'text/plain' });
+              const pair = buildBodyFiles(email);
+              if (!pair) continue;
+              const savedRef = await saveFileWithFallback(pair.localFile, pair.cloudFile, paths.length);
+              if (savedRef) paths.push(savedRef);
             }
           } else if (entry?.base64) {
             const byteChars = atob(entry.base64.replace(/\s/g, ''));
             const byteArray = new Uint8Array(byteChars.length);
             for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
-            localFile = new File([byteArray], entry.name, { type: entry.mime });
+            const localFile = new File([byteArray], entry.name, { type: entry.mime });
             const bareMime = String(entry.mime || '').split(';')[0].trim();
-            if (/^(text\/plain|image\/|application\/pdf)$/i.test(bareMime)) {
-              cloudFile = localFile;
-            }
+            const cloudFile = /^(text\/plain|image\/|application\/pdf)$/i.test(bareMime) ? localFile : null;
+            const savedRef = await saveFileWithFallback(localFile, cloudFile, paths.length);
+            if (savedRef) paths.push(savedRef);
           }
-          if (!localFile) continue;
-          let savedRef = canSaveLocal ? await saveReceiptToLocalFile(localFile, 'email-imports') : null;
-          if (!savedRef && cloudFile && canSaveCloud) {
-            try {
-              savedRef = await uploadReceiptToCloud(cloudFile, 'email-imports');
-            } catch (cloudErr) {
-              console.warn('Cloud fallback for email receipt file failed', cloudErr);
-            }
-          }
-          if (savedRef) paths.push(savedRef);
         } catch (err) {
-          console.error('Failed to save receipt file locally', err);
+          console.error('Failed to save receipt file', err);
         }
       }
       emailFiles = paths;
@@ -6941,8 +6988,6 @@ async function _saveDraftReceiptFiles(item, ctx) {
   }
 
   if (emailFiles.length) return emailFiles.slice();
-  // Every file the add-on staged stays on the expense, not just the first.
-  if (addonFiles.length) return addonFiles.slice();
   // A pasted/uploaded draft is paired with its own file by the row's stable
   // index (rowIndex), not by its position among the rows still ticked — so
   // unticking a row or a failed save can't hand a draft its neighbour's file.
@@ -6955,7 +7000,23 @@ async function _saveDraftReceiptFiles(item, ctx) {
   else if (own < savedReceiptPaths.length) paired = savedReceiptPaths[own];
   else paired = savedReceiptPaths.find(Boolean);
   const fallback = item.receipt || paired || '';
-  return fallback ? [fallback] : [];
+  if (fallback) return [fallback];
+
+  // Text-only Paste & Upload receipt with no file attached: save a formatted
+  // HTML record (or plain text in cloud) so the expense still owns a file.
+  if (own != null && (canSaveLocal || canSaveCloud) && (pastedText || item.sourceSnippet || item.description)) {
+    const pair = buildBodyFiles({
+      subject: item.description || item.vendor || 'Receipt',
+      from: item.emailFrom || '',
+      date: item.date || '',
+      body: pastedText || item.sourceSnippet || item.description || '',
+    });
+    if (pair) {
+      const savedRef = await saveFileWithFallback(pair.localFile, pair.cloudFile, 0);
+      if (savedRef) return [savedRef];
+    }
+  }
+  return [];
 }
 
 let _importingEmailDrafts = false;
@@ -6970,6 +7031,7 @@ async function importDirectGmailEmails() {
     return;
   }
 
+  await ensureReceiptFolderPermission().catch(() => false);
   const btn = $('email-receipt-scan-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Archiving originals…'; }
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
@@ -6986,6 +7048,7 @@ async function importDirectGmailEmails() {
         const email = await _fetchEmailContent(msgId);
         const listed = selectedEmails.get(msgId) || email;
         const vendor = _directGmailVendor(listed);
+        const date = normalizeReceiptDate(email.date || listed.date) || today();
         const item = {
           msgId,
           vendor,
@@ -6996,11 +7059,15 @@ async function importDirectGmailEmails() {
         const receiptFiles = await _saveDraftReceiptFiles(item, {
           gmailSavedByMsg,
           savedReceiptPaths: [],
-          draftIdx: imported
+          draftIdx: imported,
+          meta: { date, vendor, desc: item.description, cat: fallbackCategory, amount: 0, currency: baseCurrency },
         });
+        if (!receiptFiles.length) {
+          failed.push(msgId);
+          continue;
+        }
         const receipt = receiptFiles[0] || '';
-        const date = normalizeReceiptDate(email.date || listed.date) || today();
-        TAX_CENTER.businessExpenses.unshift({
+        const newExpense = {
           id: Date.now() + Math.floor(Math.random() * 100000),
           desc: item.description,
           vendor,
@@ -7021,7 +7088,9 @@ async function importDirectGmailEmails() {
           importedFromEmail: true,
           importedWithoutAi: true,
           importedAt: new Date().toISOString()
-        });
+        };
+        if (receiptFiles.some(isOurCloudReceipt)) newExpense.receiptCloudAt = new Date().toISOString();
+        TAX_CENTER.businessExpenses.unshift(newExpense);
         imported++;
       } catch (error) {
         console.error('[importDirectGmailEmails]', error);
@@ -7043,8 +7112,8 @@ async function importDirectGmailEmails() {
     } else {
       showToast(
         imported
-          ? `Archived ${imported} email${imported === 1 ? '' : 's'} — add the amount when you review the expense.${failed.length ? ` ${failed.length} could not be archived.` : ''}`
-          : 'Could not archive the selected emails',
+          ? `Archived ${imported} email${imported === 1 ? '' : 's'} — add the amount when you review the expense.${failed.length ? ` ${failed.length} could not save a receipt file.` : ''}`
+          : 'Could not save the receipt files locally or to cloud storage',
         imported ? 'ok' : 'err'
       );
     }
@@ -7063,11 +7132,13 @@ async function importEmailReceiptDrafts() {
   if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
 
   try {
+    await ensureReceiptFolderPermission().catch(() => false);
     const counts = await _fileReceiptDrafts(drafts, {
       fallbackCat: $('email-receipt-default-cat')?.value || 'Other',
       attachedFiles: Array.from($('email-receipt-files')?.files || []),
+      pastedText: ($('email-receipt-source')?.value || '').trim(),
     });
-    const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held } = counts;
+    const { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held, attachFailed = 0 } = counts;
 
     const msgParts = [];
     if (imported) msgParts.push(`✓ Imported ${imported} expense${imported > 1 ? 's' : ''}`);
@@ -7076,11 +7147,12 @@ async function importEmailReceiptDrafts() {
     if (attached) msgParts.push(`🔁 ${attached} kept as proof for subscription charges already counted`);
     if (countedEarly) msgParts.push(`🔁 ${countedEarly} subscription charge${countedEarly > 1 ? 's' : ''} counted now`);
     if (skippedDup) msgParts.push(`${skippedDup} duplicate${skippedDup > 1 ? 's' : ''} skipped`);
-    if (held) msgParts.push(`${held} left waiting — choose what ${held > 1 ? 'each one is' : 'it is'} in the list`);
+    if (attachFailed) msgParts.push(`⚠ ${attachFailed} held — receipt file could not be saved locally or to cloud`);
+    else if (held) msgParts.push(`${held} left waiting — choose what ${held > 1 ? 'each one is' : 'it is'} in the list`);
     if (attachedLost) msgParts.push(`⚠ ${attachedLost} attached file${attachedLost > 1 ? 's' : ''} could not be saved — attach from the ledger row`);
     if (saved === false) msgParts.push('⚠ could not save — nothing was cleared, try again');
     const filedAny = imported || relinked || attached || countedEarly;
-    showToast(msgParts.join(' · ') || 'Nothing imported', filedAny && !attachedLost && !held && saved !== false ? 'ok' : 'warn');
+    showToast(msgParts.join(' · ') || 'Nothing imported', filedAny && !attachedLost && !held && !attachFailed && saved !== false ? 'ok' : 'warn');
 
     if (saved === false) {
       if (btn) { btn.disabled = false; btn.textContent = 'File selected receipts'; }
@@ -7131,7 +7203,7 @@ async function importEmailReceiptDrafts() {
  * inbox alert's one-tap File button (which passes none, because nothing in the
  * modal belongs to those receipts).
  */
-async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles = [] } = {}) {
+async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles = [], pastedText = '' } = {}) {
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
   const baseCur = TAX_CENTER.settings?.baseCurrency || 'CAD';
 
@@ -7141,7 +7213,17 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   const savedReceiptPaths = attachedFiles.map(() => '');
   for (let i = 0; i < attachedFiles.length; i++) {
     try {
-      const saved = await saveReceiptBestEffort(attachedFiles[i], 'email-imports');
+      const ownerDraft = drafts.find(d => _pastedDraftFileIndex(d) === i) || drafts[i] || drafts[0];
+      const fileMeta = ownerDraft ? {
+        date: ownerDraft.date || today(),
+        vendor: ownerDraft.vendor || '',
+        desc: ownerDraft.description || ownerDraft.vendor || 'Email receipt',
+        cat: EXPENSE_CATEGORIES.includes(ownerDraft.category) ? ownerDraft.category : fallbackCat,
+        amount: Number(ownerDraft.amount || 0),
+        currency: (ownerDraft.currency || baseCur).toUpperCase(),
+        index: i,
+      } : null;
+      const saved = await saveReceiptBestEffort(attachedFiles[i], 'email-imports', fileMeta);
       savedReceiptPaths[i] = saved.ref || '';
     } catch (_) { /* leave this slot blank */ }
   }
@@ -7174,7 +7256,7 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   if (!TAX_CENTER.businessExpenses) TAX_CENTER.businessExpenses = [];
 
   let imported = 0, skippedDup = 0, relinked = 0, importedNeedsAmount = 0;
-  let attached = 0, countedEarly = 0;
+  let attached = 0, countedEarly = 0, attachFailed = 0;
   // Receipts that fit two subscriptions equally well wait for the owner to
   // say which — filing either way could count a cost twice or not at all.
   const held = [];
@@ -7196,6 +7278,16 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
     // whole change exists to remove, just relocated from extraction to import.
     if (!amount && !item.amountUnknown) continue;
 
+    const category = EXPENSE_CATEGORIES.includes(item.category) ? item.category : fallbackCat;
+    const meta = {
+      date: item.date || today(),
+      vendor: item.vendor || '',
+      desc: item.description || item.vendor || 'Email receipt',
+      cat: category,
+      amount,
+      currency,
+    };
+
     // A receipt for a charge a subscription already counts is that charge's
     // proof, not an expense of its own. A paused subscription's receipt is
     // filed as usual: nothing in the books counts it.
@@ -7205,8 +7297,15 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       // Which subscription, and what the receipt is, are the owner's to say.
       const choice = subMatch.ambiguous ? '' : _subscriptionAnswer(item, subMatch.match, amount);
       if (!choice) { held.push(item); continue; }
-      const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx });
+      const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx, meta, pastedText });
       draftIdx++;
+      if (!receiptFiles.length) {
+        item._attachError = 'Could not save the receipt file locally or to cloud storage. Unlock your folder or reconnect and try again.';
+        held.push(item);
+        attachFailed++;
+        continue;
+      }
+      delete item._attachError;
       const kept = _keepReceiptWithSubscription(item, subMatch.match, { currency, amount, receiptFiles, choice });
       if (kept === 'attached') { attached++; continue; }
       if (kept === 'counted') { countedEarly++; continue; }
@@ -7227,21 +7326,25 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       continue;
     }
 
-    const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx });
+    const receiptFiles = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths, draftIdx, meta, pastedText });
     const receiptPath = receiptFiles[0] || '';
     draftIdx++;
 
+    if (!receiptFiles.length) {
+      item._attachError = 'Could not save the receipt file locally or to cloud storage. Unlock your folder or reconnect and try again.';
+      held.push(item);
+      attachFailed++;
+      continue;
+    }
+    delete item._attachError;
+
     if (dup) {
       // Existing receiptless expense — attach what we just saved.
-      if (receiptFiles.length) {
-        dup.receipt = receiptPath;
-        dup.receiptFiles = receiptFiles;
-        if (receiptFiles.some(isOurCloudReceipt)) dup.receiptCloudAt = new Date().toISOString();
-        if (item.msgId && !dup.emailMsgId) dup.emailMsgId = item.msgId;
-        relinked++;
-      } else {
-        skippedDup++;
-      }
+      dup.receipt = receiptPath;
+      dup.receiptFiles = receiptFiles;
+      if (receiptFiles.some(isOurCloudReceipt)) dup.receiptCloudAt = new Date().toISOString();
+      if (item.msgId && !dup.emailMsgId) dup.emailMsgId = item.msgId;
+      relinked++;
       continue;
     }
 
@@ -7254,7 +7357,7 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
       id: Date.now() + Math.floor(Math.random() * 100000),
       desc: item.description || item.vendor || 'Email receipt',
       vendor: item.vendor || '',
-      cat: EXPENSE_CATEGORIES.includes(item.category) ? item.category : fallbackCat,
+      cat: category,
       currency,
       amount,
       amountUnknown: !!item.amountUnknown,
@@ -7328,7 +7431,75 @@ async function _fileReceiptDrafts(drafts, { fallbackCat = 'Other', attachedFiles
   updateEmailInboxBadge();
 
   if (typeof renderTaxCenter === 'function') renderTaxCenter();
-  return { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held: held.length };
+  return { imported, importedNeedsAmount, relinked, skippedDup, attachedLost, saved, attached, countedEarly, held: held.length, attachFailed };
+}
+
+/**
+ * Fetch and physically attach receipt files (PDF/image + formatted HTML email,
+ * or cloud fallback) for Gmail-imported expenses already in the ledger that
+ * have no receipt file yet.
+ */
+async function backfillMissingGmailReceipts() {
+  if (!window.IS_PUBLISHER || isAuthor()) { showToast('Publisher access required', 'warn'); return { attached: 0, failed: 0 }; }
+  await ensureReceiptFolderPermission().catch(() => false);
+  const missing = backfillableGmailExpenses(TAX_CENTER.businessExpenses || []);
+  if (!missing.length) {
+    showToast('✓ All Gmail expenses already have receipt files attached', 'ok');
+    return { attached: 0, failed: 0 };
+  }
+  const gmailSavedByMsg = {};
+  let attached = 0;
+  let failed = 0;
+  for (const exp of missing) {
+    const msgId = gmailMessageIdOf(exp);
+    const item = {
+      msgId,
+      vendor: exp.vendor || '',
+      description: exp.desc || exp.vendor || 'Email receipt',
+      date: exp.date || today(),
+      reference: exp.ref || '',
+      sourceSnippet: exp.sourceSnippet || '',
+      emailSubject: exp.desc || '',
+      selectedAtts: [],
+    };
+    const meta = {
+      date: exp.date || today(),
+      vendor: exp.vendor || '',
+      desc: exp.desc || exp.vendor || 'Email receipt',
+      cat: exp.cat || 'Other',
+      amount: exp.origAmount ?? exp.amount ?? 0,
+      currency: exp.origCurrency || exp.currency || (TAX_CENTER.settings?.baseCurrency || 'CAD'),
+    };
+    try {
+      const files = await _saveDraftReceiptFiles(item, { gmailSavedByMsg, savedReceiptPaths: [], draftIdx: 0, meta });
+      if (files.length) {
+        writeReceiptRefs(exp, files);
+        if (files.some(isOurCloudReceipt)) exp.receiptCloudAt = new Date().toISOString();
+        else delete exp.receiptCloudAt;
+        if (msgId && !exp.emailMsgId) exp.emailMsgId = msgId;
+        attached++;
+      } else {
+        failed++;
+      }
+    } catch (_) {
+      failed++;
+    }
+  }
+  if (attached > 0) {
+    const saved = (await saveTaxCenter()) !== false;
+    if (!saved) {
+      showToast('Attached files locally, but could not save Tax Centre — try again', 'err');
+      return { attached: 0, failed: missing.length };
+    }
+    if (typeof renderTaxCenter === 'function') renderTaxCenter();
+  }
+  showToast(
+    attached
+      ? `✓ Attached receipt files to ${attached} Gmail expense${attached === 1 ? '' : 's'}${failed ? ` (${failed} could not be fetched)` : ''}`
+      : 'Could not fetch receipt files for those Gmail expenses',
+    attached ? 'ok' : 'warn'
+  );
+  return { attached, failed };
 }
 
 // ── The receipt inbox scans itself ──────────────────────────────────────
@@ -8541,7 +8712,9 @@ export {
   applyGmailPresetQuery,
   attachReceiptToExpenseRow,
   authorizeReceiptFolder,
+  backfillMissingGmailReceipts,
   backfillReceiptCache,
+  ensureReceiptFolderPermission,
   batchExpenseAddBlankRow,
   batchExpenseDestinations,
   batchExpenseDragLeave,
