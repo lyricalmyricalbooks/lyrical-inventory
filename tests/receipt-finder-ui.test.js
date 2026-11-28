@@ -913,4 +913,45 @@ describe('receipt finder reconnect pill, filing queue, and stuck draft recovery'
     unqueue.click(); await settle();
     expect(mocks.saved.drafts[0]).toMatchObject({ status: 'draft', error: '' });
   });
+
+  it('saves PDF attachment first and formatted HTML email second into the local folder before falling back to cloud', async () => {
+    const pdfBase64 = btoa('%PDF-1.4 test');
+    const sourceWithPdf = {
+      ...source,
+      id: 'm_pdf',
+      fileParts: [{ name: 'invoice.pdf', mime: 'application/pdf', attachmentId: 'att1', base64: pdfBase64 }],
+    };
+    const draftWithPdf = normalizeFoundReceipt({
+      vendor: 'Printer', amount: 113, currency: 'CAD', date: '2026-09-01', reference: 'INV-PDF', confidence: 0.95,
+    }, sourceWithPdf);
+    mocks.saved.drafts = [draftWithPdf];
+    mocks.saved.emails['publisher@example.com:m_pdf'] = sourceWithPdf;
+
+    const savedLocally = [];
+    deps.prepareFolder = vi.fn(async () => true);
+    deps.saveLocal = vi.fn(async (file, meta) => {
+      savedLocally.push({ name: file.name, type: file.type, meta });
+      return `local://2026/Other/${meta.index + 1}_${file.name}`;
+    });
+    deps.formatEmailHtml = vi.fn((email, d) => new File(['<html>email</html>'], `${d.vendor}.html`, { type: 'text/html' }));
+    deps.upload = vi.fn();
+    deps.commit = vi.fn(async expense => ({ expense }));
+    Object.defineProperty(navigator, 'onLine', { configurable: true, value: true });
+
+    await mount();
+    document.querySelector('[data-file-one]').click(); await settle(); await settle();
+
+    expect(deps.prepareFolder).toHaveBeenCalledOnce();
+    expect(deps.upload).not.toHaveBeenCalled();
+    expect(savedLocally.map(x => [x.name, x.type, x.meta.index])).toEqual([
+      ['invoice.pdf', 'application/pdf', 0],
+      ['Printer.html', 'text/html', 1],
+    ]);
+    const committedExpense = deps.commit.mock.calls[0][0];
+    expect(committedExpense.receipt).toBe('local://2026/Other/1_invoice.pdf');
+    expect(committedExpense.receiptFiles).toEqual([
+      'local://2026/Other/1_invoice.pdf',
+      'local://2026/Other/2_Printer.html',
+    ]);
+  });
 });

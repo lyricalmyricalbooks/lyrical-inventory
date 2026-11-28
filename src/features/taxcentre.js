@@ -38,6 +38,7 @@ import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
 import { TC_CATEGORIES, _tcOpenTripName, openArtistPayoutEditor, renderExpenseRules } from './tax-entries.js';
 import {
   _localReceiptCell,
+  backfillMissingGmailReceipts,
   clearReceiptScanReview,
   getPendingWebcamReceipt,
   loadReceiptFolderHandle,
@@ -81,7 +82,7 @@ import { findCategoryMismatches } from '../lib/category-fit.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { deductibleAmount, deductibleRate } from '../lib/deductibility.js';
 import { MAX_RECEIPT_PICKS } from '../lib/receipt-picks.js';
-import { receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels, settlementRepaidLookup } from '../lib/receipt-storage.js';
+import { backfillableGmailExpenses, receiptOwners, summarizeReceiptStorage, isReceiptExemptExpense, receiptRefsOf, isWebReceiptLink, hasOnlyShippingLabels, settlementRepaidLookup } from '../lib/receipt-storage.js';
 import { testZonosConnection } from '../lib/zonos.js';
 import { friendlyOpenRouterError, openRouterAllowanceNote, testOpenRouterConnection } from '../lib/openrouter-chat.js';
 import { checkClaude, claudeMeterLine, claudeStatus, friendlyClaudeError } from '../lib/claude-chat.js';
@@ -2956,6 +2957,7 @@ function _tcRenderReceiptStorage() {
   const notices = [];
   const dismissed = getDismissedReceiptNotices();
 
+  const gmailMissing = backfillableGmailExpenses(TAX_CENTER.businessExpenses || []).length;
   if (s.withoutReceipts && !dismissed.missing) {
     notices.push(`
       <div class="tc-receipt-alert is-warn" id="tc-notice-missing">
@@ -2963,6 +2965,7 @@ function _tcRenderReceiptStorage() {
         <div class="tc-alert-info">
           <strong>${s.withoutReceipts} expense${s.withoutReceipts === 1 ? '' : 's'} without a receipt attached.</strong>
           <span>Attach digital receipts or supplier invoices to maintain full audit compliance for tax filing.</span>
+          ${gmailMissing ? `<button type="button" class="btn gold sm tc-alert-cta" data-tc-action="backfill-gmail-receipts">Fetch ${gmailMissing} missing Gmail receipt${gmailMissing === 1 ? '' : 's'}</button>` : ''}
         </div>
         <button class="tc-alert-dismiss" type="button" onclick="dismissReceiptNotice('missing')" title="Dismiss this notice" aria-label="Dismiss notice">✕</button>
       </div>
@@ -2990,6 +2993,22 @@ function _tcRenderReceiptStorage() {
   el.innerHTML = `<div class="tc-receipt-stat-head">Where your receipts are <span>Tap a box to list those expenses below</span></div><div class="tc-receipt-stat-grid">${tiles.join('')}</div>`
     + (notices.length ? `<div class="tc-receipt-alert-stack">${notices.join('')}</div>` : '');
   el.style.display = '';
+  const backfillBtn = el.querySelector('[data-tc-action="backfill-gmail-receipts"]');
+  if (backfillBtn) {
+    backfillBtn.addEventListener('click', async () => {
+      const prevText = backfillBtn.textContent;
+      backfillBtn.disabled = true;
+      backfillBtn.textContent = 'Fetching…';
+      try {
+        await backfillMissingGmailReceipts();
+      } finally {
+        if (backfillBtn.isConnected) {
+          backfillBtn.disabled = false;
+          backfillBtn.textContent = prevText;
+        }
+      }
+    });
+  }
 }
 
 let activeTaxCenterSubTab = 'ledger';

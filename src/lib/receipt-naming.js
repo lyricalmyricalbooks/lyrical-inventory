@@ -110,6 +110,8 @@ export function extensionFor(originalName = '', mimeType = '') {
   if (mime.includes('heic')) return 'heic';
   if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg';
   if (mime.includes('gif')) return 'gif';
+  if (mime.includes('html')) return 'html';
+  if (mime.includes('text/plain')) return 'txt';
   return 'bin';
 }
 

@@ -418,3 +418,24 @@ export function settlementRepaidLookup(statesById) {
     return byBook.get(bid).get(String(row.itemId))?.date || '';
   };
 }
+
+/**
+ * Gmail message id associated with an imported expense, if one was recorded
+ * directly (`emailMsgId`) or in `ref` (`receipt-email:<id>` / `email-import:<id>`).
+ */
+export function gmailMessageIdOf(expense) {
+  if (!expense || typeof expense !== 'object') return '';
+  const direct = String(expense.emailMsgId || '').trim();
+  if (direct) return direct.replace(/-\d+$/, '');
+  const ref = String(expense.ref || '').trim();
+  const match = /^(?:receipt-email|email-import):([A-Za-z0-9_-]+)/.exec(ref);
+  return match ? match[1].replace(/-\d+$/, '') : '';
+}
+
+/**
+ * Previously-imported Gmail expenses that still have no physical receipt file
+ * attached (neither local nor cloud). Used for one-click backfill.
+ */
+export function backfillableGmailExpenses(expenses) {
+  return (expenses || []).filter(e => e && !receiptRefsOf(e).length && !!gmailMessageIdOf(e));
+}

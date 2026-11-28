@@ -1150,9 +1150,12 @@ async function onClick(event) {
       case 'scan-day': await scanOneDay(-1); break;
       case 'next': await scan(true); break;
       case 'cancel': controller?.abort(); break;
-      case 'retry': await resumeReceiptImports(); break;
+      case 'retry':
+        await deps.prepareFolder?.().catch(() => false);
+        await resumeReceiptImports(); break;
       case 'retry-failed': await retryFailedEmails(); break;
       case 'import':
+        await deps.prepareFolder?.().catch(() => false);
         withStatusCache(() => state.drafts.forEach(draft => {
           if (draft.selected && statusOf(draft) === 'ready') { draft.status = 'queued'; draft.selected = false; draft.updatedAt = Date.now(); }
         }));
@@ -1173,6 +1176,7 @@ async function fileOne(draft) {
     await persist(); render();
     throw new Error(receiptProblems(draft)[0] || 'This receipt can’t be filed yet. Check what is listed on it.');
   }
+  await deps.prepareFolder?.().catch(() => false);
   draft.status = 'queued'; draft.selected = false; autoPick = true;
   await persist(); render();
   announce(`${draft.vendor || 'Receipt'} saved for filing. It syncs when you are connected.`);
@@ -1949,39 +1953,84 @@ async function resumeReceiptImports() {
         expenses: deps.expenses, rate: deps.rate, commit: deps.commit, accept: deps.accept,
         subscription: deps.subscription,
         save: persist, render,
-        files: async email => {
-          const output = [];
-          const body = new File([`From: ${email.from}\nSubject: ${email.subject}\nDate: ${email.date}\n\n${email.body}`], 'email.txt', { type: 'text/plain' });
+        files: async (email, draft) => {
+          const meta = draft ? {
+            date: draft.date,
+            vendor: draft.vendor || '',
+            desc: draft.description || draft.vendor || 'Email receipt',
+            cat: draft.category || 'Other',
+            amount: draft.amount,
+            currency: draft.currency,
+          } : null;
+          const plainBody = new File(
+            [`From: ${email.from}\nSubject: ${email.subject}\nDate: ${email.date}\n\n${email.body}`],
+            'email.txt',
+            { type: 'text/plain' }
+          );
+          const htmlBody = deps.formatEmailHtml ? deps.formatEmailHtml(email, draft || {}) : plainBody;
+          const isPdf = p => /pdf/i.test(p?.mime || '') || /\.pdf$/i.test(p?.name || '');
+          const parts = Array.isArray(email.fileParts) ? email.fileParts : [];
           // An attachment the reader had to skip (over 12 MB, or it would not
           // download) has no bytes to file. It keeps its slot, empty, so the other
           // files still line up with their attachments — and it must not block the
           // receipt: the email body and the other files are filed, and the Gmail
           // link on the expense still leads to the original.
-          const files = [{ file: body, name: 'email.txt' }, ...email.fileParts.map((part, index) => {
+          const attachmentEntries = parts.map((part, index) => {
             if (!part.base64 || !/^(text\/plain|image\/|application\/pdf)$/i.test(String(part.mime || '').split(';')[0].trim())) {
-              return { skipped: true, name: '' };
+              return { kind: 'att', attIndex: index, skipped: true, name: '', isPdf: isPdf(part) };
             }
-            return { file: new File([decodeGmailBase64(part.base64)], part.name, { type: part.mime }), name: `${index}-${part.name.replace(/[^a-zA-Z0-9._-]/g, '_')}` };
-          })];
+            const file = new File([decodeGmailBase64(part.base64)], part.name, { type: part.mime });
+            return {
+              kind: 'att',
+              attIndex: index,
+              localFile: file,
+              cloudFile: file,
+              name: `${index}-${part.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`,
+              isPdf: isPdf(part),
+            };
+          });
+          // Save PDFs first, then images, then the email body so the primary
+          // file index (index 0) goes to the strongest receipt document.
+          const orderedEntries = [
+            ...attachmentEntries.filter(e => !e.skipped && e.isPdf),
+            ...attachmentEntries.filter(e => !e.skipped && !e.isPdf),
+            ...attachmentEntries.filter(e => e.skipped),
+            { kind: 'body', localFile: htmlBody, cloudFile: plainBody, name: 'email.txt' },
+          ];
+          const output = [];
+          const attachmentRefs = parts.map(() => '');
+          let bodyRef = '';
+          let hasCloud = false;
+          let savedIdx = 0;
           if (!email.savedFiles) email.savedFiles = {};
-          for (const entry of files) {
+          for (const entry of orderedEntries) {
             if (!active() || uid !== owner) throw new Error('Sign in as the same publisher to finish importing');
             if (entry.skipped) { output.push(''); continue; }
             if (!email.savedFiles[entry.name]) {
-              let timer;
-              try {
-                const path = `email-imports/${encodeURIComponent(email.account)}/${email.id}/${entry.name}`;
-                email.savedFiles[entry.name] = await Promise.race([
-                  deps.upload(entry.file, path),
-                  new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Receipt upload timed out. Retry pending imports.')), 45000); }),
-                ]);
-                if (!email.savedFiles[entry.name]) throw new Error('Receipt upload did not return a file link');
-              } finally { clearTimeout(timer); }
+              let saved = deps.saveLocal
+                ? await deps.saveLocal(entry.localFile, meta ? { ...meta, index: savedIdx } : null)
+                : '';
+              if (!saved) {
+                let timer;
+                try {
+                  const path = `email-imports/${encodeURIComponent(email.account)}/${email.id}/${entry.name}`;
+                  saved = await Promise.race([
+                    deps.upload(entry.cloudFile, path),
+                    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Receipt upload timed out. Retry pending imports.')), 45000); }),
+                  ]);
+                  if (!saved) throw new Error('Receipt upload did not return a file link');
+                } finally { clearTimeout(timer); }
+              }
+              email.savedFiles[entry.name] = saved;
               await persist();
             }
-            output.push(email.savedFiles[entry.name]);
+            const ref = email.savedFiles[entry.name];
+            if (typeof ref === 'string' && /^https?:\/\//i.test(ref) && /firebasestorage/i.test(ref)) hasCloud = true;
+            if (entry.kind === 'att') attachmentRefs[entry.attIndex] = ref;
+            else bodyRef = ref;
+            savedIdx++;
           }
-          return output;
+          return { bodyRef, attachmentRefs, hasCloud };
         },
       });
       for (const draft of state.drafts) {

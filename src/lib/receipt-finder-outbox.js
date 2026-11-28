@@ -1,5 +1,14 @@
 import { receiptDuplicate, receiptExpense, receiptProblems } from './receipt-finder.js';
 
+function flattenSavedFiles(files) {
+  if (files && !Array.isArray(files) && typeof files === 'object') {
+    const att = Array.isArray(files.attachmentRefs) ? files.attachmentRefs : [];
+    const body = files.bodyRef || '';
+    return [...att.filter(Boolean), ...(body ? [body] : [])];
+  }
+  return Array.isArray(files) ? files.filter(Boolean) : [];
+}
+
 // Processing is sequential, so a failed upload/FX lookup cannot drop the rest.
 // The server transaction is the final duplicate check, including cross-device.
 export async function flushReceiptOutbox(state, deps) {
@@ -22,9 +31,11 @@ export async function flushReceiptOutbox(state, deps) {
       if (subscription?.kind === 'hold') throw new Error(subscription.message);
       if (subscription?.kind === 'skip' || subscription?.kind === 'attach') {
         if (subscription.kind === 'attach') {
-          const files = await deps.files(source);
+          const files = await deps.files(source, draft);
           if (!deps.canSync()) break;
-          await subscription.attach(files);
+          const flatFiles = flattenSavedFiles(files);
+          if (!flatFiles.length) throw new Error('Could not save the receipt file locally or to cloud storage. Unlock your folder or reconnect and try again.');
+          await subscription.attach(flatFiles);
         }
         draft.status = 'imported'; draft.error = ''; draft.selected = false; draft.updatedAt = Date.now();
         await deps.save();
@@ -34,8 +45,11 @@ export async function flushReceiptOutbox(state, deps) {
       // The rate for the invoice's own date, not whatever it is the day it is filed.
       const rate = await deps.rate(draft.currency, draft.date);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Waiting for a currency conversion rate');
-      const receiptFiles = await deps.files(source);
+      const receiptFiles = await deps.files(source, draft);
       if (!deps.canSync()) break;
+      if (!flattenSavedFiles(receiptFiles).length) {
+        throw new Error('Could not save the receipt file locally or to cloud storage. Unlock your folder or reconnect and try again.');
+      }
       const expense = receiptExpense(draft, rate, receiptFiles);
       const result = await deps.commit(expense, draft);
       if (!deps.canSync()) break;
