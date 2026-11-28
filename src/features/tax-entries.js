@@ -52,9 +52,11 @@ import { payoutNetted } from '../lib/earnings.js';
 import { canonicalExpenseCategory } from '../lib/expense-categories.js';
 import { addExpenseRule, cleanExpenseRules, findExpenseRule, removeExpenseRule } from '../lib/expense-rules.js';
 import { registerActions } from '../lib/actions.js';
-import { expensesRepaidBySettlement } from '../lib/receipt-storage.js';
+import { dropFilesIntoInput, setDropzoneDrag } from '../lib/dropzone.js';
+import { receiptRefName } from '../lib/expense-receipts.js';
+import { expensesRepaidBySettlement, isOurCloudReceipt } from '../lib/receipt-storage.js';
 import { escapeHtml, jsArg } from '../lib/html.js';
-import { closeM, confirmDialog, openM, promptDialog } from '../lib/modal.js';
+import { closeM, confirmDialog, openM, promptDialog, refreshUnsavedMarkers } from '../lib/modal.js';
 import { fmt, getBookCurrencyCode, getSym, roundCents, setSelectCurrency } from '../lib/money.js';
 import { followableUrl } from '../lib/receipt-links.js';
 import { datedCadRate, saleCadAmounts } from '../lib/sale-fx.js';
@@ -312,7 +314,9 @@ let _editingExpense = null;
 
 function renderEditExpenseReceipts() {
   const container = $('edit-exp-receipts-preview');
+  const sig = $('edit-exp-receipts-sig');
   if (!container || !_editingExpense) return;
+  if (sig) sig.value = JSON.stringify(_editingExpense.files);
   if (!_editingExpense.files.length) {
     container.innerHTML = '<span style="color:var(--text3);font-size:var(--text-xs);">No receipts attached</span>';
     return;
@@ -325,22 +329,22 @@ function renderEditExpenseReceipts() {
       const fn = r.replace('local://', '');
       const base = fn.split('/').pop();
       name = base;
-      viewLink = `<a href="#" onclick="event.preventDefault(); viewLocalReceipt(${escapeHtml(JSON.stringify(fn))})" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(base)}</a>`;
+      viewLink = `<a href="#" class="edit-exp-receipt-link" onclick="event.preventDefault(); viewLocalReceipt(${escapeHtml(JSON.stringify(fn))})">${escapeHtml(base)}</a>`;
     } else {
-      name = String(r).split('/').pop() || 'Remote Receipt';
+      name = receiptRefName(r) || 'Remote Receipt';
       const href = followableUrl(r);
       // Unfollowable and unescaped before: a stored value with a quote in it
       // broke out of the attribute, and one with no usable scheme rendered a
       // link that did nothing.
       viewLink = href
-        ? `<a href="${escapeHtml(href)}" target="_blank" rel="noopener" style="color:var(--gold3);text-decoration:underline;">${escapeHtml(name)}</a>`
+        ? `<a href="${escapeHtml(href)}" class="edit-exp-receipt-link" target="_blank" rel="noopener">${escapeHtml(name)}</a>`
         : `<span title="This receipt reference cannot be opened" style="color:var(--text3);">${escapeHtml(name)}</span>`;
     }
-    return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,0.05);padding:4px 8px;border-radius:var(--r);border:var(--stroke-hair) solid rgba(255,255,255,0.1);margin-bottom:4px;">
-      <span style="font-size:var(--text-xs);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px;" title="${escapeHtml(name)}">📄 ${viewLink}</span>
-      <div style="display:flex;gap:4px;">
-        <button class="btn tx" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:var(--text-2xs);color:var(--gold-text);" title="Change or edit this receipt link">✏️ Relink</button>
-        <button class="btn tx" type="button" onclick="removeEditExpenseReceipt(${idx})" style="padding:2px 6px;font-size:var(--text-2xs);color:var(--red);" title="Remove receipt attachment">Remove</button>
+    return `<div class="edit-exp-receipt-row">
+      <span class="edit-exp-receipt-name" title="${escapeHtml(name)}">📄 ${viewLink}</span>
+      <div class="edit-exp-receipt-actions">
+        <button class="btn tx sm" type="button" onclick="relinkEditExpenseReceipt(${idx})" style="color:var(--gold-text);" title="Change or edit this receipt link">✏️ Relink</button>
+        <button class="btn tx sm" type="button" onclick="removeEditExpenseReceipt(${idx})" style="color:var(--red);" title="Remove receipt attachment">Remove</button>
       </div>
     </div>`;
   }).join('');
@@ -373,6 +377,7 @@ async function relinkEditExpenseReceipt(idx) {
       ? entered
       : `local://${entered.replace(/^local:\/\//, '')}`;
     renderEditExpenseReceipts();
+    refreshUnsavedMarkers();
     showToast('✓ Receipt link updated — click Save changes to apply', 'ok');
   }
 }
@@ -381,6 +386,7 @@ function removeEditExpenseReceipt(idx) {
   if (!_editingExpense) return;
   _editingExpense.files.splice(idx, 1);
   renderEditExpenseReceipts();
+  refreshUnsavedMarkers();
 }
 
 function openEditSale(bid, itemId) {
@@ -448,6 +454,15 @@ function openEditExpense(type, bid, id) {
     files: Array.isArray(exp.receiptFiles) ? [...exp.receiptFiles] : (exp.receipt ? [exp.receipt] : [])
   };
 
+  const badge = $('edit-exp-modal-type-badge');
+  if (badge) {
+    badge.textContent = type === 'bookExpense'
+      ? `${BOOKS[bid]?.title || 'Book'} · Book Expense`
+      : 'Business Expense';
+  }
+  const tripGroup = $('edit-exp-trip-group');
+  if (tripGroup) tripGroup.hidden = type !== 'businessExpense';
+
   $('edit-exp-desc').value = exp.desc || '';
   setSelectCurrency($('edit-exp-cur'), exp.origCurrency || exp.currency || 'CAD');
   $('edit-exp-amount').value = exp.amountUnknown ? '' : (exp.origAmount != null ? exp.origAmount : (exp.amount || 0));
@@ -465,11 +480,37 @@ function openEditExpense(type, bid, id) {
 // so the chosen file's name is written beside the button here.
 function syncEditExpFileName() {
   const name = $('edit-exp-file-name');
-  const file = $('edit-exp-file')?.files?.[0];
-  if (name) name.textContent = file ? file.name : 'No file chosen';
+  const clearBtn = $('edit-exp-file-clear');
+  const files = $('edit-exp-file')?.files;
+  const count = files ? files.length : 0;
+  if (name) {
+    name.textContent = count > 1
+      ? `${count} files chosen`
+      : (count === 1 ? files[0].name : 'No file chosen');
+  }
+  if (clearBtn) clearBtn.hidden = !count;
+  refreshUnsavedMarkers();
+}
+function clearEditExpFile() {
+  const input = $('edit-exp-file');
+  if (input) input.value = '';
+  setPendingWebcamReceipt(null);
+  const preview = $('edit-exp-file-preview');
+  if (preview) preview.textContent = '';
+  syncEditExpFileName();
 }
 function _tcWireEditExpenseFile() {
   $('edit-exp-file')?.addEventListener('change', syncEditExpFileName);
+  $('edit-exp-file-clear')?.addEventListener('click', clearEditExpFile);
+  const dropGroup = $('edit-exp-file-group');
+  if (dropGroup && !dropGroup.dataset.dropWired) {
+    dropGroup.dataset.dropWired = '1';
+    dropGroup.addEventListener('dragover', ev => setDropzoneDrag(ev, 'edit-exp-file-group', true));
+    dropGroup.addEventListener('dragleave', ev => setDropzoneDrag(ev, 'edit-exp-file-group', false));
+    dropGroup.addEventListener('drop', ev => {
+      if (dropFilesIntoInput(ev, 'edit-exp-file-group', 'edit-exp-file')) syncEditExpFileName();
+    });
+  }
 }
 
 async function saveExpenseEdit() {
@@ -487,26 +528,62 @@ async function saveExpenseEdit() {
   if (!amount) { showToast('⚠ Please enter an amount', 'warn'); $('edit-exp-amount').focus(); return; }
 
   const submitBtn = $('m-edit-expense').querySelector('.modal-footer .gold');
-  const oldText = submitBtn.textContent;
-  submitBtn.textContent = 'Saving...'; submitBtn.disabled = true;
+  if (submitBtn?.disabled) return;
+  const oldText = submitBtn ? submitBtn.textContent : 'Save changes';
+  if (submitBtn) { submitBtn.textContent = 'Saving...'; submitBtn.disabled = true; }
 
+  let shouldClose = false;
   try {
     const fileInput = $('edit-exp-file');
-    let newReceiptUrl = '';
-    if (fileInput && fileInput.files.length > 0) {
-      const file = fileInput.files[0];
+    const pickedFiles = fileInput && fileInput.files ? Array.from(fileInput.files) : [];
+    const addedRefs = [];
+    let anyCloud = false;
+    const failedErrors = [];
+    const subfolder = type === 'bookExpense' && BOOKS[bid] ? BOOKS[bid].title : 'General';
+    const meta = {
+      date, desc, cat, amount, currency,
+      ...(type === 'bookExpense' && BOOKS[bid] ? { book: BOOKS[bid].title } : {}),
+    };
+
+    for (let i = 0; i < pickedFiles.length; i++) {
+      const file = pickedFiles[i];
       const pendingCam = getPendingWebcamReceipt();
       if (pendingCam && pendingCam.name === file.name && pendingCam.size === file.size) {
-        newReceiptUrl = pendingCam.url;
+        addedRefs.push(pendingCam.url);
+        continue;
+      }
+      if (submitBtn) {
+        submitBtn.textContent = pickedFiles.length > 1
+          ? `Saving receipt ${i + 1} of ${pickedFiles.length}…`
+          : 'Saving receipt…';
+      }
+      const saved = await saveReceiptBestEffort(file, subfolder.replace(/[^a-zA-Z0-9.\-_]/g, '_'), {
+        ...meta,
+        index: _editingExpense.files.length + addedRefs.length,
+      });
+      if (saved.ref) {
+        addedRefs.push(saved.ref);
+        if (saved.storage === 'cloud') anyCloud = true;
       } else {
-        const subfolder = type === 'bookExpense' && BOOKS[bid] ? BOOKS[bid].title : 'General';
-        const localUrl = await saveReceiptToLocalFile(file, subfolder.replace(/[^a-zA-Z0-9.\-_]/g, '_'));
-        if (localUrl) newReceiptUrl = localUrl;
+        failedErrors.push(saved.error || `Could not save "${file.name}".`);
       }
     }
 
-    if (newReceiptUrl) {
-      _editingExpense.files.push(newReceiptUrl);
+    if (failedErrors.length > 0) {
+      if (submitBtn) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+      const detail = failedErrors[0];
+      const proceed = await confirmDialog(
+        `${failedErrors.length > 1 ? `${failedErrors.length} receipts could not be saved` : 'The receipt could not be saved'}: ${detail}\n\nSave your other changes without ${addedRefs.length ? 'the failed receipt(s)' : 'it'}?`,
+        { title: 'Receipt could not be saved', okLabel: 'Save without receipt', cancelLabel: 'Keep editing' }
+      );
+      if (!proceed) return;
+      if (submitBtn) { submitBtn.textContent = 'Saving...'; submitBtn.disabled = true; }
+    } else if (submitBtn) {
+      submitBtn.textContent = 'Saving...';
+    }
+
+    if (addedRefs.length) {
+      _editingExpense.files.push(...addedRefs);
     }
 
     // Recalculate converted CAD total at the expense's own date's rate. No rate
@@ -533,6 +610,11 @@ async function saveExpenseEdit() {
         exp.trip = trip;
         exp.receiptFiles = [..._editingExpense.files];
         exp.receipt = _editingExpense.files[0] || '';
+        if (exp.receiptFiles.some(isOurCloudReceipt)) {
+          if (!exp.receiptCloudAt) exp.receiptCloudAt = new Date().toISOString();
+        } else {
+          delete exp.receiptCloudAt;
+        }
         await saveTaxCenter();
       }
     } else if (type === 'bookExpense') {
@@ -557,6 +639,11 @@ async function saveExpenseEdit() {
           exp.date = date;
           exp.receiptFiles = [..._editingExpense.files];
           exp.receipt = _editingExpense.files[0] || '';
+          if (exp.receiptFiles.some(isOurCloudReceipt)) {
+            if (!exp.receiptCloudAt) exp.receiptCloudAt = new Date().toISOString();
+          } else {
+            delete exp.receiptCloudAt;
+          }
           await saveState(bid);
         }
       }
@@ -566,29 +653,34 @@ async function saveExpenseEdit() {
     const tripModal = $('m-tc-trip-detail');
     const catModal = $('m-tc-cat-detail');
     if (tripModal && tripModal.style.display !== 'none' && _tcOpenTripName) {
-      await loadTaxCenter();
       renderTaxCenter();
       showTripDetail(_tcOpenTripName);
     } else if (catModal && catModal.style.display !== 'none') {
       const activeCatName = $('tc-cat-detail-title').textContent;
-      if (activeCatName) {
-        await loadTaxCenter();
-        renderTaxCenter();
-        showCategoryDetail(activeCatName);
-      }
+      renderTaxCenter();
+      if (activeCatName) showCategoryDetail(activeCatName);
     } else {
       renderTaxCenter();
     }
 
+    shouldClose = true;
     closeM('edit-expense');
-    showToast('✓ Expense updated successfully');
+    showToast(
+      anyCloud
+        ? '✓ Expense updated — receipt saved to the cloud'
+        : '✓ Expense updated successfully',
+      'ok',
+      anyCloud ? 5000 : undefined
+    );
   } catch (e) {
     console.error('Error saving expense edit', e);
     showToast('⚠ Error saving changes', 'err');
   } finally {
-    submitBtn.textContent = oldText; submitBtn.disabled = false;
-    _editingExpense = null;
-    setPendingWebcamReceipt(null);
+    if (submitBtn) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+    if (shouldClose) {
+      _editingExpense = null;
+      setPendingWebcamReceipt(null);
+    }
   }
 }
 
@@ -847,76 +939,90 @@ async function submitTaxExpense() {
   if (!desc) { showToast('⚠ Please enter a description', 'warn'); $('tc-exp-desc').focus(); return; }
   if (!amount) { showToast('⚠ Please enter an amount', 'warn'); $('tc-exp-amount').focus(); return; }
 
-  const fileInput = $('tc-exp-file');
-  let receiptUrl = '';
-  let receiptStorage = 'none';
-  if (fileInput && fileInput.files.length > 0) {
-    const file = fileInput.files[0];
-    // Webcam captures are written to the local folder immediately on
-    // "Use Photo", so reuse that path instead of writing the same bytes
-    // a second time (which would create a duplicate file).
-    const pendingCam = getPendingWebcamReceipt();
-    if (pendingCam && pendingCam.name === file.name && pendingCam.size === file.size) {
-      receiptUrl = pendingCam.url;
-      receiptStorage = 'local';
-    } else {
-      const submitBtn = $('tc-submit-exp-btn');
-      const oldText = submitBtn.textContent;
-      submitBtn.textContent = 'Saving receipt…'; submitBtn.disabled = true;
-      // Folder first, cloud second. The folder is unreachable more often than
-      // it looks — permission lapses on every browser restart, and a phone or
-      // a borrowed laptop has no folder at all. Before this fallback the
-      // expense saved and the receipt quietly went nowhere.
-      const saved = await saveReceiptBestEffort(file, 'General', { date, desc, cat, amount, currency });
-      submitBtn.textContent = oldText; submitBtn.disabled = false;
+  const submitBtn = $('tc-submit-exp-btn');
+  if (submitBtn?.disabled) return;
+  const oldText = submitBtn ? submitBtn.textContent : 'Log Business Expense';
+  if (submitBtn) submitBtn.disabled = true;
 
-      receiptUrl = saved.ref;
-      receiptStorage = saved.storage;
+  try {
+    const fileInput = $('tc-exp-file');
+    let receiptUrl = '';
+    let receiptStorage = 'none';
+    if (fileInput && fileInput.files.length > 0) {
+      const file = fileInput.files[0];
+      // Webcam captures are written to the local folder immediately on
+      // "Use Photo", so reuse that path instead of writing the same bytes
+      // a second time (which would create a duplicate file).
+      const pendingCam = getPendingWebcamReceipt();
+      if (pendingCam && pendingCam.name === file.name && pendingCam.size === file.size) {
+        receiptUrl = pendingCam.url;
+        receiptStorage = 'local';
+      } else {
+        if (submitBtn) submitBtn.textContent = 'Saving receipt…';
+        // Folder first, cloud second. The folder is unreachable more often than
+        // it looks — permission lapses on every browser restart, and a phone or
+        // a borrowed laptop has no folder at all. Before this fallback the
+        // expense saved and the receipt quietly went nowhere.
+        const saved = await saveReceiptBestEffort(file, 'General', { date, desc, cat, amount, currency });
 
-      if (receiptStorage === 'none') {
-        const proceed = await confirmDialog(
-          'The receipt could not be saved to your folder or to the cloud — most likely there\'s no connection right now.\n\nLog the expense without it? You can attach the receipt later from the ledger.',
-          { title: 'Receipt could not be saved', okLabel: 'Log without receipt', cancelLabel: 'Cancel' }
-        );
-        if (!proceed) return;
+        receiptUrl = saved.ref;
+        receiptStorage = saved.storage;
+
+        if (receiptStorage === 'none') {
+          if (submitBtn) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
+          const reason = saved.error ? `${saved.error}\n\n` : '';
+          const proceed = await confirmDialog(
+            `${reason}Log the expense without the receipt? You can attach the receipt later from the ledger.`,
+            { title: 'Receipt could not be saved', okLabel: 'Log without receipt', cancelLabel: 'Cancel' }
+          );
+          if (!proceed) return;
+          if (submitBtn) submitBtn.disabled = true;
+        }
       }
     }
+
+    if (submitBtn) submitBtn.textContent = 'Saving…';
+
+    // Multi-currency calculation, at the rate for the expense's date. With no
+    // rate to be had (offline), the expense is logged without a CAD value and
+    // flagged; the Tax Centre fills it in the next time it's online. It used to
+    // fall back to 1:1, so US$100 went in as CA$100 for good.
+    const trip = ($('tc-exp-trip')?.value || '').trim();
+    const { fxRate } = await recordBusinessExpense({ desc, cat, currency, amount, date, receipt: receiptUrl, receiptStorage, trip }, { save: false });
+
+    // If this submit came from "Confirm & log" on a pending note, that note's
+    // job is done — clear it so the reminder doesn't fire again for an expense
+    // that is now actually in the ledger.
+    const clearedPending = _tcClearConfirmedPending();
+
+    saveTaxCenter();
+    renderTaxCenter();
+    if (!fxRate) {
+      // Logged, but with no CAD value yet: say so, rather than a plain "Logged".
+      showToast(`✓ Logged — no ${currency} exchange rate is available right now, so its CAD value will be filled in next time you open the Tax Centre online`, 'warn', 7000);
+    } else if (receiptStorage === 'cloud') {
+      // Say it plainly rather than letting a "✓ Logged" imply the receipt is
+      // filed where the owner expects to find it.
+      showToast('✓ Logged — receipt saved to the cloud until your folder is available', 'ok', 5000);
+    } else {
+      showToast(clearedPending
+        ? `✓ Logged — pending note cleared${trip ? ` · ${trip}` : ''}`
+        : (trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged'));
+    }
+    $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
+    resetCategoryAutofill('tc-exp-cat', 'tc-exp-cat-hint');
+    if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
+    if (fileInput) fileInput.value = '';
+    if (typeof window.tcExpFileChosen === 'function') window.tcExpFileChosen();
+    const filePreview = $('tc-exp-file-preview');
+    if (filePreview) filePreview.textContent = '';
+    setPendingWebcamReceipt(null);
+  } catch (e) {
+    console.error('Error logging business expense', e);
+    showToast('⚠ Error logging expense', 'err');
+  } finally {
+    if (submitBtn) { submitBtn.textContent = oldText; submitBtn.disabled = false; }
   }
-
-  // Multi-currency calculation, at the rate for the expense's date. With no
-  // rate to be had (offline), the expense is logged without a CAD value and
-  // flagged; the Tax Centre fills it in the next time it's online. It used to
-  // fall back to 1:1, so US$100 went in as CA$100 for good.
-  const trip = ($('tc-exp-trip')?.value || '').trim();
-  const { fxRate } = await recordBusinessExpense({ desc, cat, currency, amount, date, receipt: receiptUrl, receiptStorage, trip }, { save: false });
-
-  // If this submit came from "Confirm & log" on a pending note, that note's
-  // job is done — clear it so the reminder doesn't fire again for an expense
-  // that is now actually in the ledger.
-  const clearedPending = _tcClearConfirmedPending();
-
-  saveTaxCenter();
-  renderTaxCenter();
-  if (!fxRate) {
-    // Logged, but with no CAD value yet: say so, rather than a plain "Logged".
-    showToast(`✓ Logged — no ${currency} exchange rate is available right now, so its CAD value will be filled in next time you open the Tax Centre online`, 'warn', 7000);
-  } else if (receiptStorage === 'cloud') {
-    // Say it plainly rather than letting a "✓ Logged" imply the receipt is
-    // filed where the owner expects to find it.
-    showToast('✓ Logged — receipt saved to the cloud until your folder is available', 'ok', 5000);
-  } else {
-    showToast(clearedPending
-      ? `✓ Logged — pending note cleared${trip ? ` · ${trip}` : ''}`
-      : (trip ? `✓ Logged to trip: ${trip}` : '✓ Business Expense logged'));
-  }
-  $('tc-exp-desc').value = ''; $('tc-exp-amount').value = ''; $('tc-exp-date').value = today();
-  resetCategoryAutofill('tc-exp-cat', 'tc-exp-cat-hint');
-  if ($('tc-exp-trip')) $('tc-exp-trip').value = '';
-  if (fileInput) fileInput.value = '';
-  if (typeof window.tcExpFileChosen === 'function') window.tcExpFileChosen();
-  const filePreview = $('tc-exp-file-preview');
-  if (filePreview) filePreview.textContent = '';
-  setPendingWebcamReceipt(null);
 }
 
 // addRecurring() used to live here, reading a five-field inline form. Both the
@@ -1396,8 +1502,13 @@ function downloadFullTaxSeasonExport() {
 // ledger search shortcuts.
 function initTaxEntries() {
   document.addEventListener('click', _tcCloseTripPickersOnOutsideClick);
-  document.addEventListener('DOMContentLoaded', _tcWireEditExpenseFile);
-  document.addEventListener('DOMContentLoaded', _tcWireSmartCategory);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _tcWireEditExpenseFile);
+    document.addEventListener('DOMContentLoaded', _tcWireSmartCategory);
+  } else {
+    _tcWireEditExpenseFile();
+    _tcWireSmartCategory();
+  }
   document.addEventListener('keydown', _tcKeyboardShortcuts);
 }
 
@@ -1406,6 +1517,7 @@ export {
   _tcGuessCategory,
   TC_CATEGORIES,
   changeExpenseCategory,
+  clearEditExpFile,
   removeLedgerEntry,
   _tcEditTripId,
   _tcOpenTripName,
